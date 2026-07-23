@@ -1,0 +1,141 @@
+.card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-hairline-soft);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+}
+
+.tabRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tab:hover {
+  color: var(--color-ink);
+}
+
+.tabActive {
+  background: var(--color-ink);
+  color: #fff;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.h {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-top: 12px;
+}
+
+.h:first-child {
+  margin-top: 0;
+}
+
+.p {
+  font-size: 14px;
+  color: var(--color-body);
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-body);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-hairline-soft);
+}
+
+.infoRow:last-child {
+  border-bottom: none;
+}
+
+.infoRow svg {
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.sellerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--color-surface-soft);
+  border-radius: var(--radius-lg);
+}
+
+.sellerAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sellerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.sellerName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.verifiedIcon {
+  color: var(--color-primary);
+}
+
+.sellerMeta {
+  font-size: 13px;
+  color: var(--color-muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.starIcon {
+  color: var(--color-accent-yellow);
+  fill: var(--color-accent-yellow);
+}
+
+.verifiedBadge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-up);
+  background: var(--color-up-tint);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}

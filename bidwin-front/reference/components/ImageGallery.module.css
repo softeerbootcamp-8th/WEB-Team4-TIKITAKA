@@ -1,0 +1,82 @@
+.wrap {
+  display: flex;
+  gap: 12px;
+}
+
+.thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface-soft);
+  color: var(--color-muted-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.thumb:hover {
+  color: var(--color-muted);
+}
+
+.thumbActive {
+  border: 2px solid var(--color-ink);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+}
+
+.main {
+  position: relative;
+  flex: 1;
+  aspect-ratio: 1.22 / 1;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-hairline-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.mainGlow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 42%, rgba(0, 82, 255, 0.08), transparent 60%);
+}
+
+.mainIcon {
+  color: var(--color-muted-soft);
+  position: relative;
+}
+
+.mainLabel {
+  position: relative;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    flex-direction: column-reverse;
+  }
+
+  .thumbs {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .thumb {
+    width: 52px;
+    height: 52px;
+  }
+}

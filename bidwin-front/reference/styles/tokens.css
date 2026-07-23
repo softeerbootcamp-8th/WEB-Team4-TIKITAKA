@@ -1,0 +1,63 @@
+:root {
+  /* Colors */
+  --color-primary: #0052ff;
+  --color-primary-active: #003ecc;
+  --color-primary-disabled: #a8b8cc;
+  --color-primary-tint: #eaf0ff;
+
+  --color-ink: #0a0b0d;
+  --color-body: #5b616e;
+  --color-body-strong: #0a0b0d;
+  --color-muted: #7c828a;
+  --color-muted-soft: #a8acb3;
+
+  --color-hairline: #dee1e6;
+  --color-hairline-soft: #eef0f3;
+
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-card: #ffffff;
+  --color-surface-strong: #eef0f3;
+  --color-surface-dark: #0a0b0d;
+  --color-surface-dark-elevated: #16181c;
+
+  --color-on-primary: #ffffff;
+  --color-on-dark: #ffffff;
+  --color-on-dark-soft: #a8acb3;
+
+  --color-up: #05b169;
+  --color-up-tint: #e7f8f0;
+  --color-down: #cf202f;
+  --color-down-tint: #fdecee;
+  --color-accent-yellow: #f4b000;
+
+  /* Typography */
+  --font-display: 'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Radius */
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 100px;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-base: 16px;
+  --space-md: 20px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  --space-section: 96px;
+
+  /* Elevation */
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 2px 8px rgba(10, 11, 13, 0.06);
+}

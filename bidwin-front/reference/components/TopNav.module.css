@@ -1,0 +1,93 @@
+.nav {
+  height: 64px;
+  background: var(--color-canvas);
+  border-bottom: 1px solid var(--color-hairline);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.inner {
+  max-width: 1200px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.3px;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+
+.brand svg {
+  color: var(--color-primary);
+}
+
+.links {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+}
+
+.links a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-body);
+}
+
+.links a:hover {
+  color: var(--color-ink);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--color-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+.signIn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.signIn:hover {
+  background: var(--color-hairline);
+}
+
+@media (max-width: 720px) {
+  .links {
+    display: none;
+  }
+}

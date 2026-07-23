@@ -1,0 +1,56 @@
+.wrap {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  animation: rise 0.25s ease-out;
+  white-space: nowrap;
+}
+
+.toneSuccess svg {
+  color: var(--color-up);
+}
+
+.toneInfo svg {
+  color: var(--color-accent-yellow);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    bottom: 84px;
+    width: 100%;
+    padding: 0 16px;
+  }
+
+  .toast {
+    white-space: normal;
+    justify-content: center;
+    width: 100%;
+  }
+}
