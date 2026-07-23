@@ -1,0 +1,9 @@
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" != "main" ] && [ "$branch" != "dev" ]; then
+  if ! echo "$branch" | grep -Eq '^(feat|fix|refactor|chore|docs)/#[0-9]+-[a-z0-9-]+$'; then
+    echo "브랜치명이 컨벤션에 맞지 않습니다: $branch"
+    echo "형식: {type}/#{이슈번호}-{기능명} (예: feat/#12-bid-api)"
+    exit 1
+  fi
+fi
