@@ -35,7 +35,7 @@ public enum ErrorCode {
     UNAUTHENTICATED(
             HttpStatus.UNAUTHORIZED,
             "MEMBER_401_2",
-            "인증 토큰이 없거나 만료되었습니다."
+            "로그인 세션이 없거나 만료되었습니다."
     ),
     INVALID_PASSWORD_FORMAT(
             HttpStatus.BAD_REQUEST,

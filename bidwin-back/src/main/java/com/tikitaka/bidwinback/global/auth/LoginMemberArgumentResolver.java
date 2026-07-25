@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.global.auth;
 
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import org.springframework.core.MethodParameter;
 import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -22,9 +24,15 @@ public class LoginMemberArgumentResolver implements HandlerMethodArgumentResolve
             NativeWebRequest webRequest,
             WebDataBinderFactory binderFactory
     ) {
-        return webRequest.getAttribute(
+        Object attribute = webRequest.getAttribute(
                 AuthConstant.REQUEST_ATTRIBUTE_KEY,
                 RequestAttributes.SCOPE_REQUEST
         );
+
+        if (attribute instanceof AuthMember authMember) {
+            return authMember;
+        }
+
+        throw new AuthException(ErrorCode.UNAUTHENTICATED);
     }
 }
