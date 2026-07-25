@@ -7,11 +7,10 @@ import com.tikitaka.bidwinback.member.domain.entity.Member;
  * 변경 가능한 회원 정보(포인트, 상태 등)는 담지 않는다.
  */
 public record AuthMember(
-        Long memberId,
-        String nickname
+        Long memberId
 ) {
 
     public static AuthMember from(Member member) {
-        return new AuthMember(member.getId(), member.getNickname());
+        return new AuthMember(member.getId());
     }
 }
