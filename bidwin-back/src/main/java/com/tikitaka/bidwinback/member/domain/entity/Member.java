@@ -22,6 +22,7 @@ import static lombok.AccessLevel.PROTECTED;
 public class Member {
 
     private static final long INITIAL_POINT = 2_000_000L;
+    private static final String DEFAULT_PROFILE_OBJECT_KEY = "profiles/default-profile.png";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,7 +40,7 @@ public class Member {
     @Column(nullable = false, length = 320)
     private String email;
 
-    @Column(nullable = false, length = 60)
+    @Column(nullable = false, length = 128)
     private String password;
 
     @Column(name = "total_point", nullable = false)
@@ -73,7 +74,9 @@ public class Member {
         this.email = email;
         this.password = password;
         this.totalPoint = totalPoint == null ? INITIAL_POINT : totalPoint;
-        this.profileObjectKey = profileObjectKey;
+        this.profileObjectKey = profileObjectKey == null
+                ? DEFAULT_PROFILE_OBJECT_KEY
+                : profileObjectKey;
         this.status = status == null ? MemberStatus.PENDING : status;
         this.lockedPoint = lockedPoint == null ? 0L : lockedPoint;
     }
