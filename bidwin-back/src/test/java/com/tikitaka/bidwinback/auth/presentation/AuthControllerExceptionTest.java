@@ -1,8 +1,12 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
+import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
+import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +36,68 @@ class AuthControllerExceptionTest {
                 .standaloneSetup(new AuthController(authService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void 중복된_이메일이면_409를_응답한다() throws Exception {
+        when(authService.checkEmailAvailability(any(EmailAvailabilityRequest.class)))
+                .thenThrow(new MemberException(ErrorCode.DUPLICATE_EMAIL));
+
+        mockMvc.perform(post("/api/v1/auth/signups/email/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "member@example.com"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_409_1"));
+    }
+
+    @Test
+    void 중복된_닉네임이면_409를_응답한다() throws Exception {
+        when(authService.checkNicknameAvailability(any(NicknameAvailabilityRequest.class)))
+                .thenThrow(new MemberException(ErrorCode.DUPLICATE_NICKNAME));
+
+        mockMvc.perform(post("/api/v1/auth/signups/nickname/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": "티키타카"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_409_2"));
+    }
+
+    @Test
+    void 이메일_형식이_올바르지_않으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/signups/email/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invalid-email"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+    }
+
+    @Test
+    void 닉네임_형식이_올바르지_않으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/signups/nickname/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": "한"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
     }
 
     @Test

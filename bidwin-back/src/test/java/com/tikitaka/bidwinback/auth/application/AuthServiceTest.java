@@ -1,5 +1,8 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.dto.AvailabilityResponse;
+import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
 import com.tikitaka.bidwinback.member.application.MemberService;
@@ -16,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,6 +38,29 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(new MemberService(memberRepository), passwordHasher);
+    }
+
+    @Test
+    void 사용_가능한_이메일을_확인한다() {
+        EmailAvailabilityRequest request =
+                new EmailAvailabilityRequest("member@example.com");
+        when(memberRepository.existsByEmail(request.email())).thenReturn(false);
+
+        AvailabilityResponse response = authService.checkEmailAvailability(request);
+
+        assertTrue(response.available());
+        verify(memberRepository).existsByEmail(request.email());
+    }
+
+    @Test
+    void 사용_가능한_닉네임을_확인한다() {
+        NicknameAvailabilityRequest request = new NicknameAvailabilityRequest("티키타카");
+        when(memberRepository.existsByNickname(request.nickname())).thenReturn(false);
+
+        AvailabilityResponse response = authService.checkNicknameAvailability(request);
+
+        assertTrue(response.available());
+        verify(memberRepository).existsByNickname(request.nickname());
     }
 
     @Test

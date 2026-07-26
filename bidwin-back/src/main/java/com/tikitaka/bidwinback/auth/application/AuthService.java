@@ -1,5 +1,8 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.dto.AvailabilityResponse;
+import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -13,6 +16,16 @@ public class AuthService {
 
     private final MemberService memberService;
     private final PasswordHasher passwordHasher;
+
+    public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
+        memberService.validateEmailAvailable(request.email());
+        return new AvailabilityResponse(true);
+    }
+
+    public AvailabilityResponse checkNicknameAvailability(NicknameAvailabilityRequest request) {
+        memberService.validateNicknameAvailable(request.nickname());
+        return new AvailabilityResponse(true);
+    }
 
     public SignUpResponse signup(SignUpRequest request) {
         String encodedPassword = passwordHasher.hash(request.password());
