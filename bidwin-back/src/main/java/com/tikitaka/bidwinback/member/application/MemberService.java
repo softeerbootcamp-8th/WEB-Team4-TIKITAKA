@@ -63,13 +63,23 @@ public class MemberService {
             DataIntegrityViolationException exception
     ) {
         String constraintName = extractConstraintName(exception);
-        if (EMAIL_UNIQUE_CONSTRAINT.equalsIgnoreCase(constraintName)) {
+        if (matchesConstraint(constraintName, EMAIL_UNIQUE_CONSTRAINT)) {
             return new MemberException(DUPLICATE_EMAIL);
         }
-        if (NICKNAME_UNIQUE_CONSTRAINT.equalsIgnoreCase(constraintName)) {
+        if (matchesConstraint(constraintName, NICKNAME_UNIQUE_CONSTRAINT)) {
             return new MemberException(DUPLICATE_NICKNAME);
         }
         return exception;
+    }
+
+    private boolean matchesConstraint(String actualName, String expectedName) {
+        if (actualName == null) {
+            return false;
+        }
+
+        int separatorIndex = actualName.lastIndexOf('.');
+        String unqualifiedName = actualName.substring(separatorIndex + 1);
+        return expectedName.equalsIgnoreCase(unqualifiedName);
     }
 
     // 중첩된 DB 예외에서 Hibernate가 추출한 제약조건 이름을 찾는다.

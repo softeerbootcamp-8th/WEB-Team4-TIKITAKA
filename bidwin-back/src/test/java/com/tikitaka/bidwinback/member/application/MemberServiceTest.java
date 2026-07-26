@@ -85,6 +85,18 @@ class MemberServiceTest {
     }
 
     @Test
+    void 테이블명이_포함된_이메일_유니크_제약도_중복_이메일_예외로_변환한다() {
+        DataIntegrityViolationException exception =
+                createConstraintViolation("member." + Member.EMAIL_UNIQUE_CONSTRAINT);
+        when(memberRepository.saveAndFlush(any(Member.class))).thenThrow(exception);
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(this::createMember)
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+    }
+
+    @Test
     void 닉네임_유니크_제약을_위반하면_중복_닉네임_예외로_변환한다() {
         DataIntegrityViolationException exception =
                 createConstraintViolation(Member.NICKNAME_UNIQUE_CONSTRAINT);
