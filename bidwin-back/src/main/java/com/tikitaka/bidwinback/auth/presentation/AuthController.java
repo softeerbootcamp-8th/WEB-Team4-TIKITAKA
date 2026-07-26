@@ -1,12 +1,17 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
+import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.AvailabilityResponse;
 import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.global.auth.AuthConstant;
+import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -46,5 +51,18 @@ public class AuthController {
         SignUpResponse response = authService.signup(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<Void>> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        AuthMember authMember = authService.login(request);
+        HttpSession session = servletRequest.getSession();
+        servletRequest.changeSessionId();
+        session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 }

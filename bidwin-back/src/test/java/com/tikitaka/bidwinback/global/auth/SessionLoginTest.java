@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.global.auth;
 
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.config.FilterConfig;
+import com.tikitaka.bidwinback.global.config.WebMvcConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +22,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest
-@Import({SessionLoginTest.TestController.class, FilterConfig.class})
+@WebMvcTest(SessionLoginTest.TestController.class)
+@Import({
+        SessionLoginTest.TestController.class,
+        FilterConfig.class,
+        WebMvcConfig.class
+})
 class SessionLoginTest {
 
     @RestController

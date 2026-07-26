@@ -1,18 +1,23 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
+import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.AvailabilityResponse;
 import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.global.auth.AuthConstant;
+import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -71,6 +76,35 @@ class AuthControllerTest {
         assertAll(
                 () -> assertEquals(HttpStatus.CREATED, result.getStatusCode()),
                 () -> assertSame(expected, result.getBody().data())
+        );
+    }
+
+    @Test
+    void 로그인하면_세션_ID를_교체하고_인증_회원을_저장한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        AuthMember authMember = new AuthMember(1L);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        String previousSessionId = servletRequest.getSession().getId();
+        when(authService.login(request)).thenReturn(authMember);
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).login(request, servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertNotEquals(
+                        previousSessionId,
+                        servletRequest.getSession().getId()
+                ),
+                () -> assertSame(
+                        authMember,
+                        servletRequest.getSession()
+                                .getAttribute(AuthConstant.SESSION_KEY)
+                )
         );
     }
 }
