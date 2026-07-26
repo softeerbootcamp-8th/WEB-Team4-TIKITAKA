@@ -39,6 +39,48 @@ class AuthControllerExceptionTest {
     }
 
     @Test
+    void 회원가입_이메일이_중복되면_409를_응답한다() throws Exception {
+        when(authService.signup(any(SignUpRequest.class)))
+                .thenThrow(new MemberException(ErrorCode.DUPLICATE_EMAIL));
+
+        mockMvc.perform(post("/api/v1/auth/signups")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "member@example.com",
+                                  "password": "password!",
+                                  "name": "홍길동",
+                                  "phoneNumber": "01012345678",
+                                  "nickname": "티키타카"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_409_1"));
+    }
+
+    @Test
+    void 회원가입_닉네임이_중복되면_409를_응답한다() throws Exception {
+        when(authService.signup(any(SignUpRequest.class)))
+                .thenThrow(new MemberException(ErrorCode.DUPLICATE_NICKNAME));
+
+        mockMvc.perform(post("/api/v1/auth/signups")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "member@example.com",
+                                  "password": "password!",
+                                  "name": "홍길동",
+                                  "phoneNumber": "01012345678",
+                                  "nickname": "티키타카"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_409_2"));
+    }
+
+    @Test
     void 중복된_이메일이면_409를_응답한다() throws Exception {
         when(authService.checkEmailAvailability(any(EmailAvailabilityRequest.class)))
                 .thenThrow(new MemberException(ErrorCode.DUPLICATE_EMAIL));

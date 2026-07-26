@@ -28,6 +28,9 @@ public class AuthService {
     }
 
     public SignUpResponse signup(SignUpRequest request) {
+        memberService.validateEmailAvailable(request.email());
+        memberService.validateNicknameAvailable(request.nickname());
+
         String encodedPassword = passwordHasher.hash(request.password());
         Member member = memberService.create(
                 request.email(),
