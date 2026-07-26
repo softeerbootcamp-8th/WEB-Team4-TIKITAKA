@@ -1,7 +1,11 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
@@ -16,9 +20,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -65,5 +73,77 @@ class AuthServiceTest {
                 () -> assertEquals(request.email(), response.email()),
                 () -> assertEquals(request.nickname(), response.nickname())
         );
+    }
+
+    @Test
+    void 활성_회원의_이메일과_비밀번호가_일치하면_인증_회원을_반환한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(member.getId()).thenReturn(1L);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+
+        // when
+        AuthMember authMember = authService.login(request);
+
+        // then
+        assertEquals(1L, authMember.memberId());
+    }
+
+    @Test
+    void 비밀번호가_일치하지_않으면_인증에_실패한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "wrong-password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
+    }
+
+    @Test
+    void 존재하지_않는_이메일도_동일한_인증_실패로_처리한다() {
+        // given
+        LoginRequest request = new LoginRequest("unknown@example.com", "password!");
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
+    }
+
+    @Test
+    void 활성_상태가_아닌_회원은_로그인할_수_없다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.BANNED);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
     }
 }
