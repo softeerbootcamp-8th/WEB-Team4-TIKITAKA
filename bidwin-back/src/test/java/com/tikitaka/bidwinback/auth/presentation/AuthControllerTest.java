@@ -1,6 +1,9 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
+import com.tikitaka.bidwinback.dto.AvailabilityResponse;
+import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
@@ -15,6 +18,39 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
+
+    @Test
+    void 이메일이_사용_가능하면_확인_결과와_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        EmailAvailabilityRequest request =
+                new EmailAvailabilityRequest("member@example.com");
+        AvailabilityResponse expected = new AvailabilityResponse(true);
+        when(authService.checkEmailAvailability(request)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<AvailabilityResponse>> result =
+                new AuthController(authService).verifyEmail(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertSame(expected, result.getBody().data())
+        );
+    }
+
+    @Test
+    void 닉네임이_사용_가능하면_확인_결과와_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        NicknameAvailabilityRequest request = new NicknameAvailabilityRequest("티키타카");
+        AvailabilityResponse expected = new AvailabilityResponse(true);
+        when(authService.checkNicknameAvailability(request)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<AvailabilityResponse>> result =
+                new AuthController(authService).verifyNickname(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertSame(expected, result.getBody().data())
+        );
+    }
 
     @Test
     void 회원가입_성공_시_생성된_회원과_201을_응답한다() {
