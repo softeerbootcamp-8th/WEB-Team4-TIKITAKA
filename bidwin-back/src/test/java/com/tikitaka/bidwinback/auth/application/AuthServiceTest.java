@@ -77,7 +77,7 @@ class AuthServiceTest {
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
         verify(passwordHasher, never()).hash(any(String.class));
-        verify(memberRepository, never()).save(any(Member.class));
+        verify(memberRepository, never()).saveAndFlush(any(Member.class));
     }
 
     @Test
@@ -91,20 +91,20 @@ class AuthServiceTest {
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
         verify(passwordHasher, never()).hash(any(String.class));
-        verify(memberRepository, never()).save(any(Member.class));
+        verify(memberRepository, never()).saveAndFlush(any(Member.class));
     }
 
     @Test
     void 회원가입_시_비밀번호를_해싱하고_회원을_저장한다() {
         SignUpRequest request = createSignUpRequest();
         when(passwordHasher.hash(request.password())).thenReturn("encoded-password");
-        when(memberRepository.save(any(Member.class)))
+        when(memberRepository.saveAndFlush(any(Member.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         SignUpResponse response = authService.signup(request);
 
         ArgumentCaptor<Member> captor = ArgumentCaptor.forClass(Member.class);
-        verify(memberRepository).save(captor.capture());
+        verify(memberRepository).saveAndFlush(captor.capture());
         Member savedMember = captor.getValue();
         assertAll(
                 () -> assertEquals("encoded-password", savedMember.getPassword()),
