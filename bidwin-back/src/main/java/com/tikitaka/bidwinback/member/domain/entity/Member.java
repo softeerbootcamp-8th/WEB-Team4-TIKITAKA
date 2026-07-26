@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,9 +18,24 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "Member")
+@Table(
+        name = "Member",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = Member.EMAIL_UNIQUE_CONSTRAINT,
+                        columnNames = "email"
+                ),
+                @UniqueConstraint(
+                        name = Member.NICKNAME_UNIQUE_CONSTRAINT,
+                        columnNames = "nickname"
+                )
+        }
+)
 @NoArgsConstructor(access = PROTECTED)
 public class Member {
+
+    public static final String EMAIL_UNIQUE_CONSTRAINT = "uk_member_email";
+    public static final String NICKNAME_UNIQUE_CONSTRAINT = "uk_member_nickname";
 
     private static final long INITIAL_POINT = 2_000_000L;
     private static final String DEFAULT_PROFILE_OBJECT_KEY = "profiles/default-profile.png";
