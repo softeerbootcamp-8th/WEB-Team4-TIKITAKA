@@ -32,7 +32,6 @@ public class AuthService {
         return SignUpResponse.from(member);
     }
 
-    @Transactional(readOnly = true)
     public AuthMember login(LoginRequest request) {
         Member member = memberService.findByEmail(request.email())
                 .orElseThrow(() -> new AuthException(ErrorCode.INVALID_CREDENTIALS));
