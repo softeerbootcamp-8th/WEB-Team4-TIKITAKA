@@ -1,12 +1,13 @@
 package com.tikitaka.bidwinback.auth.application;
 
-import com.tikitaka.bidwinback.dto.LoginRequest;
-import com.tikitaka.bidwinback.dto.AvailabilityResponse;
-import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.PasswordResetRequest;
-import com.tikitaka.bidwinback.dto.SignUpRequest;
-import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -15,7 +16,6 @@ import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -76,5 +76,13 @@ public class AuthService {
                     String rawToken = passwordResetTokenService.issue(member);
                     passwordResetMailSender.send(member.getEmail(), rawToken);
                 });
+    }
+
+    public void resetPassword(PasswordChangeRequest request) {
+        if (!request.newPassword().equals(request.newPasswordConfirm())) {
+            throw new AuthException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        passwordResetTokenService.resetPassword(request.token(), request.newPassword());
     }
 }

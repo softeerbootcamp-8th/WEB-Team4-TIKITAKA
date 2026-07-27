@@ -1,12 +1,13 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
-import com.tikitaka.bidwinback.dto.LoginRequest;
-import com.tikitaka.bidwinback.dto.AvailabilityResponse;
-import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.SignUpRequest;
-import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
@@ -19,7 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
@@ -106,5 +111,64 @@ class AuthControllerTest {
                                 .getAttribute(AuthConstant.SESSION_KEY)
                 )
         );
+    }
+
+    @Test
+    void 비밀번호를_변경하면_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "new-password!"
+        );
+
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).resetPassword(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+        verify(authService).resetPassword(request);
+    }
+
+    @Test
+    void 로그아웃하면_세션을_무효화한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        var session = servletRequest.getSession();
+        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> session.getAttribute(AuthConstant.SESSION_KEY)
+                )
+        );
+    }
+
+    @Test
+    void 동시_로그아웃으로_세션이_이미_무효화되어도_성공한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = mock(MockHttpServletRequest.class);
+        var session = mock(jakarta.servlet.http.HttpSession.class);
+        when(servletRequest.getSession(false)).thenReturn(session);
+        doThrow(new IllegalStateException()).when(session).invalidate();
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertEquals(HttpStatus.OK, result.getStatusCode());
     }
 }

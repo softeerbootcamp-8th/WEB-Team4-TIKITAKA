@@ -1,15 +1,15 @@
 package com.tikitaka.bidwinback.auth.application;
 
-import com.tikitaka.bidwinback.dto.AvailabilityResponse;
-import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.LoginRequest;
-import com.tikitaka.bidwinback.dto.PasswordResetRequest;
-import com.tikitaka.bidwinback.dto.SignUpRequest;
-import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
-import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -257,5 +257,36 @@ class AuthServiceTest {
         authService.requestPasswordReset(request);
 
         verifyNoInteractions(passwordResetTokenService, passwordResetMailSender);
+    }
+
+    @Test
+    void 새_비밀번호와_확인_비밀번호가_일치하면_비밀번호를_변경한다() {
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "new-password!"
+        );
+
+        authService.resetPassword(request);
+
+        verify(passwordResetTokenService)
+                .resetPassword(request.token(), request.newPassword());
+    }
+
+    @Test
+    void 새_비밀번호와_확인_비밀번호가_다르면_변경하지_않는다() {
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "different-password!"
+        );
+
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.resetPassword(request)
+        );
+
+        assertEquals(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH, exception.getErrorCode());
+        verifyNoInteractions(passwordResetTokenService);
     }
 }

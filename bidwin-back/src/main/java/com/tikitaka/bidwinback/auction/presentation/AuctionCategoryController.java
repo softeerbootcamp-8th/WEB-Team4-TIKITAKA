@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
 import com.tikitaka.bidwinback.auction.application.AuctionCategoryService;
-import com.tikitaka.bidwinback.dto.AuctionCategoryResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionCategoryResponse;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
