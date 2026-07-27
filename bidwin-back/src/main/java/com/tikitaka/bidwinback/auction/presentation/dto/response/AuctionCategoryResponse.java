@@ -1,4 +1,4 @@
-package com.tikitaka.bidwinback.auction.presentation.dto;
+package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 

@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
-import com.tikitaka.bidwinback.auction.presentation.dto.AuctionCategoryResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionCategoryResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
