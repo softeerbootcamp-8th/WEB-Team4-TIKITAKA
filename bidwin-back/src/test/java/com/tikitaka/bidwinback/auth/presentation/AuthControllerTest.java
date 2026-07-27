@@ -19,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -106,5 +109,45 @@ class AuthControllerTest {
                                 .getAttribute(AuthConstant.SESSION_KEY)
                 )
         );
+    }
+
+    @Test
+    void 로그아웃하면_세션을_무효화한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        var session = servletRequest.getSession();
+        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> session.getAttribute(AuthConstant.SESSION_KEY)
+                )
+        );
+    }
+
+    @Test
+    void 동시_로그아웃으로_세션이_이미_무효화되어도_성공한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = mock(MockHttpServletRequest.class);
+        var session = mock(jakarta.servlet.http.HttpSession.class);
+        when(servletRequest.getSession(false)).thenReturn(session);
+        doThrow(new IllegalStateException()).when(session).invalidate();
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertEquals(HttpStatus.OK, result.getStatusCode());
     }
 }

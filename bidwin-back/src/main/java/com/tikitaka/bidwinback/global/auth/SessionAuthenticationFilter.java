@@ -84,9 +84,13 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             return Optional.empty();
         }
 
-        Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
-        if (attribute instanceof AuthMember authMember) {
-            return Optional.of(authMember);
+        try {
+            Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
+            if (attribute instanceof AuthMember authMember) {
+                return Optional.of(authMember);
+            }
+        } catch (IllegalStateException ignored) {
+            // 로그아웃과 동시에 처리 중인 요청은 인증되지 않은 요청
         }
 
         return Optional.empty();

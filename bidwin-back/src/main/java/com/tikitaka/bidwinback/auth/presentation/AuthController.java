@@ -75,4 +75,19 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.successWithoutData());
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest servletRequest) {
+        HttpSession session = servletRequest.getSession(false);
+        if (session != null) {
+            try {
+                session.invalidate();
+            } catch (IllegalStateException ignored) {
+                // 이미 로그아웃된 세션!
+            }
+        }
+
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
 }
