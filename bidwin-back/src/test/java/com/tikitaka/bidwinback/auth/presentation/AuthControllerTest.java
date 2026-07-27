@@ -1,12 +1,12 @@
 package com.tikitaka.bidwinback.auth.presentation;
 
 import com.tikitaka.bidwinback.auth.application.AuthService;
-import com.tikitaka.bidwinback.dto.LoginRequest;
-import com.tikitaka.bidwinback.dto.AvailabilityResponse;
-import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
-import com.tikitaka.bidwinback.dto.SignUpRequest;
-import com.tikitaka.bidwinback.dto.SignUpResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
