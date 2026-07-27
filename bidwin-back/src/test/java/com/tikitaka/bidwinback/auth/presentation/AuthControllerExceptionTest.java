@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auth.application.AuthService;
 import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.PasswordResetRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -142,6 +144,39 @@ class AuthControllerExceptionTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+    }
+
+    @Test
+    void 비밀번호_재설정_요청을_접수하면_202를_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password-resets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "member@example.com"
+                                }
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(authService).requestPasswordReset(
+                new PasswordResetRequest("member@example.com")
+        );
+    }
+
+    @Test
+    void 비밀번호_재설정_이메일_형식이_올바르지_않으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password-resets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invalid-email"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+
+        verifyNoInteractions(authService);
     }
 
     @Test

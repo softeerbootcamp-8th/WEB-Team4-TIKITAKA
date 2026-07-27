@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.AvailabilityResponse;
 import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.PasswordResetRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
@@ -64,5 +65,14 @@ public class AuthController {
         session.setAttribute(AuthConstant.SESSION_KEY, authMember);
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @PostMapping("/password-resets")
+    public ResponseEntity<ApiResponse<Void>> requestPasswordReset(
+            @Valid @RequestBody PasswordResetRequest request
+    ) {
+        authService.requestPasswordReset(request);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.successWithoutData());
     }
 }
