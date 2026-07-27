@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.dto.LoginRequest;
 import com.tikitaka.bidwinback.dto.AvailabilityResponse;
 import com.tikitaka.bidwinback.dto.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.dto.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.dto.PasswordResetRequest;
 import com.tikitaka.bidwinback.dto.SignUpRequest;
 import com.tikitaka.bidwinback.dto.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
@@ -22,6 +23,8 @@ public class AuthService {
 
     private final MemberService memberService;
     private final PasswordHasher passwordHasher;
+    private final PasswordResetTokenService passwordResetTokenService;
+    private final PasswordResetMailSender passwordResetMailSender;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
         memberService.validateEmailAvailable(request.email());
@@ -63,5 +66,15 @@ public class AuthService {
         }
 
         return AuthMember.from(member);
+    }
+
+    public void requestPasswordReset(PasswordResetRequest request) {
+        // 회원 존재 여부가 응답으로 노출되지 않도록 미가입·비활성 회원은 동일하게 처리한다.
+        memberService.findByEmail(request.email())
+                .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
+                .ifPresent(member -> {
+                    String rawToken = passwordResetTokenService.issue(member);
+                    passwordResetMailSender.send(member.getEmail(), rawToken);
+                });
     }
 }

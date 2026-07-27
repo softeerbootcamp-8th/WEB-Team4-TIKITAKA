@@ -32,6 +32,12 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets/confirm")
     );
+    private static final List<PathPattern> PUBLIC_GET_PATHS = List.of(
+            PathPatternParser.defaultInstance.parse("/swagger-ui.html"),
+            PathPatternParser.defaultInstance.parse("/swagger-ui/**"),
+            PathPatternParser.defaultInstance.parse("/v3/api-docs"),
+            PathPatternParser.defaultInstance.parse("/v3/api-docs/**")
+    );
 
     private final ObjectMapper objectMapper;
 
@@ -65,9 +71,11 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
         PathContainer requestPath =
                 ServletRequestPathUtils.parse(request).pathWithinApplication();
-        boolean isPublicPath = HttpMethod.POST.matches(request.getMethod())
+        boolean isPublicPostPath = HttpMethod.POST.matches(request.getMethod())
                 && PUBLIC_POST_PATHS.stream().anyMatch(pattern -> pattern.matches(requestPath));
-        return !isPublicPath;
+        boolean isPublicGetPath = HttpMethod.GET.matches(request.getMethod())
+                && PUBLIC_GET_PATHS.stream().anyMatch(pattern -> pattern.matches(requestPath));
+        return !isPublicPostPath && !isPublicGetPath;
     }
 
     private Optional<AuthMember> resolveAuthMember(HttpServletRequest request) {

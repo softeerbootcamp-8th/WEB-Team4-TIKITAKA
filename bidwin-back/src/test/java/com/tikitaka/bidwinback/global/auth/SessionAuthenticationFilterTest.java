@@ -255,6 +255,42 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
+    void Swagger_UI는_세션_없이_요청할_수_있다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/swagger-ui/index.html"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+    }
+
+    @Test
+    void OpenAPI_문서는_세션_없이_요청할_수_있다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/v3/api-docs"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+    }
+
+    @Test
     void 인증번호_확인_경로는_회원_식별자_한_구간만_허용한다()
             throws ServletException, IOException {
         // given
