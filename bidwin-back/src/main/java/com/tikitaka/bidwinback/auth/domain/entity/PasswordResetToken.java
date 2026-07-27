@@ -2,16 +2,7 @@ package com.tikitaka.bidwinback.auth.domain.entity;
 
 import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -34,6 +25,9 @@ public class PasswordResetToken extends BaseTimeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Integer version;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false)
@@ -67,5 +61,9 @@ public class PasswordResetToken extends BaseTimeEntity {
             LocalDateTime expiresAt
     ) {
         return new PasswordResetToken(member, tokenHash, expiresAt);
+    }
+
+    public void markUsed(LocalDateTime usedAt) {
+        this.usedAt = usedAt;
     }
 }

@@ -47,6 +47,21 @@ public enum ErrorCode {
             "MEMBER_400_2",
             "이용약관 및 개인정보 처리방침에 동의해야 가입할 수 있습니다."
     ),
+    PASSWORD_CONFIRMATION_MISMATCH(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_3",
+            "새 비밀번호와 확인 비밀번호가 일치하지 않습니다."
+    ),
+    INVALID_PASSWORD_RESET_TOKEN(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_4",
+            "유효하지 않은 비밀번호 재설정 토큰입니다."
+    ),
+    EXPIRED_PASSWORD_RESET_TOKEN(
+            HttpStatus.GONE,
+            "MEMBER_410_1",
+            "비밀번호 재설정 토큰이 만료되었습니다."
+    ),
     DUPLICATE_EMAIL(
             HttpStatus.CONFLICT,
             "MEMBER_409_1",

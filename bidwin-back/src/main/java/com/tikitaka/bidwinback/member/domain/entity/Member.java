@@ -96,4 +96,8 @@ public class Member {
         this.status = status == null ? MemberStatus.PENDING : status;
         this.lockedPoint = lockedPoint == null ? 0L : lockedPoint;
     }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
 }
