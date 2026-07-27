@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auth.application;
 
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -25,6 +26,8 @@ public class AuthService {
     private final PasswordHasher passwordHasher;
     private final PasswordResetTokenService passwordResetTokenService;
     private final PasswordResetMailSender passwordResetMailSender;
+    private final EmailVerificationTokenService emailVerificationTokenService;
+    private final EmailVerificationMailSender emailVerificationMailSender;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
         memberService.validateEmailAvailable(request.email());
@@ -48,7 +51,15 @@ public class AuthService {
                 request.phoneNumber(),
                 request.nickname()
         );
+
+        String rawToken = emailVerificationTokenService.issue(member);
+        emailVerificationMailSender.send(member.getEmail(), rawToken);
+
         return SignUpResponse.from(member);
+    }
+
+    public void verifyEmail(EmailVerificationRequest request) {
+        emailVerificationTokenService.verify(request.token());
     }
 
     public AuthMember login(LoginRequest request) {

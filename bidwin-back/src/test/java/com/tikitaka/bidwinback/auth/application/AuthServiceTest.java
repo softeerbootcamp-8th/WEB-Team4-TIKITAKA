@@ -53,6 +53,12 @@ class AuthServiceTest {
     @Mock
     private PasswordResetMailSender passwordResetMailSender;
 
+    @Mock
+    private EmailVerificationTokenService emailVerificationTokenService;
+
+    @Mock
+    private EmailVerificationMailSender emailVerificationMailSender;
+
     private AuthService authService;
 
     @BeforeEach
@@ -61,7 +67,9 @@ class AuthServiceTest {
                 new MemberService(memberRepository),
                 passwordHasher,
                 passwordResetTokenService,
-                passwordResetMailSender
+                passwordResetMailSender,
+                emailVerificationTokenService,
+                emailVerificationMailSender
         );
     }
 

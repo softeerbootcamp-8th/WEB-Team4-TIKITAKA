@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auth.presentation;
 import com.tikitaka.bidwinback.auth.application.AuthService;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -53,6 +54,14 @@ public class AuthController {
         SignUpResponse response = authService.signup(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    @PostMapping("/signups/email/confirm")
+    public ResponseEntity<ApiResponse<Void>> confirmEmail(
+            @Valid @RequestBody EmailVerificationRequest request
+    ) {
+        authService.verifyEmail(request);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
     @PostMapping("/login")
