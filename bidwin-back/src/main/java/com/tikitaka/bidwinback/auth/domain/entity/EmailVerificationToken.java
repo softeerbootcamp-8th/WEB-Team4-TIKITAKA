@@ -72,4 +72,8 @@ public class EmailVerificationToken extends BaseTimeEntity {
     ) {
         return new EmailVerificationToken(member, tokenHash, expiresAt);
     }
+
+    public void markUsed(LocalDateTime usedAt) {
+        this.usedAt = usedAt;
+    }
 }

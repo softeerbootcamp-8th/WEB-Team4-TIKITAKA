@@ -100,4 +100,8 @@ public class Member {
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
     }
+
+    public void activate() {
+        this.status = MemberStatus.ACTIVE;
+    }
 }

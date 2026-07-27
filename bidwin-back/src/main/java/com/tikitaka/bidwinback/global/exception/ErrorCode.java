@@ -62,6 +62,16 @@ public enum ErrorCode {
             "MEMBER_410_1",
             "비밀번호 재설정 토큰이 만료되었습니다."
     ),
+    INVALID_EMAIL_VERIFICATION_TOKEN(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_5",
+            "유효하지 않은 이메일 인증 토큰입니다."
+    ),
+    EXPIRED_EMAIL_VERIFICATION_TOKEN(
+            HttpStatus.GONE,
+            "MEMBER_410_2",
+            "이메일 인증 토큰이 만료되었습니다."
+    ),
     DUPLICATE_EMAIL(
             HttpStatus.CONFLICT,
             "MEMBER_409_1",
