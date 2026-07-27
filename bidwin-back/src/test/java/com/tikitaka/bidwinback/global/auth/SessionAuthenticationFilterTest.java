@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -180,6 +181,46 @@ class SessionAuthenticationFilterTest {
 
         // then
         assertThat(filterChainInvoked).isTrue();
+    }
+
+    @Test
+    void 로그아웃은_세션이_없으면_요청할_수_없다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.POST.name(), "/api/v1/auth/logout");
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        filter.doFilter(request, response, (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(filterChainInvoked).isFalse();
+        assertThat(request.getSession(false)).isNull();
+    }
+
+    @Test
+    void 로그아웃과_동시에_무효화된_세션은_인증되지_않은_것으로_처리한다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.setSession(new MockHttpSession() {
+            @Override
+            public Object getAttribute(String name) {
+                throw new IllegalStateException();
+            }
+        });
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        filter.doFilter(request, response, new MockFilterChain());
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
