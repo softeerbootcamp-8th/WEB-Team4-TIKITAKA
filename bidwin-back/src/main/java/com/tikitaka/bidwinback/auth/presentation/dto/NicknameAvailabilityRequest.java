@@ -1,4 +1,4 @@
-package com.tikitaka.bidwinback.dto;
+package com.tikitaka.bidwinback.auth.presentation.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

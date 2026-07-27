@@ -1,4 +1,4 @@
-package com.tikitaka.bidwinback.dto;
+package com.tikitaka.bidwinback.auth.presentation.dto;
 
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 
