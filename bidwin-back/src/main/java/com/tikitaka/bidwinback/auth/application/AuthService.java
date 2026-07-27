@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityRespon
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
@@ -75,5 +76,13 @@ public class AuthService {
                     String rawToken = passwordResetTokenService.issue(member);
                     passwordResetMailSender.send(member.getEmail(), rawToken);
                 });
+    }
+
+    public void resetPassword(PasswordChangeRequest request) {
+        if (!request.newPassword().equals(request.newPasswordConfirm())) {
+            throw new AuthException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        passwordResetTokenService.resetPassword(request.token(), request.newPassword());
     }
 }

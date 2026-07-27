@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auth.application.AuthService;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
@@ -24,6 +25,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +41,13 @@ class AuthControllerExceptionTest {
             {
               "email": "member@example.com",
               "password": "password!"
+            }
+            """;
+    private static final String VALID_PASSWORD_CHANGE_REQUEST = """
+            {
+              "token": "raw-reset-token",
+              "newPassword": "new-password!",
+              "newPasswordConfirm": "new-password!"
             }
             """;
 
@@ -176,6 +185,89 @@ class AuthControllerExceptionTest {
                 .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
 
         verifyNoInteractions(authService);
+    }
+
+    @Test
+    void 비밀번호_변경에_성공하면_200을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password-resets/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_PASSWORD_CHANGE_REQUEST))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(authService).resetPassword(
+                new PasswordChangeRequest(
+                        "raw-reset-token",
+                        "new-password!",
+                        "new-password!"
+                )
+        );
+    }
+
+    @Test
+    void 새_비밀번호_형식이_올바르지_않으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password-resets/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "raw-reset-token",
+                                  "newPassword": "password",
+                                  "newPasswordConfirm": "password"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    void 새_비밀번호와_확인_비밀번호가_다르면_400을_응답한다() throws Exception {
+        doThrow(new AuthException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH))
+                .when(authService)
+                .resetPassword(any(PasswordChangeRequest.class));
+
+        mockMvc.perform(post("/api/v1/auth/password-resets/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "raw-reset-token",
+                                  "newPassword": "new-password!",
+                                  "newPasswordConfirm": "different-password!"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_400_3"));
+    }
+
+    @Test
+    void 유효하지_않은_토큰이면_400을_응답한다() throws Exception {
+        doThrow(new AuthException(ErrorCode.INVALID_PASSWORD_RESET_TOKEN))
+                .when(authService)
+                .resetPassword(any(PasswordChangeRequest.class));
+
+        mockMvc.perform(post("/api/v1/auth/password-resets/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_PASSWORD_CHANGE_REQUEST))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_400_4"));
+    }
+
+    @Test
+    void 만료된_토큰이면_410을_응답한다() throws Exception {
+        doThrow(new AuthException(ErrorCode.EXPIRED_PASSWORD_RESET_TOKEN))
+                .when(authService)
+                .resetPassword(any(PasswordChangeRequest.class));
+
+        mockMvc.perform(post("/api/v1/auth/password-resets/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_PASSWORD_CHANGE_REQUEST))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("MEMBER_410_1"));
     }
 
     @Test

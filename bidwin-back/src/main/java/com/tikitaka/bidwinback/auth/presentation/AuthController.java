@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityRespon
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
@@ -74,6 +75,14 @@ public class AuthController {
         authService.requestPasswordReset(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.successWithoutData());
+    }
+
+    @PostMapping("/password-resets/confirm")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody PasswordChangeRequest request
+    ) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
     @PostMapping("/logout")

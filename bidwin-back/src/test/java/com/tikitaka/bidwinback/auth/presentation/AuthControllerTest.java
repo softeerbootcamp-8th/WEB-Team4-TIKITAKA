@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityRespon
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
@@ -109,6 +111,25 @@ class AuthControllerTest {
                                 .getAttribute(AuthConstant.SESSION_KEY)
                 )
         );
+    }
+
+    @Test
+    void 비밀번호를_변경하면_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "new-password!"
+        );
+
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).resetPassword(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+        verify(authService).resetPassword(request);
     }
 
     @Test
