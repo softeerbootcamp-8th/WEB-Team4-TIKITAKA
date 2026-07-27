@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityRespon
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
@@ -256,5 +257,36 @@ class AuthServiceTest {
         authService.requestPasswordReset(request);
 
         verifyNoInteractions(passwordResetTokenService, passwordResetMailSender);
+    }
+
+    @Test
+    void 새_비밀번호와_확인_비밀번호가_일치하면_비밀번호를_변경한다() {
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "new-password!"
+        );
+
+        authService.resetPassword(request);
+
+        verify(passwordResetTokenService)
+                .resetPassword(request.token(), request.newPassword());
+    }
+
+    @Test
+    void 새_비밀번호와_확인_비밀번호가_다르면_변경하지_않는다() {
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "different-password!"
+        );
+
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.resetPassword(request)
+        );
+
+        assertEquals(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH, exception.getErrorCode());
+        verifyNoInteractions(passwordResetTokenService);
     }
 }
