@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auth.presentation;
 import com.tikitaka.bidwinback.auth.application.AuthService;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -111,6 +112,22 @@ class AuthControllerTest {
                                 .getAttribute(AuthConstant.SESSION_KEY)
                 )
         );
+    }
+
+    @Test
+    void 이메일_인증에_성공하면_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        EmailVerificationRequest request =
+                new EmailVerificationRequest("raw-email-verification-token");
+
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).confirmEmail(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+        verify(authService).verifyEmail(request);
     }
 
     @Test

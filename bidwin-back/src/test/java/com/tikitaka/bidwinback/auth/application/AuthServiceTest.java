@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auth.application;
 
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -146,6 +147,24 @@ class AuthServiceTest {
                 () -> assertEquals(request.email(), response.email()),
                 () -> assertEquals(request.nickname(), response.nickname())
         );
+    }
+
+    @Test
+    void 회원가입_시_이메일_인증_토큰을_발급하고_메일을_전송한다() {
+        SignUpRequest request = createSignUpRequest();
+        when(passwordHasher.hash(request.password())).thenReturn("encoded-password");
+        when(memberRepository.saveAndFlush(any(Member.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(emailVerificationTokenService.issue(any(Member.class)))
+                .thenReturn("raw-email-verification-token");
+
+        authService.signup(request);
+
+        ArgumentCaptor<Member> captor = ArgumentCaptor.forClass(Member.class);
+        verify(emailVerificationTokenService).issue(captor.capture());
+        assertEquals(request.email(), captor.getValue().getEmail());
+        verify(emailVerificationMailSender)
+                .send(request.email(), "raw-email-verification-token");
     }
 
     private SignUpRequest createSignUpRequest() {
@@ -296,5 +315,14 @@ class AuthServiceTest {
 
         assertEquals(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH, exception.getErrorCode());
         verifyNoInteractions(passwordResetTokenService);
+    }
+
+    @Test
+    void 이메일_인증을_요청하면_토큰_검증을_위임한다() {
+        EmailVerificationRequest request = new EmailVerificationRequest("raw-email-verification-token");
+
+        authService.verifyEmail(request);
+
+        verify(emailVerificationTokenService).verify(request.token());
     }
 }
