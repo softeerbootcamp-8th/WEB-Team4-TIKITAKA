@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.member.domain.entity;
 
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.EntityTransaction;
@@ -83,7 +84,7 @@ class MemberAuthVersionPersistenceTest {
         executeInTransaction(reader -> {
             Member persisted = reader.find(Member.class, memberId);
             assertThat(persisted.getAuthVersion()).isEqualTo(1L);
-            assertThat(persisted.getStatus().name()).isEqualTo("ACTIVE");
+            assertThat(persisted.getStatus()).isEqualTo(MemberStatus.ACTIVE);
             return null;
         });
     }

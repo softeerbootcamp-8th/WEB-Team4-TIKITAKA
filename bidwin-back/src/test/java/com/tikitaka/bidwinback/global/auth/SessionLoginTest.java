@@ -59,7 +59,7 @@ class SessionLoginTest {
     void 로그인_세션이_있으면_현재_회원으로_요청을_처리한다() throws Exception {
         // given
         MockHttpSession session = new MockHttpSession();
-        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(7L));
+        session.setAttribute(AuthConstant.SESSION_KEY, AuthMemberFixture.of(7L));
         when(sessionAuthService.isAuthenticatable(7L, 0L)).thenReturn(true);
 
         // when

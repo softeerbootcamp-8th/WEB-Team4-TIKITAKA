@@ -11,6 +11,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.junit.jupiter.api.Test;
@@ -90,7 +91,7 @@ class AuthControllerTest {
         // given
         AuthService authService = mock(AuthService.class);
         LoginRequest request = new LoginRequest("member@example.com", "password!");
-        AuthMember authMember = new AuthMember(1L);
+        AuthMember authMember = AuthMemberFixture.of(1L);
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         String previousSessionId = servletRequest.getSession().getId();
         when(authService.login(request)).thenReturn(authMember);
@@ -155,7 +156,7 @@ class AuthControllerTest {
         AuthService authService = mock(AuthService.class);
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         var session = servletRequest.getSession();
-        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        session.setAttribute(AuthConstant.SESSION_KEY, AuthMemberFixture.of(1L));
 
         // when
         ResponseEntity<ApiResponse<Void>> result =

@@ -2,7 +2,8 @@ package com.tikitaka.bidwinback.upload.presentation;
 
 import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
-import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
@@ -55,11 +56,13 @@ class AuctionImageUploadControllerTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuctionImageUploadController(presignService))
                 .setControllerAdvice(new GlobalExceptionHandler())
-                .addFilters(new SessionAuthenticationFilter(
-                        new ObjectMapper(),
-                        sessionAuthService,
-                        Clock.systemUTC()
-                ))
+                .addFilters(
+                        new AuthExceptionFilter(new ObjectMapper()),
+                        new SessionAuthenticationFilter(
+                                sessionAuthService,
+                                Clock.systemUTC()
+                        )
+                )
                 .build();
     }
 
@@ -131,7 +134,7 @@ class AuctionImageUploadControllerTest {
 
     private MockHttpSession authenticatedSession() {
         MockHttpSession session = new MockHttpSession();
-        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        session.setAttribute(AuthConstant.SESSION_KEY, AuthMemberFixture.of(1L));
         when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
         return session;
     }
