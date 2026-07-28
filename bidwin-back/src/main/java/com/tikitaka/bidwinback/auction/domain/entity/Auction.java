@@ -2,22 +2,10 @@ package com.tikitaka.bidwinback.auction.domain.entity;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import lombok.Builder;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -28,8 +16,10 @@ import static lombok.AccessLevel.PROTECTED;
 @Getter
 @Entity
 @Table(name = "Auction")
+@Inheritance(strategy = InheritanceType.JOINED)
+@DiscriminatorColumn(name = "auction_type")
 @NoArgsConstructor(access = PROTECTED)
-public class Auction extends BaseTimeEntity {
+public abstract class Auction extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -66,12 +56,7 @@ public class Auction extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String contact;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "auction_type", nullable = false)
-    private AuctionType auctionType;
-
-    @Builder
-    private Auction(
+    protected Auction(
             Member seller,
             String title,
             String description,
@@ -80,8 +65,7 @@ public class Auction extends BaseTimeEntity {
             long startPrice,
             LocalDateTime endedAt,
             TradeType tradeType,
-            String contact,
-            AuctionType auctionType
+            String contact
     ) {
         this.seller = seller;
         this.title = title;
@@ -92,6 +76,5 @@ public class Auction extends BaseTimeEntity {
         this.endedAt = endedAt;
         this.tradeType = tradeType;
         this.contact = contact;
-        this.auctionType = auctionType;
     }
 }
