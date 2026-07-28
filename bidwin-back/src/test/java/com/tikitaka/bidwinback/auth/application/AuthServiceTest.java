@@ -79,12 +79,12 @@ class AuthServiceTest {
     void 사용_가능한_이메일을_확인한다() {
         EmailAvailabilityRequest request =
                 new EmailAvailabilityRequest("member@example.com");
-        when(memberRepository.existsByEmail(request.email())).thenReturn(false);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
 
         AvailabilityResponse response = authService.checkEmailAvailability(request);
 
         assertTrue(response.available());
-        verify(memberRepository).existsByEmail(request.email());
+        verify(memberRepository).findByEmail(request.email());
     }
 
     @Test
@@ -101,7 +101,15 @@ class AuthServiceTest {
     @Test
     void 회원가입_시_이메일이_중복되면_해싱과_저장을_하지_않는다() {
         SignUpRequest request = createSignUpRequest();
-        when(memberRepository.existsByEmail(request.email())).thenReturn(true);
+        Member existingMember = Member.builder()
+                .email(request.email())
+                .password("encoded-password")
+                .name("기존회원")
+                .phoneNumber("01099998888")
+                .nickname("기존닉네임")
+                .status(MemberStatus.ACTIVE)
+                .build();
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(existingMember));
 
         assertThatExceptionOfType(MemberException.class)
                 .isThrownBy(() -> authService.signup(request))
@@ -114,7 +122,7 @@ class AuthServiceTest {
     @Test
     void 회원가입_시_닉네임이_중복되면_해싱과_저장을_하지_않는다() {
         SignUpRequest request = createSignUpRequest();
-        when(memberRepository.existsByEmail(request.email())).thenReturn(false);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
         when(memberRepository.existsByNickname(request.nickname())).thenReturn(true);
 
         assertThatExceptionOfType(MemberException.class)
