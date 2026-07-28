@@ -18,6 +18,9 @@ import org.springframework.web.util.pattern.PathPatternParser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,6 +28,8 @@ import tools.jackson.databind.ObjectMapper;
 
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
+    // 유휴 만료만으로는 계속 사용되는 탈취 세션을 종료할 수 없어 로그인 시각부터 수명을 제한한다.
+    private static final Duration ABSOLUTE_SESSION_LIFETIME = Duration.ofHours(24);
     private static final List<PathPattern> PUBLIC_POST_PATHS = List.of(
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/*/verify"),
@@ -42,9 +47,15 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     );
 
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     public SessionAuthenticationFilter(ObjectMapper objectMapper) {
+        this(objectMapper, Clock.systemUTC());
+    }
+
+    SessionAuthenticationFilter(ObjectMapper objectMapper, Clock clock) {
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     @Override
@@ -88,7 +99,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
-            if (attribute instanceof AuthMember authMember) {
+            if (attribute instanceof AuthMember authMember && isWithinAbsoluteLifetime(authMember)) {
                 return Optional.of(authMember);
             }
         } catch (IllegalStateException ignored) {
@@ -96,6 +107,12 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return Optional.empty();
+    }
+
+    private boolean isWithinAbsoluteLifetime(AuthMember authMember) {
+        Instant loggedInAt = authMember.loggedInAt();
+        return loggedInAt != null
+                && loggedInAt.isAfter(clock.instant().minus(ABSOLUTE_SESSION_LIFETIME));
     }
 
     private void writeUnauthorizedResponse(HttpServletResponse response) throws IOException {
