@@ -2,6 +2,8 @@ package com.tikitaka.bidwinback.auth.application;
 
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationSendRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -53,6 +55,12 @@ class AuthServiceTest {
     @Mock
     private PasswordResetMailSender passwordResetMailSender;
 
+    @Mock
+    private EmailVerificationTokenService emailVerificationTokenService;
+
+    @Mock
+    private EmailVerificationMailSender emailVerificationMailSender;
+
     private AuthService authService;
 
     @BeforeEach
@@ -61,7 +69,9 @@ class AuthServiceTest {
                 new MemberService(memberRepository),
                 passwordHasher,
                 passwordResetTokenService,
-                passwordResetMailSender
+                passwordResetMailSender,
+                emailVerificationTokenService,
+                emailVerificationMailSender
         );
     }
 
@@ -69,12 +79,12 @@ class AuthServiceTest {
     void 사용_가능한_이메일을_확인한다() {
         EmailAvailabilityRequest request =
                 new EmailAvailabilityRequest("member@example.com");
-        when(memberRepository.existsByEmail(request.email())).thenReturn(false);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
 
         AvailabilityResponse response = authService.checkEmailAvailability(request);
 
         assertTrue(response.available());
-        verify(memberRepository).existsByEmail(request.email());
+        verify(memberRepository).findByEmail(request.email());
     }
 
     @Test
@@ -91,7 +101,15 @@ class AuthServiceTest {
     @Test
     void 회원가입_시_이메일이_중복되면_해싱과_저장을_하지_않는다() {
         SignUpRequest request = createSignUpRequest();
-        when(memberRepository.existsByEmail(request.email())).thenReturn(true);
+        Member existingMember = Member.builder()
+                .email(request.email())
+                .password("encoded-password")
+                .name("기존회원")
+                .phoneNumber("01099998888")
+                .nickname("기존닉네임")
+                .status(MemberStatus.ACTIVE)
+                .build();
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(existingMember));
 
         assertThatExceptionOfType(MemberException.class)
                 .isThrownBy(() -> authService.signup(request))
@@ -104,7 +122,7 @@ class AuthServiceTest {
     @Test
     void 회원가입_시_닉네임이_중복되면_해싱과_저장을_하지_않는다() {
         SignUpRequest request = createSignUpRequest();
-        when(memberRepository.existsByEmail(request.email())).thenReturn(false);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
         when(memberRepository.existsByNickname(request.nickname())).thenReturn(true);
 
         assertThatExceptionOfType(MemberException.class)
@@ -138,6 +156,52 @@ class AuthServiceTest {
                 () -> assertEquals(request.email(), response.email()),
                 () -> assertEquals(request.nickname(), response.nickname())
         );
+    }
+
+    @Test
+    void 회원가입은_이메일_인증_토큰_발급이나_메일_전송을_수행하지_않는다() {
+        SignUpRequest request = createSignUpRequest();
+        when(passwordHasher.hash(request.password())).thenReturn("encoded-password");
+        when(memberRepository.saveAndFlush(any(Member.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.signup(request);
+
+        verifyNoInteractions(emailVerificationTokenService, emailVerificationMailSender);
+    }
+
+    @Test
+    void 이메일_인증_메일_발송_요청_시_토큰을_발급하고_메일을_전송한다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .build();
+        when(memberRepository.findByEmail(member.getEmail()))
+                .thenReturn(Optional.of(member));
+        when(emailVerificationTokenService.issue(member))
+                .thenReturn("raw-email-verification-token");
+
+        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+
+        verify(emailVerificationTokenService).issue(member);
+        verify(emailVerificationMailSender)
+                .send(member.getEmail(), "raw-email-verification-token");
+    }
+
+    @Test
+    void 존재하지_않는_회원에게_인증_메일_발송을_요청하면_예외가_발생한다() {
+        when(memberRepository.findByEmail("unknown@example.com"))
+                .thenReturn(Optional.empty());
+
+        assertThatExceptionOfType(AuthException.class)
+                .isThrownBy(() -> authService.sendVerificationEmail(
+                        new EmailVerificationSendRequest("unknown@example.com")))
+                .extracting(AuthException::getErrorCode)
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verifyNoInteractions(emailVerificationMailSender);
     }
 
     private SignUpRequest createSignUpRequest() {
@@ -288,5 +352,14 @@ class AuthServiceTest {
 
         assertEquals(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH, exception.getErrorCode());
         verifyNoInteractions(passwordResetTokenService);
+    }
+
+    @Test
+    void 이메일_인증을_요청하면_토큰_검증을_위임한다() {
+        EmailVerificationRequest request = new EmailVerificationRequest("raw-email-verification-token");
+
+        authService.verifyEmail(request);
+
+        verify(emailVerificationTokenService).verify(request.token());
     }
 }

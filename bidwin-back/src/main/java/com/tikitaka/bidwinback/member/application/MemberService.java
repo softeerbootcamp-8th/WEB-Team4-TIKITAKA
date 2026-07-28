@@ -11,8 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
+
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.EMAIL_VERIFICATION_PENDING;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.EMAIL_UNIQUE_CONSTRAINT;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.NICKNAME_UNIQUE_CONSTRAINT;
 
@@ -24,9 +27,12 @@ public class MemberService {
 
     @Transactional(readOnly = true)
     public void validateEmailAvailable(String email) {
-        if (memberRepository.existsByEmail(email)) {
+        memberRepository.findByEmail(email).ifPresent(member -> {
+            if (member.getStatus() == MemberStatus.PENDING) {
+                throw new MemberException(EMAIL_VERIFICATION_PENDING);
+            }
             throw new MemberException(DUPLICATE_EMAIL);
-        }
+        });
     }
 
     @Transactional(readOnly = true)

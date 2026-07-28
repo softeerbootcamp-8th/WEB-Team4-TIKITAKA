@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.member.application;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
@@ -35,21 +38,48 @@ class MemberServiceTest {
     @Test
     void 존재하지_않는_이메일은_사용할_수_있다() {
         String email = "member@example.com";
-        when(memberRepository.existsByEmail(email)).thenReturn(false);
+        when(memberRepository.findByEmail(email)).thenReturn(Optional.empty());
 
         assertThatCode(() -> memberService.validateEmailAvailable(email))
                 .doesNotThrowAnyException();
     }
 
     @Test
-    void 이미_존재하는_이메일이면_중복_예외를_던진다() {
+    void 이미_존재하는_활성_회원의_이메일이면_중복_예외를_던진다() {
         String email = "member@example.com";
-        when(memberRepository.existsByEmail(email)).thenReturn(true);
+        Member member = Member.builder()
+                .email(email)
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .status(MemberStatus.ACTIVE)
+                .build();
+        when(memberRepository.findByEmail(email)).thenReturn(Optional.of(member));
 
         assertThatExceptionOfType(MemberException.class)
                 .isThrownBy(() -> memberService.validateEmailAvailable(email))
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+    }
+
+    @Test
+    void 이메일_인증_대기중인_회원이면_인증_대기_예외를_던진다() {
+        String email = "member@example.com";
+        Member member = Member.builder()
+                .email(email)
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .status(MemberStatus.PENDING)
+                .build();
+        when(memberRepository.findByEmail(email)).thenReturn(Optional.of(member));
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.validateEmailAvailable(email))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.EMAIL_VERIFICATION_PENDING);
     }
 
     @Test
