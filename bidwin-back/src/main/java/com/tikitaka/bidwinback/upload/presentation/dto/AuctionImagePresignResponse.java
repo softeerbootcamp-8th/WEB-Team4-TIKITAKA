@@ -3,7 +3,7 @@ package com.tikitaka.bidwinback.upload.presentation.dto;
 import java.time.Instant;
 
 public record AuctionImagePresignResponse(
-        String uploadUrl,
+        String presignedUrl,
         String objectKey,
         Instant expiresAt
 ) {

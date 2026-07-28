@@ -52,14 +52,14 @@ class AuctionImagePresignServiceTest {
                 248_392L
         );
         String objectKey = "auction-images/image-id.jpg";
-        URL uploadUrl = URI.create("https://example.com/presigned-upload").toURL();
+        URL presignedUrl = URI.create("https://example.com/presigned-upload").toURL();
         Instant expiresAt = Instant.parse("2026-07-28T06:10:00Z");
         PresignedPutObjectRequest presignedRequest =
                 mock(PresignedPutObjectRequest.class);
 
         when(objectKeyGenerator.generate(AuctionImageFileType.JPEG))
                 .thenReturn(objectKey);
-        when(presignedRequest.url()).thenReturn(uploadUrl);
+        when(presignedRequest.url()).thenReturn(presignedUrl);
         when(presignedRequest.expiration()).thenReturn(expiresAt);
         when(s3Presigner.presignPutObject(
                 org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
@@ -75,7 +75,10 @@ class AuctionImagePresignServiceTest {
                 capturedPresignRequest.putObjectRequest();
 
         assertAll(
-                () -> assertEquals(uploadUrl.toString(), response.uploadUrl()),
+                () -> assertEquals(
+                        presignedUrl.toString(),
+                        response.presignedUrl()
+                ),
                 () -> assertEquals(objectKey, response.objectKey()),
                 () -> assertEquals(expiresAt, response.expiresAt()),
                 () -> assertEquals(

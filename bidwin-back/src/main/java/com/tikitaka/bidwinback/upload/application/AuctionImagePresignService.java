@@ -33,7 +33,6 @@ public class AuctionImagePresignService {
                 .contentLength(request.size())
                 .build();
 
-
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
                 .signatureDuration(s3Properties.presignDuration())
                 .putObjectRequest(putObjectRequest)
