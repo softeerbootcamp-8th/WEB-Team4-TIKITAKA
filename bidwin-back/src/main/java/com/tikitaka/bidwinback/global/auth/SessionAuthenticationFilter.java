@@ -112,10 +112,13 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             if (attribute instanceof AuthMember authMember) {
                 if (isWithinAbsoluteLifetime(authMember)
                         && authMember.memberId() != null
-                        && memberService.isActive(authMember.memberId())) {
+                        && memberService.isActiveWithAuthVersion(
+                                authMember.memberId(),
+                                authMember.authVersion()
+                        )) {
                     return Optional.of(authMember);
                 }
-                // 세션에 저장된 과거 상태가 아니라 DB의 현재 ACTIVE 상태만 인증 근거로 사용한다.
+                // DB의 현재 ACTIVE 상태와 인증 버전이 모두 일치할 때만 세션을 신뢰한다.
                 session.invalidate();
             }
         } catch (IllegalStateException ignored) {

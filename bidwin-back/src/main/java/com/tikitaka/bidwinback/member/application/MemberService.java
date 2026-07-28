@@ -109,7 +109,11 @@ public class MemberService {
     }
 
     @Transactional(readOnly = true)
-    public boolean isActive(Long memberId) {
-        return memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE);
+    public boolean isActiveWithAuthVersion(Long memberId, long authVersion) {
+        return memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        );
     }
 }
