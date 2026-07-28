@@ -55,7 +55,7 @@ class EmailVerificationTokenServiceTest {
     }
 
     @Test
-    void 이메일_인증_토큰을_해시해_24시간_유효기간으로_저장한다() {
+    void 이메일_인증_토큰을_해시해_15분_유효기간으로_저장한다() {
         String rawToken = "raw-email-verification-token";
         String tokenHash = "hashed-email-verification-token";
         when(member.getId()).thenReturn(1L);
@@ -77,7 +77,7 @@ class EmailVerificationTokenServiceTest {
         assertThat(savedToken.getMember()).isSameAs(member);
         assertThat(savedToken.getTokenHash()).isEqualTo(tokenHash);
         assertThat(savedToken.getExpiresAt())
-                .isEqualTo(issuedAtCaptor.getValue().plusHours(24));
+                .isEqualTo(issuedAtCaptor.getValue().plusMinutes(15));
         assertThat(savedToken.getUsedAt()).isNull();
         assertThat(savedToken.getRevokedAt()).isNull();
     }

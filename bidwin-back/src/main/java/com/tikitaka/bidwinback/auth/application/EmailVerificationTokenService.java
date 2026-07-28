@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EmailVerificationTokenService {
 
-    private static final Duration TOKEN_VALIDITY = Duration.ofHours(24);
+    private static final Duration TOKEN_VALIDITY = Duration.ofMinutes(15);
 
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final EmailVerificationTokenGenerator tokenGenerator;

@@ -50,6 +50,6 @@ class GmailEmailVerificationMailSenderTest {
         assertThat(message.getSubject()).isEqualTo("[BidWin] 이메일 인증 안내");
         assertThat(message.getText())
                 .contains(EMAIL_VERIFICATION_URL + "?token=" + rawToken)
-                .contains("24시간 동안 유효합니다.");
+                .contains("15분 동안 유효합니다.");
     }
 }

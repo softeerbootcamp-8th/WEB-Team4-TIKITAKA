@@ -17,7 +17,7 @@ public class GmailEmailVerificationMailSender implements EmailVerificationMailSe
             아래 링크를 통해 이메일 인증을 완료해 주세요.
             %s
 
-            이 링크는 24시간 동안 유효합니다.
+            이 링크는 15분 동안 유효합니다.
             본인이 요청하지 않았다면 이 메일을 무시해 주세요.
             """;
 
