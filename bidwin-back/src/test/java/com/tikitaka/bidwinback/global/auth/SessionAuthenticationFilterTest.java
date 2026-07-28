@@ -1,6 +1,8 @@
 package com.tikitaka.bidwinback.global.auth;
 
+import com.tikitaka.bidwinback.member.application.MemberService;
 import jakarta.servlet.ServletException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -19,6 +21,11 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,13 +33,20 @@ class SessionAuthenticationFilterTest {
 
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final MemberService memberService = mock(MemberService.class);
     private final SessionAuthenticationFilter filter =
-            new SessionAuthenticationFilter(objectMapper);
+            new SessionAuthenticationFilter(objectMapper, memberService);
     private final SessionAuthenticationFilter fixedTimeFilter =
             new SessionAuthenticationFilter(
                     objectMapper,
+                    memberService,
                     Clock.fixed(NOW, ZoneOffset.UTC)
             );
+
+    @BeforeEach
+    void setUp() {
+        when(memberService.isActive(anyLong())).thenReturn(true);
+    }
 
     @Test
     void 로그인_세션이_있으면_요청에서_인증_회원을_사용할_수_있다()
@@ -67,6 +81,44 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
+    void 활성_상태가_아닌_회원의_세션은_무효화한다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        MockHttpSession session = (MockHttpSession) request.getSession();
+        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        when(memberService.isActive(1L)).thenReturn(false);
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        // then
+        assertThatThrownBy(() -> session.getAttribute(AuthConstant.SESSION_KEY))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void 활성_상태가_아닌_회원은_보호_경로에_접근할_수_없다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L)
+        );
+        when(memberService.isActive(1L)).thenReturn(false);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        filter.doFilter(request, response, new MockFilterChain());
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
     void 로그인_후_24시간에_도달하면_보호_경로에_접근할_수_없다()
             throws ServletException, IOException {
         // given
@@ -83,6 +135,28 @@ class SessionAuthenticationFilterTest {
 
         // then
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void 절대_만료된_세션은_회원_상태를_조회하지_않는다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L, NOW.minus(Duration.ofHours(24)))
+        );
+
+        // when
+        fixedTimeFilter.doFilter(
+                request,
+                new MockHttpServletResponse(),
+                new MockFilterChain()
+        );
+
+        // then
+        verifyNoInteractions(memberService);
     }
 
     @Test

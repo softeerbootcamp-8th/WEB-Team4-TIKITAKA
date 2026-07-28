@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.member.application;
 
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -100,6 +102,34 @@ class MemberServiceTest {
                 .isThrownBy(() -> memberService.validateNicknameAvailable(nickname))
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
+    }
+
+    @Test
+    void 활성_회원이면_활성_상태로_확인한다() {
+        // given
+        Long memberId = 1L;
+        when(memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE))
+                .thenReturn(true);
+
+        // when
+        boolean active = memberService.isActive(memberId);
+
+        // then
+        assertThat(active).isTrue();
+    }
+
+    @Test
+    void 활성_회원이_아니면_비활성_상태로_확인한다() {
+        // given
+        Long memberId = 1L;
+        when(memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE))
+                .thenReturn(false);
+
+        // when
+        boolean active = memberService.isActive(memberId);
+
+        // then
+        assertThat(active).isFalse();
     }
 
     @Test
