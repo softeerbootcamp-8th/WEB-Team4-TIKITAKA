@@ -1,10 +1,12 @@
 package com.tikitaka.bidwinback.global.config;
 
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
-import com.tikitaka.bidwinback.member.application.MemberService;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -15,11 +17,16 @@ public class FilterConfig {
     @Bean
     public FilterRegistrationBean<SessionAuthenticationFilter> sessionAuthenticationFilter(
             ObjectMapper objectMapper,
-            MemberService memberService
+            SessionAuthService sessionAuthService,
+            Clock clock
     ) {
         FilterRegistrationBean<SessionAuthenticationFilter> registration =
                 new FilterRegistrationBean<>(
-                        new SessionAuthenticationFilter(objectMapper, memberService)
+                        new SessionAuthenticationFilter(
+                                objectMapper,
+                                sessionAuthService,
+                                clock
+                        )
                 );
 
         registration.addUrlPatterns("/*");

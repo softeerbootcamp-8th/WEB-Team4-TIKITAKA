@@ -23,11 +23,11 @@ public record AuthMember(
         this(memberId, 0L, loggedInAt);
     }
 
-    public static AuthMember from(Member member) {
+    public static AuthMember from(Member member, Instant loggedInAt) {
         return new AuthMember(
                 member.getId(),
                 member.getAuthVersion(),
-                Instant.now()
+                loggedInAt
         );
     }
 }
