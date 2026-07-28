@@ -1,10 +1,10 @@
 package com.tikitaka.bidwinback.upload.presentation.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record AuctionImagePresignResponse(
         String uploadUrl,
         String objectKey,
-        LocalDateTime expiresAt
+        Instant expiresAt
 ) {
 }
