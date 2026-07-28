@@ -253,6 +253,25 @@ class AuthServiceTest {
     }
 
     @Test
+    void 로그인하면_현재_회원의_인증_버전을_인증_정보에_기록한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(member.getId()).thenReturn(1L);
+        when(member.getAuthVersion()).thenReturn(3L);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+
+        // when
+        AuthMember authMember = authService.login(request);
+
+        // then
+        assertThat(authMember.authVersion()).isEqualTo(3L);
+    }
+
+    @Test
     void 비밀번호가_일치하지_않으면_인증에_실패한다() {
         // given
         LoginRequest request = new LoginRequest("member@example.com", "wrong-password!");

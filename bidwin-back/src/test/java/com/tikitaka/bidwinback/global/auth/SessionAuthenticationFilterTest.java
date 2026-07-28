@@ -45,7 +45,8 @@ class SessionAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
-        when(memberService.isActive(anyLong())).thenReturn(true);
+        when(memberService.isActiveWithAuthVersion(anyLong(), anyLong()))
+                .thenReturn(true);
     }
 
     @Test
@@ -88,7 +89,7 @@ class SessionAuthenticationFilterTest {
                 new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
         MockHttpSession session = (MockHttpSession) request.getSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
-        when(memberService.isActive(1L)).thenReturn(false);
+        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(false);
 
         // when
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
@@ -108,7 +109,48 @@ class SessionAuthenticationFilterTest {
                 AuthConstant.SESSION_KEY,
                 new AuthMember(1L)
         );
-        when(memberService.isActive(1L)).thenReturn(false);
+        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(false);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        filter.doFilter(request, response, new MockFilterChain());
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void 세션과_현재_회원의_인증_버전이_다르면_세션을_무효화한다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        MockHttpSession session = (MockHttpSession) request.getSession();
+        session.setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L, 1L, Instant.now())
+        );
+        when(memberService.isActiveWithAuthVersion(1L, 1L)).thenReturn(false);
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        // then
+        assertThatThrownBy(() -> session.getAttribute(AuthConstant.SESSION_KEY))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void 세션과_현재_회원의_인증_버전이_다르면_보호_경로에_접근할_수_없다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L, 1L, Instant.now())
+        );
+        when(memberService.isActiveWithAuthVersion(1L, 1L)).thenReturn(false);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         // when

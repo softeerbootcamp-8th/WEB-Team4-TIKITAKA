@@ -105,31 +105,41 @@ class MemberServiceTest {
     }
 
     @Test
-    void 활성_회원이면_활성_상태로_확인한다() {
+    void ACTIVE_회원이고_인증_버전이_일치하면_현재_인증_상태로_확인한다() {
         // given
         Long memberId = 1L;
-        when(memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE))
+        long authVersion = 3L;
+        when(memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        ))
                 .thenReturn(true);
 
         // when
-        boolean active = memberService.isActive(memberId);
+        boolean current = memberService.isActiveWithAuthVersion(memberId, authVersion);
 
         // then
-        assertThat(active).isTrue();
+        assertThat(current).isTrue();
     }
 
     @Test
-    void 활성_회원이_아니면_비활성_상태로_확인한다() {
+    void ACTIVE_상태와_인증_버전이_일치하지_않으면_현재_인증_상태가_아니다() {
         // given
         Long memberId = 1L;
-        when(memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE))
+        long authVersion = 2L;
+        when(memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        ))
                 .thenReturn(false);
 
         // when
-        boolean active = memberService.isActive(memberId);
+        boolean current = memberService.isActiveWithAuthVersion(memberId, authVersion);
 
         // then
-        assertThat(active).isFalse();
+        assertThat(current).isFalse();
     }
 
     @Test

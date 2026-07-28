@@ -58,7 +58,7 @@ class SessionLoginTest {
         // given
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(7L));
-        when(memberService.isActive(7L)).thenReturn(true);
+        when(memberService.isActiveWithAuthVersion(7L, 0L)).thenReturn(true);
 
         // when
         var result = mockMvc.perform(get("/test/wiring/me").session(session));
