@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.global.auth;
 
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
-import com.tikitaka.bidwinback.member.application.MemberService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,23 +48,16 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     );
 
     private final ObjectMapper objectMapper;
-    private final MemberService memberService;
+    private final SessionAuthService sessionAuthService;
     private final Clock clock;
 
     public SessionAuthenticationFilter(
             ObjectMapper objectMapper,
-            MemberService memberService
-    ) {
-        this(objectMapper, memberService, Clock.systemUTC());
-    }
-
-    SessionAuthenticationFilter(
-            ObjectMapper objectMapper,
-            MemberService memberService,
+            SessionAuthService sessionAuthService,
             Clock clock
     ) {
         this.objectMapper = objectMapper;
-        this.memberService = memberService;
+        this.sessionAuthService = sessionAuthService;
         this.clock = clock;
     }
 
@@ -74,16 +67,19 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        Optional<AuthMember> authMember = resolveAuthMember(request);
-        authMember.ifPresent(member ->
-                request.setAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY, member)
-        );
+        // 공개 경로는 인증 회원이 필요하지 않으므로 세션 검증 질의도 하지 않는다.
+        if (!requiresAuthentication(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-        if (authMember.isEmpty() && requiresAuthentication(request)) {
+        Optional<AuthMember> authMember = resolveAuthMember(request);
+        if (authMember.isEmpty()) {
             writeUnauthorizedResponse(response);
             return;
         }
 
+        request.setAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY, authMember.get());
         filterChain.doFilter(request, response);
     }
 
@@ -110,15 +106,15 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         try {
             Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
             if (attribute instanceof AuthMember authMember) {
+                // DB의 현재 ACTIVE 상태와 인증 버전이 모두 일치할 때만 세션을 신뢰한다.
                 if (isWithinAbsoluteLifetime(authMember)
-                        && authMember.memberId() != null
-                        && memberService.isActiveWithAuthVersion(
+                        && sessionAuthService.isAuthenticatable(
                                 authMember.memberId(),
                                 authMember.authVersion()
                         )) {
                     return Optional.of(authMember);
                 }
-                // DB의 현재 ACTIVE 상태와 인증 버전이 모두 일치할 때만 세션을 신뢰한다.
+
                 session.invalidate();
             }
         } catch (IllegalStateException ignored) {
