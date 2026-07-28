@@ -28,6 +28,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     private static final List<PathPattern> PUBLIC_POST_PATHS = List.of(
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/*/verify"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/email/send"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/email/confirm"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/login"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets"),

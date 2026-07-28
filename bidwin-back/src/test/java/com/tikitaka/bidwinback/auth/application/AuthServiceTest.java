@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auth.application;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationSendRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -150,21 +151,49 @@ class AuthServiceTest {
     }
 
     @Test
-    void 회원가입_시_이메일_인증_토큰을_발급하고_메일을_전송한다() {
+    void 회원가입은_이메일_인증_토큰_발급이나_메일_전송을_수행하지_않는다() {
         SignUpRequest request = createSignUpRequest();
         when(passwordHasher.hash(request.password())).thenReturn("encoded-password");
         when(memberRepository.saveAndFlush(any(Member.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(emailVerificationTokenService.issue(any(Member.class)))
-                .thenReturn("raw-email-verification-token");
 
         authService.signup(request);
 
-        ArgumentCaptor<Member> captor = ArgumentCaptor.forClass(Member.class);
-        verify(emailVerificationTokenService).issue(captor.capture());
-        assertEquals(request.email(), captor.getValue().getEmail());
+        verifyNoInteractions(emailVerificationTokenService, emailVerificationMailSender);
+    }
+
+    @Test
+    void 이메일_인증_메일_발송_요청_시_토큰을_발급하고_메일을_전송한다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .build();
+        when(memberRepository.findByEmail(member.getEmail()))
+                .thenReturn(Optional.of(member));
+        when(emailVerificationTokenService.issue(member))
+                .thenReturn("raw-email-verification-token");
+
+        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+
+        verify(emailVerificationTokenService).issue(member);
         verify(emailVerificationMailSender)
-                .send(request.email(), "raw-email-verification-token");
+                .send(member.getEmail(), "raw-email-verification-token");
+    }
+
+    @Test
+    void 존재하지_않는_회원에게_인증_메일_발송을_요청하면_예외가_발생한다() {
+        when(memberRepository.findByEmail("unknown@example.com"))
+                .thenReturn(Optional.empty());
+
+        assertThatExceptionOfType(AuthException.class)
+                .isThrownBy(() -> authService.sendVerificationEmail(
+                        new EmailVerificationSendRequest("unknown@example.com")))
+                .extracting(AuthException::getErrorCode)
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+        verifyNoInteractions(emailVerificationMailSender);
     }
 
     private SignUpRequest createSignUpRequest() {
