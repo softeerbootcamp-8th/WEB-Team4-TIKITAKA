@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auth.application;
 
-public interface PasswordResetTokenHasher {
+public interface TokenHasher {
 
     String hash(String token);
 }

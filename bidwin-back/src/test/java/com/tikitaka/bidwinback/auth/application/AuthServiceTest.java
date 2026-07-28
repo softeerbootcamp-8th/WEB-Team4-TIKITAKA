@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationTokenService;
+import com.tikitaka.bidwinback.auth.application.passwordreset.PasswordResetTokenService;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
@@ -53,13 +55,10 @@ class AuthServiceTest {
     private PasswordResetTokenService passwordResetTokenService;
 
     @Mock
-    private PasswordResetMailSender passwordResetMailSender;
-
-    @Mock
     private EmailVerificationTokenService emailVerificationTokenService;
 
     @Mock
-    private EmailVerificationMailSender emailVerificationMailSender;
+    private TokenMailSender tokenMailSender;
 
     private AuthService authService;
 
@@ -69,9 +68,8 @@ class AuthServiceTest {
                 new MemberService(memberRepository),
                 passwordHasher,
                 passwordResetTokenService,
-                passwordResetMailSender,
                 emailVerificationTokenService,
-                emailVerificationMailSender
+                tokenMailSender
         );
     }
 
@@ -167,7 +165,7 @@ class AuthServiceTest {
 
         authService.signup(request);
 
-        verifyNoInteractions(emailVerificationTokenService, emailVerificationMailSender);
+        verifyNoInteractions(emailVerificationTokenService, tokenMailSender);
     }
 
     @Test
@@ -187,8 +185,8 @@ class AuthServiceTest {
         authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
 
         verify(emailVerificationTokenService).issue(member);
-        verify(emailVerificationMailSender)
-                .send(member.getEmail(), "raw-email-verification-token");
+        verify(tokenMailSender)
+                .send(MailPurpose.EMAIL_VERIFICATION, member.getEmail(), "raw-email-verification-token");
     }
 
     @Test
@@ -201,7 +199,7 @@ class AuthServiceTest {
                         new EmailVerificationSendRequest("unknown@example.com")))
                 .extracting(AuthException::getErrorCode)
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-        verifyNoInteractions(emailVerificationMailSender);
+        verifyNoInteractions(tokenMailSender);
     }
 
     private SignUpRequest createSignUpRequest() {
@@ -298,7 +296,7 @@ class AuthServiceTest {
         authService.requestPasswordReset(request);
 
         verify(passwordResetTokenService).issue(member);
-        verify(passwordResetMailSender).send(request.email(), "raw-reset-token");
+        verify(tokenMailSender).send(MailPurpose.PASSWORD_RESET, request.email(), "raw-reset-token");
     }
 
     @Test
@@ -308,7 +306,7 @@ class AuthServiceTest {
 
         authService.requestPasswordReset(request);
 
-        verifyNoInteractions(passwordResetTokenService, passwordResetMailSender);
+        verifyNoInteractions(passwordResetTokenService, tokenMailSender);
     }
 
     @Test
@@ -320,7 +318,7 @@ class AuthServiceTest {
 
         authService.requestPasswordReset(request);
 
-        verifyNoInteractions(passwordResetTokenService, passwordResetMailSender);
+        verifyNoInteractions(passwordResetTokenService, tokenMailSender);
     }
 
     @Test

@@ -1,5 +1,7 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.application.emailverification;
 
+import com.tikitaka.bidwinback.auth.application.TokenGenerator;
+import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.EmailVerificationToken;
 import com.tikitaka.bidwinback.auth.domain.repository.EmailVerificationTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
@@ -35,10 +37,10 @@ class EmailVerificationTokenServiceTest {
     private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     @Mock
-    private EmailVerificationTokenGenerator tokenGenerator;
+    private TokenGenerator tokenGenerator;
 
     @Mock
-    private EmailVerificationTokenHasher tokenHasher;
+    private TokenHasher tokenHasher;
 
     @Mock
     private Member member;

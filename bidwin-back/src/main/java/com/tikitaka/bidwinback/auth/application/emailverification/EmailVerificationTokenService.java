@@ -1,5 +1,7 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.application.emailverification;
 
+import com.tikitaka.bidwinback.auth.application.TokenGenerator;
+import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.EmailVerificationToken;
 import com.tikitaka.bidwinback.auth.domain.repository.EmailVerificationTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
@@ -20,8 +22,8 @@ public class EmailVerificationTokenService {
     private static final Duration TOKEN_VALIDITY = Duration.ofMinutes(15);
 
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
-    private final EmailVerificationTokenGenerator tokenGenerator;
-    private final EmailVerificationTokenHasher tokenHasher;
+    private final TokenGenerator tokenGenerator;
+    private final TokenHasher tokenHasher;
 
     @Transactional
     public String issue(Member member) {
