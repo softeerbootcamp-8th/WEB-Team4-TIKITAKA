@@ -1,4 +1,4 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.domain.enums;
 
 public enum MailPurpose {
     PASSWORD_RESET,

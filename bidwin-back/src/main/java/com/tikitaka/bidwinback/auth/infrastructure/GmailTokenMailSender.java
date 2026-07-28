@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auth.infrastructure;
 
-import com.tikitaka.bidwinback.auth.application.MailPurpose;
+import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
 import com.tikitaka.bidwinback.auth.application.TokenMailSender;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;

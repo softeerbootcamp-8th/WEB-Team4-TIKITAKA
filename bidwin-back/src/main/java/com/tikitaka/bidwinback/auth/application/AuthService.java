@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auth.application;
 
 import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationTokenService;
 import com.tikitaka.bidwinback.auth.application.passwordreset.PasswordResetTokenService;
+import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;

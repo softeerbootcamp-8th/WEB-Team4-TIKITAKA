@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auth.infrastructure;
 
-import com.tikitaka.bidwinback.auth.application.MailPurpose;
+import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
