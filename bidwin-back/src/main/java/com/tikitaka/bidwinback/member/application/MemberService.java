@@ -12,8 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
-import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
-
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.EMAIL_VERIFICATION_PENDING;
