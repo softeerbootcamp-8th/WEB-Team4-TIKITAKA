@@ -170,6 +170,13 @@ public enum ErrorCode {
             "등록된 경매는 수정하거나 삭제할 수 없습니다."
     ),
 
+    // Upload
+    UNSUPPORTED_IMAGE_TYPE(
+            HttpStatus.BAD_REQUEST,
+            "UPLOAD_400_1",
+            "지원하지 않는 이미지 형식입니다."
+    ),
+
     // Bid
     BID_PRICE_TOO_LOW(
             HttpStatus.UNPROCESSABLE_CONTENT,
