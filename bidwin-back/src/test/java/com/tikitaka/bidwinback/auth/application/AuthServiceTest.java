@@ -28,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,6 +42,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
@@ -229,6 +231,25 @@ class AuthServiceTest {
 
         // then
         assertEquals(1L, authMember.memberId());
+    }
+
+    @Test
+    void 로그인하면_인증_정보에_로그인_시각을_기록한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(member.getId()).thenReturn(1L);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+        Instant beforeLogin = Instant.now();
+
+        // when
+        AuthMember authMember = authService.login(request);
+
+        // then
+        assertThat(authMember.loggedInAt()).isBetween(beforeLogin, Instant.now());
     }
 
     @Test

@@ -12,6 +12,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,9 +24,15 @@ import tools.jackson.databind.ObjectMapper;
 
 class SessionAuthenticationFilterTest {
 
+    private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SessionAuthenticationFilter filter =
             new SessionAuthenticationFilter(objectMapper);
+    private final SessionAuthenticationFilter fixedTimeFilter =
+            new SessionAuthenticationFilter(
+                    objectMapper,
+                    Clock.fixed(NOW, ZoneOffset.UTC)
+            );
 
     @Test
     void 로그인_세션이_있으면_요청에서_인증_회원을_사용할_수_있다()
@@ -54,6 +64,70 @@ class SessionAuthenticationFilterTest {
 
         // then
         assertThat(filterChainInvoked).isTrue();
+    }
+
+    @Test
+    void 로그인_후_24시간에_도달하면_보호_경로에_접근할_수_없다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L, NOW.minus(Duration.ofHours(24)))
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        fixedTimeFilter.doFilter(request, response, new MockFilterChain());
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void 로그인_후_24시간이_지나기_전에는_보호_경로에_접근할_수_있다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(
+                        1L,
+                        NOW.minus(Duration.ofHours(24)).plusNanos(1)
+                )
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        fixedTimeFilter.doFilter(
+                request,
+                new MockHttpServletResponse(),
+                (ignoredRequest, ignoredResponse) -> filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+    }
+
+    @Test
+    void 로그인_시각이_없는_세션으로는_보호_경로에_접근할_수_없다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
+        request.getSession().setAttribute(
+                AuthConstant.SESSION_KEY,
+                new AuthMember(1L, null)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        fixedTimeFilter.doFilter(request, response, new MockFilterChain());
+
+        // then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
