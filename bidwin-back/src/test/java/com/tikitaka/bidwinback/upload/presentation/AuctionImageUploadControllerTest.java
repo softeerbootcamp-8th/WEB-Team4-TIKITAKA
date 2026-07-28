@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
+import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
@@ -43,6 +44,9 @@ class AuctionImageUploadControllerTest {
     @Mock
     private AuctionImagePresignService presignService;
 
+    @Mock
+    private MemberService memberService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -50,7 +54,10 @@ class AuctionImageUploadControllerTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuctionImageUploadController(presignService))
                 .setControllerAdvice(new GlobalExceptionHandler())
-                .addFilters(new SessionAuthenticationFilter(new ObjectMapper()))
+                .addFilters(new SessionAuthenticationFilter(
+                        new ObjectMapper(),
+                        memberService
+                ))
                 .build();
     }
 
@@ -123,6 +130,7 @@ class AuctionImageUploadControllerTest {
     private MockHttpSession authenticatedSession() {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(true);
         return session;
     }
 }
