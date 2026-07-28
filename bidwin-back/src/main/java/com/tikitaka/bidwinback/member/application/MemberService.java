@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.member.application;
 
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -105,5 +106,10 @@ public class MemberService {
     @Transactional(readOnly = true)
     public Optional<Member> findByEmail(String email) {
         return memberRepository.findByEmail(email);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isActive(Long memberId) {
+        return memberRepository.existsByIdAndStatus(memberId, MemberStatus.ACTIVE);
     }
 }
