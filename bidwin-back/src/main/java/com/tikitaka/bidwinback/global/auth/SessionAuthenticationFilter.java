@@ -1,15 +1,15 @@
 package com.tikitaka.bidwinback.global.auth;
 
 import com.tikitaka.bidwinback.auth.application.SessionAuthService;
-import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.http.server.PathContainer;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -18,14 +18,10 @@ import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-
-import tools.jackson.databind.ObjectMapper;
 
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
@@ -47,16 +43,13 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             PathPatternParser.defaultInstance.parse("/v3/api-docs/**")
     );
 
-    private final ObjectMapper objectMapper;
     private final SessionAuthService sessionAuthService;
     private final Clock clock;
 
     public SessionAuthenticationFilter(
-            ObjectMapper objectMapper,
             SessionAuthService sessionAuthService,
             Clock clock
     ) {
-        this.objectMapper = objectMapper;
         this.sessionAuthService = sessionAuthService;
         this.clock = clock;
     }
@@ -73,13 +66,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        Optional<AuthMember> authMember = resolveAuthMember(request);
-        if (authMember.isEmpty()) {
-            writeUnauthorizedResponse(response);
-            return;
-        }
-
-        request.setAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY, authMember.get());
+        request.setAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY, resolveAuthMember(request));
         filterChain.doFilter(request, response);
     }
 
@@ -97,44 +84,51 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         return !isPublicPostPath && !isPublicGetPath;
     }
 
-    private Optional<AuthMember> resolveAuthMember(HttpServletRequest request) {
+    /**
+     * 응답 변환은 AuthExceptionFilter가 담당하므로 인증 실패는 예외로만 알린다.
+     */
+    private AuthMember resolveAuthMember(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session == null) {
-            return Optional.empty();
+            throw new AuthException(ErrorCode.UNAUTHENTICATED);
         }
 
         try {
             Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
-            if (attribute instanceof AuthMember authMember) {
-                // DB의 현재 ACTIVE 상태와 인증 버전이 모두 일치할 때만 세션을 신뢰한다.
-                if (isWithinAbsoluteLifetime(authMember)
-                        && sessionAuthService.isAuthenticatable(
-                                authMember.memberId(),
-                                authMember.authVersion()
-                        )) {
-                    return Optional.of(authMember);
-                }
-
+            if (!(attribute instanceof AuthMember authMember)) {
+                // 인증 스냅샷이 아닌 값이 담긴 세션은 신뢰할 수 없으므로 함께 폐기한다.
                 session.invalidate();
+                throw new AuthException(ErrorCode.UNAUTHENTICATED);
             }
+
+            // DB의 현재 ACTIVE 상태와 인증 버전이 모두 일치할 때만 세션을 신뢰한다.
+            if (isWithinAbsoluteLifetime(authMember) && isAuthenticatable(authMember)) {
+                return authMember;
+            }
+
+            session.invalidate();
         } catch (IllegalStateException ignored) {
             // 로그아웃과 동시에 처리 중인 요청은 인증되지 않은 요청
         }
 
-        return Optional.empty();
+        throw new AuthException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    private boolean isAuthenticatable(AuthMember authMember) {
+        try {
+            return sessionAuthService.isAuthenticatable(
+                    authMember.memberId(),
+                    authMember.authVersion()
+            );
+        } catch (DataAccessException exception) {
+            // 검증에 실패한 것이 아니라 검증이 불가능한 상태이므로 401로 오인하게 하지 않는다.
+            throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+        }
     }
 
     private boolean isWithinAbsoluteLifetime(AuthMember authMember) {
         Instant loggedInAt = authMember.loggedInAt();
         return loggedInAt != null
                 && loggedInAt.isAfter(clock.instant().minus(ABSOLUTE_SESSION_LIFETIME));
-    }
-
-    private void writeUnauthorizedResponse(HttpServletResponse response) throws IOException {
-        ErrorCode errorCode = ErrorCode.UNAUTHENTICATED;
-        response.setStatus(errorCode.getStatus().value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getWriter(), ApiResponse.error(errorCode));
     }
 }

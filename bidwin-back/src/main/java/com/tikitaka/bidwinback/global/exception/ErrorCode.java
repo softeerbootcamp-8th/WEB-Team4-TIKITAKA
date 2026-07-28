@@ -37,6 +37,11 @@ public enum ErrorCode {
             "MEMBER_401_2",
             "로그인 세션이 없거나 만료되었습니다."
     ),
+    AUTHENTICATION_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "MEMBER_503_1",
+            "인증 처리를 일시적으로 완료할 수 없습니다. 잠시 후 다시 시도해주세요."
+    ),
     INVALID_PASSWORD_FORMAT(
             HttpStatus.BAD_REQUEST,
             "MEMBER_400_1",
