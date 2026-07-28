@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.global.auth;
 
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
+import com.tikitaka.bidwinback.member.application.MemberService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,14 +48,23 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     );
 
     private final ObjectMapper objectMapper;
+    private final MemberService memberService;
     private final Clock clock;
 
-    public SessionAuthenticationFilter(ObjectMapper objectMapper) {
-        this(objectMapper, Clock.systemUTC());
+    public SessionAuthenticationFilter(
+            ObjectMapper objectMapper,
+            MemberService memberService
+    ) {
+        this(objectMapper, memberService, Clock.systemUTC());
     }
 
-    SessionAuthenticationFilter(ObjectMapper objectMapper, Clock clock) {
+    SessionAuthenticationFilter(
+            ObjectMapper objectMapper,
+            MemberService memberService,
+            Clock clock
+    ) {
         this.objectMapper = objectMapper;
+        this.memberService = memberService;
         this.clock = clock;
     }
 
@@ -99,8 +109,14 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
-            if (attribute instanceof AuthMember authMember && isWithinAbsoluteLifetime(authMember)) {
-                return Optional.of(authMember);
+            if (attribute instanceof AuthMember authMember) {
+                if (isWithinAbsoluteLifetime(authMember)
+                        && authMember.memberId() != null
+                        && memberService.isActive(authMember.memberId())) {
+                    return Optional.of(authMember);
+                }
+                // 세션에 저장된 과거 상태가 아니라 DB의 현재 ACTIVE 상태만 인증 근거로 사용한다.
+                session.invalidate();
             }
         } catch (IllegalStateException ignored) {
             // 로그아웃과 동시에 처리 중인 요청은 인증되지 않은 요청
