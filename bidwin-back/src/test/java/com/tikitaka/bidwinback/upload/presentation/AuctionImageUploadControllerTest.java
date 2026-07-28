@@ -19,6 +19,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -55,7 +57,7 @@ class AuctionImageUploadControllerTest {
     }
 
     @Test
-    void 로그인한_회원이_요청하면_Presigned_URL과_201을_응답한다()
+    void 로그인한_회원이_요청하면_Presigned_URL과_서명된_헤더와_201을_응답한다()
             throws Exception {
         AuctionImagePresignRequest request = new AuctionImagePresignRequest(
                 "headphone.jpg",
@@ -65,6 +67,7 @@ class AuctionImageUploadControllerTest {
         AuctionImagePresignResponse response = new AuctionImagePresignResponse(
                 "https://example.com/presigned-upload",
                 "auction-images/image-id.jpg",
+                Map.of("Content-Type", List.of("image/jpeg")),
                 Instant.parse("2026-07-28T06:10:00Z")
         );
         when(presignService.issue(request)).thenReturn(response);
@@ -79,6 +82,9 @@ class AuctionImageUploadControllerTest {
                         .value(response.presignedUrl()))
                 .andExpect(jsonPath("$.data.objectKey")
                         .value(response.objectKey()))
+                .andExpect(jsonPath(
+                        "$.data.signedHeaders['Content-Type'][0]"
+                ).value("image/jpeg"))
                 .andExpect(jsonPath("$.data.expiresAt")
                         .value("2026-07-28T06:10:00Z"));
 
