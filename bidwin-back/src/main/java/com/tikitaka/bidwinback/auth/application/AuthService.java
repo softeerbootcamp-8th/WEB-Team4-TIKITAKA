@@ -32,7 +32,6 @@ public class AuthService {
     private final PasswordHasher passwordHasher;
     private final PasswordResetTokenService passwordResetTokenService;
     private final EmailVerificationTokenService emailVerificationTokenService;
-    private final EmailVerificationMailSender emailVerificationMailSender;
     private final Clock clock;
     private final TokenMailSender tokenMailSender;
 

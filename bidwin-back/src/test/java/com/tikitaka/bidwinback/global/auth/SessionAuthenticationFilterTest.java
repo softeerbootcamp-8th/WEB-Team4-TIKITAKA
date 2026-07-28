@@ -1,8 +1,7 @@
 package com.tikitaka.bidwinback.global.auth;
 
-import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import jakarta.servlet.ServletException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -21,8 +20,6 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -33,21 +30,19 @@ class SessionAuthenticationFilterTest {
 
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final MemberService memberService = mock(MemberService.class);
+    private final SessionAuthService sessionAuthService = mock(SessionAuthService.class);
     private final SessionAuthenticationFilter filter =
-            new SessionAuthenticationFilter(objectMapper, memberService);
+            new SessionAuthenticationFilter(
+                    objectMapper,
+                    sessionAuthService,
+                    Clock.systemUTC()
+            );
     private final SessionAuthenticationFilter fixedTimeFilter =
             new SessionAuthenticationFilter(
                     objectMapper,
-                    memberService,
+                    sessionAuthService,
                     Clock.fixed(NOW, ZoneOffset.UTC)
             );
-
-    @BeforeEach
-    void setUp() {
-        when(memberService.isActiveWithAuthVersion(anyLong(), anyLong()))
-                .thenReturn(true);
-    }
 
     @Test
     void 로그인_세션이_있으면_요청에서_인증_회원을_사용할_수_있다()
@@ -56,6 +51,7 @@ class SessionAuthenticationFilterTest {
         AuthMember authMember = new AuthMember(1L);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute(AuthConstant.SESSION_KEY, authMember);
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
 
         // when
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
@@ -70,6 +66,7 @@ class SessionAuthenticationFilterTest {
         MockHttpServletRequest request =
                 new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
         request.getSession().setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
         AtomicBoolean filterChainInvoked = new AtomicBoolean();
 
         // when
@@ -89,14 +86,13 @@ class SessionAuthenticationFilterTest {
                 new MockHttpServletRequest(HttpMethod.GET.name(), "/api/auctions");
         MockHttpSession session = (MockHttpSession) request.getSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
-        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(false);
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(false);
 
         // when
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
         // then
-        assertThatThrownBy(() -> session.getAttribute(AuthConstant.SESSION_KEY))
-                .isInstanceOf(IllegalStateException.class);
+        assertThat(session.isInvalid()).isTrue();
     }
 
     @Test
@@ -109,7 +105,7 @@ class SessionAuthenticationFilterTest {
                 AuthConstant.SESSION_KEY,
                 new AuthMember(1L)
         );
-        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(false);
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(false);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         // when
@@ -130,14 +126,13 @@ class SessionAuthenticationFilterTest {
                 AuthConstant.SESSION_KEY,
                 new AuthMember(1L, 1L, Instant.now())
         );
-        when(memberService.isActiveWithAuthVersion(1L, 1L)).thenReturn(false);
+        when(sessionAuthService.isAuthenticatable(1L, 1L)).thenReturn(false);
 
         // when
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
         // then
-        assertThatThrownBy(() -> session.getAttribute(AuthConstant.SESSION_KEY))
-                .isInstanceOf(IllegalStateException.class);
+        assertThat(session.isInvalid()).isTrue();
     }
 
     @Test
@@ -150,7 +145,7 @@ class SessionAuthenticationFilterTest {
                 AuthConstant.SESSION_KEY,
                 new AuthMember(1L, 1L, Instant.now())
         );
-        when(memberService.isActiveWithAuthVersion(1L, 1L)).thenReturn(false);
+        when(sessionAuthService.isAuthenticatable(1L, 1L)).thenReturn(false);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         // when
@@ -198,7 +193,7 @@ class SessionAuthenticationFilterTest {
         );
 
         // then
-        verifyNoInteractions(memberService);
+        verifyNoInteractions(sessionAuthService);
     }
 
     @Test
@@ -214,6 +209,7 @@ class SessionAuthenticationFilterTest {
                         NOW.minus(Duration.ofHours(24)).plusNanos(1)
                 )
         );
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
         AtomicBoolean filterChainInvoked = new AtomicBoolean();
 
         // when

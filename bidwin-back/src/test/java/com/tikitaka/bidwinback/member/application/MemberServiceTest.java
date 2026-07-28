@@ -4,7 +4,6 @@ import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
-import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

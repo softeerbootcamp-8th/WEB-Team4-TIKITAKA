@@ -1,10 +1,11 @@
 package com.tikitaka.bidwinback.global.auth;
 
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.ClockConfig;
 import com.tikitaka.bidwinback.global.config.FilterConfig;
 import com.tikitaka.bidwinback.global.config.WebMvcConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
-import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -28,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(SessionLoginTest.TestController.class)
 @Import({
         SessionLoginTest.TestController.class,
+        ClockConfig.class,
         FilterConfig.class,
         WebMvcConfig.class
 })
@@ -51,14 +53,14 @@ class SessionLoginTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private MemberService memberService;
+    private SessionAuthService sessionAuthService;
 
     @Test
     void 로그인_세션이_있으면_현재_회원으로_요청을_처리한다() throws Exception {
         // given
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(7L));
-        when(memberService.isActiveWithAuthVersion(7L, 0L)).thenReturn(true);
+        when(sessionAuthService.isAuthenticatable(7L, 0L)).thenReturn(true);
 
         // when
         var result = mockMvc.perform(get("/test/wiring/me").session(session));

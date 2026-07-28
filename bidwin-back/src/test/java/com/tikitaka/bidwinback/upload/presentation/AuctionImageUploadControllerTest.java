@@ -1,10 +1,10 @@
 package com.tikitaka.bidwinback.upload.presentation;
 
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
-import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
 import java.time.Instant;
 
 import static org.mockito.Mockito.verify;
@@ -45,7 +46,7 @@ class AuctionImageUploadControllerTest {
     private AuctionImagePresignService presignService;
 
     @Mock
-    private MemberService memberService;
+    private SessionAuthService sessionAuthService;
 
     private MockMvc mockMvc;
 
@@ -56,7 +57,8 @@ class AuctionImageUploadControllerTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(new SessionAuthenticationFilter(
                         new ObjectMapper(),
-                        memberService
+                        sessionAuthService,
+                        Clock.systemUTC()
                 ))
                 .build();
     }
@@ -130,7 +132,7 @@ class AuctionImageUploadControllerTest {
     private MockHttpSession authenticatedSession() {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
-        when(memberService.isActiveWithAuthVersion(1L, 0L)).thenReturn(true);
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
         return session;
     }
 }

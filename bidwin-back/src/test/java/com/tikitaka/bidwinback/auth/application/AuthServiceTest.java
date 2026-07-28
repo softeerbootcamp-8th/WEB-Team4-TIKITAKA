@@ -42,11 +42,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
 
     @Mock
     private MemberRepository memberRepository;
@@ -72,6 +76,7 @@ class AuthServiceTest {
                 passwordHasher,
                 passwordResetTokenService,
                 emailVerificationTokenService,
+                Clock.fixed(NOW, ZoneOffset.UTC),
                 tokenMailSender
         );
     }
@@ -243,13 +248,12 @@ class AuthServiceTest {
         when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
         when(member.getId()).thenReturn(1L);
         when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
-        Instant beforeLogin = Instant.now();
 
         // when
         AuthMember authMember = authService.login(request);
 
         // then
-        assertThat(authMember.loggedInAt()).isBetween(beforeLogin, Instant.now());
+        assertThat(authMember.loggedInAt()).isEqualTo(NOW);
     }
 
     @Test
