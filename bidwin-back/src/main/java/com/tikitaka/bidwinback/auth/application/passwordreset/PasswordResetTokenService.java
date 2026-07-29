@@ -1,5 +1,8 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.application.passwordreset;
 
+import com.tikitaka.bidwinback.auth.application.PasswordHasher;
+import com.tikitaka.bidwinback.auth.application.TokenGenerator;
+import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.PasswordResetToken;
 import com.tikitaka.bidwinback.auth.domain.repository.PasswordResetTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
@@ -20,8 +23,8 @@ public class PasswordResetTokenService {
     private static final Duration TOKEN_VALIDITY = Duration.ofMinutes(15);
 
     private final PasswordResetTokenRepository passwordResetTokenRepository;
-    private final PasswordResetTokenGenerator tokenGenerator;
-    private final PasswordResetTokenHasher tokenHasher;
+    private final TokenGenerator tokenGenerator;
+    private final TokenHasher tokenHasher;
     private final PasswordHasher passwordHasher;
 
     @Transactional

@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class SecurePasswordResetTokenGeneratorTest {
+class SecureTokenGeneratorTest {
 
-    private final SecurePasswordResetTokenGenerator tokenGenerator =
-            new SecurePasswordResetTokenGenerator();
+    private final SecureTokenGenerator tokenGenerator =
+            new SecureTokenGenerator();
 
     @Test
     void URL에_안전한_256비트_토큰을_생성한다() {
