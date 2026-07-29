@@ -30,3 +30,9 @@ app:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
   email-verification:
     url: ${EMAIL_VERIFICATION_URL:http://localhost:5173/email-verification}
+
+  storage:
+    s3:
+      bucket: ${AWS_S3_BUCKET}
+      region: ${AWS_REGION:ap-northeast-2}
+      presign-duration: ${AWS_S3_PRESIGN_DURATION:5m}
