@@ -17,6 +17,8 @@ import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,7 +34,7 @@ class AuctionImagePresignServiceTest {
     private static final Duration PRESIGN_DURATION = Duration.ofMinutes(5);
 
     @Test
-    void 이미지_업로드용_Presigned_URL을_발급한다() throws Exception {
+    void 이미지_업로드용_Presigned_URL과_서명된_헤더를_발급한다() throws Exception {
         S3Presigner s3Presigner = mock(S3Presigner.class);
         AuctionImageObjectKeyGenerator objectKeyGenerator =
                 mock(AuctionImageObjectKeyGenerator.class);
@@ -54,12 +56,17 @@ class AuctionImagePresignServiceTest {
         String objectKey = "auction-images/image-id.jpg";
         URL presignedUrl = URI.create("https://example.com/presigned-upload").toURL();
         Instant expiresAt = Instant.parse("2026-07-28T06:10:00Z");
+        Map<String, List<String>> signedHeaders = Map.of(
+                "Content-Type",
+                List.of("image/jpeg")
+        );
         PresignedPutObjectRequest presignedRequest =
                 mock(PresignedPutObjectRequest.class);
 
         when(objectKeyGenerator.generate(AuctionImageFileType.JPEG))
                 .thenReturn(objectKey);
         when(presignedRequest.url()).thenReturn(presignedUrl);
+        when(presignedRequest.signedHeaders()).thenReturn(signedHeaders);
         when(presignedRequest.expiration()).thenReturn(expiresAt);
         when(s3Presigner.presignPutObject(
                 org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
@@ -80,6 +87,7 @@ class AuctionImagePresignServiceTest {
                         response.presignedUrl()
                 ),
                 () -> assertEquals(objectKey, response.objectKey()),
+                () -> assertEquals(signedHeaders, response.signedHeaders()),
                 () -> assertEquals(expiresAt, response.expiresAt()),
                 () -> assertEquals(
                         PRESIGN_DURATION,
@@ -90,6 +98,10 @@ class AuctionImagePresignServiceTest {
                 () -> assertEquals(
                         "image/jpeg",
                         capturedPutObjectRequest.contentType()
+                ),
+                () -> assertEquals(
+                        capturedPutObjectRequest.contentType(),
+                        response.signedHeaders().get("Content-Type").getFirst()
                 ),
                 () -> assertEquals(
                         request.size(),
