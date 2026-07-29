@@ -25,6 +25,16 @@ spring:
     hibernate:
       ddl-auto: update
 
+server:
+  servlet:
+    session:
+      tracking-modes: cookie
+      cookie:
+        secure: ${SESSION_COOKIE_SECURE:true}
+        http-only: true
+        same-site: lax
+        path: /
+
 app:
   password-reset:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}

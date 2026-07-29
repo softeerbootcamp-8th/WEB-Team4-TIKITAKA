@@ -9,6 +9,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetReques
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
@@ -346,7 +347,7 @@ class AuthControllerExceptionTest {
     @Test
     void 로그인에_성공하면_세션과_200을_응답한다() throws Exception {
         // given
-        AuthMember authMember = new AuthMember(1L);
+        AuthMember authMember = AuthMemberFixture.of(1L);
         MockHttpSession session = new MockHttpSession();
         when(authService.login(any(LoginRequest.class))).thenReturn(authMember);
 

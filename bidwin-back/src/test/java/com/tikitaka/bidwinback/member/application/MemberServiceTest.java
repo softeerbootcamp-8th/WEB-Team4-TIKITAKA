@@ -2,8 +2,8 @@ package com.tikitaka.bidwinback.member.application;
 
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
+import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -100,6 +101,44 @@ class MemberServiceTest {
                 .isThrownBy(() -> memberService.validateNicknameAvailable(nickname))
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
+    }
+
+    @Test
+    void ACTIVE_회원이고_인증_버전이_일치하면_현재_인증_상태로_확인한다() {
+        // given
+        Long memberId = 1L;
+        long authVersion = 3L;
+        when(memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        ))
+                .thenReturn(true);
+
+        // when
+        boolean current = memberService.isActiveWithAuthVersion(memberId, authVersion);
+
+        // then
+        assertThat(current).isTrue();
+    }
+
+    @Test
+    void ACTIVE_상태와_인증_버전이_일치하지_않으면_현재_인증_상태가_아니다() {
+        // given
+        Long memberId = 1L;
+        long authVersion = 2L;
+        when(memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        ))
+                .thenReturn(false);
+
+        // when
+        boolean current = memberService.isActiveWithAuthVersion(memberId, authVersion);
+
+        // then
+        assertThat(current).isFalse();
     }
 
     @Test
