@@ -8,8 +8,6 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.util.Map;
-
 @Component
 public class GmailTokenMailSender implements TokenMailSender {
 
@@ -48,7 +46,8 @@ public class GmailTokenMailSender implements TokenMailSender {
 
     private final JavaMailSender mailSender;
     private final String senderEmail;
-    private final Map<MailPurpose, MailTemplate> templates;
+    private final String passwordResetUrl;
+    private final String emailVerificationUrl;
 
     public GmailTokenMailSender(
             JavaMailSender mailSender,
@@ -58,17 +57,22 @@ public class GmailTokenMailSender implements TokenMailSender {
     ) {
         this.mailSender = mailSender;
         this.senderEmail = senderEmail;
-        this.templates = Map.of(
-                MailPurpose.PASSWORD_RESET,
-                new MailTemplate(PASSWORD_RESET_SUBJECT, PASSWORD_RESET_BODY_TEMPLATE, passwordResetUrl),
-                MailPurpose.EMAIL_VERIFICATION,
-                new MailTemplate(EMAIL_VERIFICATION_SUBJECT, EMAIL_VERIFICATION_BODY_TEMPLATE, emailVerificationUrl)
-        );
+        this.passwordResetUrl = passwordResetUrl;
+        this.emailVerificationUrl = emailVerificationUrl;
+    }
+
+    private MailTemplate templateFor(MailPurpose purpose) {
+        return switch (purpose) {
+            case PASSWORD_RESET ->
+                    new MailTemplate(PASSWORD_RESET_SUBJECT, PASSWORD_RESET_BODY_TEMPLATE, passwordResetUrl);
+            case EMAIL_VERIFICATION ->
+                    new MailTemplate(EMAIL_VERIFICATION_SUBJECT, EMAIL_VERIFICATION_BODY_TEMPLATE, emailVerificationUrl);
+        };
     }
 
     @Override
     public void send(MailPurpose purpose, String recipientEmail, String rawToken) {
-        MailTemplate template = templates.get(purpose);
+        MailTemplate template = templateFor(purpose);
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(senderEmail);
