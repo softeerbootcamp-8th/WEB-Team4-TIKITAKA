@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auth.infrastructure;
 
-import com.tikitaka.bidwinback.auth.application.EmailVerificationTokenHasher;
+import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -9,7 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 @Component
-public class Sha256EmailVerificationTokenHasher implements EmailVerificationTokenHasher {
+public class Sha256TokenHasher implements TokenHasher {
 
     private static final String HASH_ALGORITHM = "SHA-256";
 

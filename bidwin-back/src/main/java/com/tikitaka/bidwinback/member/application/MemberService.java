@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.member.application;
 
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -10,8 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
-
-import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
@@ -105,5 +104,14 @@ public class MemberService {
     @Transactional(readOnly = true)
     public Optional<Member> findByEmail(String email) {
         return memberRepository.findByEmail(email);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isActiveWithAuthVersion(Long memberId, long authVersion) {
+        return memberRepository.existsByIdAndStatusAndAuthVersion(
+                memberId,
+                MemberStatus.ACTIVE,
+                authVersion
+        );
     }
 }

@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auth.application;
 
-public interface EmailVerificationTokenGenerator {
+public interface TokenGenerator {
 
     String generate();
 }

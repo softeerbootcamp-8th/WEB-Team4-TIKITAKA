@@ -13,11 +13,14 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
+// 다른 회원 정보 변경이 전체 컬럼 UPDATE로 authVersion을 옛 값으로 덮어쓰지 않도록 변경된 컬럼만 갱신한다.
+@DynamicUpdate
 @Table(
         name = "Member",
         uniqueConstraints = {
@@ -72,6 +75,9 @@ public class Member {
     @Column(name = "locked_point", nullable = false)
     private long lockedPoint;
 
+    @Column(name = "auth_version", nullable = false)
+    private long authVersion;
+
     @Builder
     private Member(
             String name,
@@ -99,6 +105,8 @@ public class Member {
 
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+        // 비밀번호 변경 전 발급된 모든 세션을 다음 인증 요청에서 폐기한다.
+        this.authVersion++;
     }
 
     public void activate() {

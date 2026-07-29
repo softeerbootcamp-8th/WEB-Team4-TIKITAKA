@@ -1,5 +1,8 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.application.passwordreset;
 
+import com.tikitaka.bidwinback.auth.application.PasswordHasher;
+import com.tikitaka.bidwinback.auth.application.TokenGenerator;
+import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.PasswordResetToken;
 import com.tikitaka.bidwinback.auth.domain.repository.PasswordResetTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
@@ -33,10 +36,10 @@ class PasswordResetTokenServiceTest {
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Mock
-    private PasswordResetTokenGenerator tokenGenerator;
+    private TokenGenerator tokenGenerator;
 
     @Mock
-    private PasswordResetTokenHasher tokenHasher;
+    private TokenHasher tokenHasher;
 
     @Mock
     private PasswordHasher passwordHasher;

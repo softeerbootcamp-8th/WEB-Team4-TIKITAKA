@@ -1,5 +1,8 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationTokenService;
+import com.tikitaka.bidwinback.auth.application.passwordreset.PasswordResetTokenService;
+import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
@@ -19,6 +22,8 @@ import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -26,9 +31,9 @@ public class AuthService {
     private final MemberService memberService;
     private final PasswordHasher passwordHasher;
     private final PasswordResetTokenService passwordResetTokenService;
-    private final PasswordResetMailSender passwordResetMailSender;
     private final EmailVerificationTokenService emailVerificationTokenService;
-    private final EmailVerificationMailSender emailVerificationMailSender;
+    private final Clock clock;
+    private final TokenMailSender tokenMailSender;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
         memberService.validateEmailAvailable(request.email());
@@ -61,7 +66,7 @@ public class AuthService {
                 .orElseThrow(() -> new AuthException(ErrorCode.MEMBER_NOT_FOUND));
 
         String rawToken = emailVerificationTokenService.issue(member);
-        emailVerificationMailSender.send(member.getEmail(), rawToken);
+        tokenMailSender.send(MailPurpose.EMAIL_VERIFICATION, member.getEmail(), rawToken);
     }
 
     public void verifyEmail(EmailVerificationRequest request) {
@@ -82,7 +87,7 @@ public class AuthService {
             throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        return AuthMember.from(member);
+        return AuthMember.from(member, clock.instant());
     }
 
     public void requestPasswordReset(PasswordResetRequest request) {
@@ -91,7 +96,7 @@ public class AuthService {
                 .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
                 .ifPresent(member -> {
                     String rawToken = passwordResetTokenService.issue(member);
-                    passwordResetMailSender.send(member.getEmail(), rawToken);
+                    tokenMailSender.send(MailPurpose.PASSWORD_RESET, member.getEmail(), rawToken);
                 });
     }
 

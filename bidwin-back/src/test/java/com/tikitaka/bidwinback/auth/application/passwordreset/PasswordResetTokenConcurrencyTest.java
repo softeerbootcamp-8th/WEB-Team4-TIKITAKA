@@ -1,6 +1,6 @@
-package com.tikitaka.bidwinback.auth.application;
+package com.tikitaka.bidwinback.auth.application.passwordreset;
 
-import com.tikitaka.bidwinback.auth.domain.entity.EmailVerificationToken;
+import com.tikitaka.bidwinback.auth.domain.entity.PasswordResetToken;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -26,7 +26,10 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-class EmailVerificationTokenConcurrencyTest {
+class PasswordResetTokenConcurrencyTest {
+
+    private static final String FIRST_PASSWORD = "encoded-first-password";
+    private static final String SECOND_PASSWORD = "encoded-second-password";
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -39,17 +42,17 @@ class EmailVerificationTokenConcurrencyTest {
         tokenId = executeInTransaction(entityManager -> {
             Member member = Member.builder()
                     .email("concurrency-%s@example.com".formatted(identifier))
-                    .password("encoded-password")
+                    .password("encoded-old-password")
                     .name("동시성테스트")
                     .phoneNumber("01012345678")
                     .nickname(identifier)
                     .build();
             entityManager.persist(member);
 
-            EmailVerificationToken token = EmailVerificationToken.issue(
+            PasswordResetToken token = PasswordResetToken.issue(
                     member,
                     "a".repeat(64),
-                    LocalDateTime.now().plusHours(24)
+                    LocalDateTime.now().plusMinutes(5)
             );
             entityManager.persist(token);
             entityManager.flush();
@@ -64,7 +67,7 @@ class EmailVerificationTokenConcurrencyTest {
         }
 
         executeInTransaction(entityManager -> {
-            EmailVerificationToken token = entityManager.find(EmailVerificationToken.class, tokenId);
+            PasswordResetToken token = entityManager.find(PasswordResetToken.class, tokenId);
             if (token != null) {
                 Member member = token.getMember();
                 entityManager.remove(token);
@@ -81,8 +84,10 @@ class EmailVerificationTokenConcurrencyTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
-            Future<Boolean> firstRequest = executor.submit(useToken(barrier));
-            Future<Boolean> secondRequest = executor.submit(useToken(barrier));
+            Future<Boolean> firstRequest =
+                    executor.submit(useToken(barrier, FIRST_PASSWORD));
+            Future<Boolean> secondRequest =
+                    executor.submit(useToken(barrier, SECOND_PASSWORD));
 
             List<Boolean> results = List.of(
                     firstRequest.get(10, TimeUnit.SECONDS),
@@ -92,11 +97,13 @@ class EmailVerificationTokenConcurrencyTest {
             assertThat(results).containsExactlyInAnyOrder(true, false);
 
             executeInTransaction(entityManager -> {
-                EmailVerificationToken token =
-                        entityManager.find(EmailVerificationToken.class, tokenId);
+                PasswordResetToken token =
+                        entityManager.find(PasswordResetToken.class, tokenId);
 
                 assertThat(token.getUsedAt()).isNotNull();
                 assertThat(token.getVersion()).isEqualTo(1);
+                assertThat(token.getMember().getPassword())
+                        .isIn(FIRST_PASSWORD, SECOND_PASSWORD);
                 return null;
             });
         } finally {
@@ -104,21 +111,24 @@ class EmailVerificationTokenConcurrencyTest {
         }
     }
 
-    private Callable<Boolean> useToken(CyclicBarrier barrier) {
+    private Callable<Boolean> useToken(
+            CyclicBarrier barrier,
+            String encodedPassword
+    ) {
         return () -> {
             EntityManager entityManager = entityManagerFactory.createEntityManager();
             EntityTransaction transaction = entityManager.getTransaction();
 
             try {
                 transaction.begin();
-                EmailVerificationToken token =
-                        entityManager.find(EmailVerificationToken.class, tokenId);
+                PasswordResetToken token =
+                        entityManager.find(PasswordResetToken.class, tokenId);
 
                 // 두 트랜잭션이 같은 version을 읽은 뒤 동시에 변경하도록 조회 시점을 맞춘다.
                 barrier.await(5, TimeUnit.SECONDS);
 
                 token.markUsed(LocalDateTime.now());
-                token.getMember().activate();
+                token.getMember().changePassword(encodedPassword);
                 entityManager.flush();
                 transaction.commit();
                 return true;

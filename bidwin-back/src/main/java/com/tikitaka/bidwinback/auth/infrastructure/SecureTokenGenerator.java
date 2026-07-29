@@ -1,13 +1,13 @@
 package com.tikitaka.bidwinback.auth.infrastructure;
 
-import com.tikitaka.bidwinback.auth.application.PasswordResetTokenGenerator;
+import com.tikitaka.bidwinback.auth.application.TokenGenerator;
 import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 
 @Component
-public class SecurePasswordResetTokenGenerator implements PasswordResetTokenGenerator {
+public class SecureTokenGenerator implements TokenGenerator {
 
     private static final int TOKEN_BYTE_LENGTH = 32;
 

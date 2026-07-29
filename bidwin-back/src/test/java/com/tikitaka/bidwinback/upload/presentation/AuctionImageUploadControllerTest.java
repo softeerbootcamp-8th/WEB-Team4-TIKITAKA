@@ -1,7 +1,9 @@
 package com.tikitaka.bidwinback.upload.presentation;
 
+import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
-import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
@@ -18,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,9 @@ class AuctionImageUploadControllerTest {
     @Mock
     private AuctionImagePresignService presignService;
 
+    @Mock
+    private SessionAuthService sessionAuthService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -52,7 +58,13 @@ class AuctionImageUploadControllerTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuctionImageUploadController(presignService))
                 .setControllerAdvice(new GlobalExceptionHandler())
-                .addFilters(new SessionAuthenticationFilter(new ObjectMapper()))
+                .addFilters(
+                        new AuthExceptionFilter(new ObjectMapper()),
+                        new SessionAuthenticationFilter(
+                                sessionAuthService,
+                                Clock.systemUTC()
+                        )
+                )
                 .build();
     }
 
@@ -128,7 +140,8 @@ class AuctionImageUploadControllerTest {
 
     private MockHttpSession authenticatedSession() {
         MockHttpSession session = new MockHttpSession();
-        session.setAttribute(AuthConstant.SESSION_KEY, new AuthMember(1L));
+        session.setAttribute(AuthConstant.SESSION_KEY, AuthMemberFixture.of(1L));
+        when(sessionAuthService.isAuthenticatable(1L, 0L)).thenReturn(true);
         return session;
     }
 }
