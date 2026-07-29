@@ -21,7 +21,14 @@ public class AuctionImagePresignService {
     private final S3Properties s3Properties;
     private final AuctionImageObjectKeyGenerator objectKeyGenerator;
 
-    public AuctionImagePresignResponse issue(AuctionImagePresignRequest request) {
+    public List<AuctionImagePresignResponse> issue(List<AuctionImagePresignRequest> requests) {
+        return requests
+                .stream()
+                .map(this::issueOne)
+                .toList();
+    }
+
+    private AuctionImagePresignResponse issueOne(AuctionImagePresignRequest request) {
 
         // 파일 확장자와 MIME 타입이 허용된 조합인지 검증한다.
         AuctionImageFileType fileType = AuctionImageFileType.from(request.fileName(), request.contentType());

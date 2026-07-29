@@ -38,11 +38,18 @@ class AuctionImageUploadControllerTest {
     private static final String ENDPOINT =
             "/api/v1/uploads/auction-images/presign";
     private static final String VALID_REQUEST = """
-            {
-              "fileName": "headphone.jpg",
-              "contentType": "image/jpeg",
-              "size": 248392
-            }
+            [
+              {
+                "fileName": "headphone.jpg",
+                "contentType": "image/jpeg",
+                "size": 248392
+              },
+              {
+                "fileName": "keyboard.png",
+                "contentType": "image/png",
+                "size": 128000
+              }
+            ]
             """;
 
     @Mock
@@ -69,20 +76,35 @@ class AuctionImageUploadControllerTest {
     }
 
     @Test
-    void 로그인한_회원이_요청하면_Presigned_URL과_서명된_헤더와_201을_응답한다()
+    void 로그인한_회원이_요청하면_이미지별_Presigned_URL과_201을_응답한다()
             throws Exception {
-        AuctionImagePresignRequest request = new AuctionImagePresignRequest(
-                "headphone.jpg",
-                "image/jpeg",
-                248_392L
+        List<AuctionImagePresignRequest> requests = List.of(
+                new AuctionImagePresignRequest(
+                        "headphone.jpg",
+                        "image/jpeg",
+                        248_392L
+                ),
+                new AuctionImagePresignRequest(
+                        "keyboard.png",
+                        "image/png",
+                        128_000L
+                )
         );
-        AuctionImagePresignResponse response = new AuctionImagePresignResponse(
-                "https://example.com/presigned-upload",
-                "auction-images/image-id.jpg",
-                Map.of("Content-Type", List.of("image/jpeg")),
-                Instant.parse("2026-07-28T06:10:00Z")
+        List<AuctionImagePresignResponse> responses = List.of(
+                new AuctionImagePresignResponse(
+                        "https://example.com/presigned-upload-1",
+                        "auction-images/image-id-1.jpg",
+                        Map.of("Content-Type", List.of("image/jpeg")),
+                        Instant.parse("2026-07-28T06:10:00Z")
+                ),
+                new AuctionImagePresignResponse(
+                        "https://example.com/presigned-upload-2",
+                        "auction-images/image-id-2.png",
+                        Map.of("Content-Type", List.of("image/png")),
+                        Instant.parse("2026-07-28T06:10:00Z")
+                )
         );
-        when(presignService.issue(request)).thenReturn(response);
+        when(presignService.issue(requests)).thenReturn(responses);
 
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
@@ -90,17 +112,22 @@ class AuctionImageUploadControllerTest {
                         .content(VALID_REQUEST))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.presignedUrl")
-                        .value(response.presignedUrl()))
-                .andExpect(jsonPath("$.data.objectKey")
-                        .value(response.objectKey()))
+                .andExpect(jsonPath("$.data[0].presignedUrl")
+                        .value(responses.get(0).presignedUrl()))
+                .andExpect(jsonPath("$.data[0].objectKey")
+                        .value(responses.get(0).objectKey()))
                 .andExpect(jsonPath(
-                        "$.data.signedHeaders['Content-Type'][0]"
+                        "$.data[0].signedHeaders['Content-Type'][0]"
                 ).value("image/jpeg"))
-                .andExpect(jsonPath("$.data.expiresAt")
-                        .value("2026-07-28T06:10:00Z"));
+                .andExpect(jsonPath("$.data[1].presignedUrl")
+                        .value(responses.get(1).presignedUrl()))
+                .andExpect(jsonPath("$.data[1].objectKey")
+                        .value(responses.get(1).objectKey()))
+                .andExpect(jsonPath(
+                        "$.data[1].signedHeaders['Content-Type'][0]"
+                ).value("image/png"));
 
-        verify(presignService).issue(request);
+        verify(presignService).issue(requests);
     }
 
     @Test
@@ -109,11 +136,13 @@ class AuctionImageUploadControllerTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {
-                                  "fileName": "headphone.jpg",
-                                  "contentType": "image/jpeg",
-                                  "size": 10485761
-                                }
+                                [
+                                  {
+                                    "fileName": "headphone.jpg",
+                                    "contentType": "image/jpeg",
+                                    "size": 10485761
+                                  }
+                                ]
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
@@ -121,6 +150,22 @@ class AuctionImageUploadControllerTest {
                         .value("COMMON_400_1"))
                 .andExpect(jsonPath("$.error.message")
                         .value("파일 크기는 10MB 이하여야 합니다."));
+
+        verifyNoInteractions(presignService);
+    }
+
+    @Test
+    void 이미지가_없으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("이미지는 한 장 이상이어야 합니다."));
 
         verifyNoInteractions(presignService);
     }

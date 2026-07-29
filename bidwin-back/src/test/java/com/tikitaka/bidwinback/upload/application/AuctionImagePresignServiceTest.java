@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -72,7 +73,7 @@ class AuctionImagePresignServiceTest {
                 org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
         )).thenReturn(presignedRequest);
 
-        AuctionImagePresignResponse response = service.issue(request);
+        AuctionImagePresignResponse response = service.issue(List.of(request)).getFirst();
 
         ArgumentCaptor<PutObjectPresignRequest> captor =
                 ArgumentCaptor.forClass(PutObjectPresignRequest.class);
@@ -112,6 +113,73 @@ class AuctionImagePresignServiceTest {
     }
 
     @Test
+    void 여러_이미지의_Presigned_URL을_요청_순서대로_발급한다() throws Exception {
+        S3Presigner s3Presigner = mock(S3Presigner.class);
+        AuctionImageObjectKeyGenerator objectKeyGenerator =
+                mock(AuctionImageObjectKeyGenerator.class);
+        S3Properties properties = new S3Properties(
+                BUCKET,
+                "ap-northeast-2",
+                PRESIGN_DURATION
+        );
+        AuctionImagePresignService service = new AuctionImagePresignService(
+                s3Presigner,
+                properties,
+                objectKeyGenerator
+        );
+        AuctionImagePresignRequest firstRequest = new AuctionImagePresignRequest(
+                "headphone.jpg",
+                "image/jpeg",
+                248_392L
+        );
+        AuctionImagePresignRequest secondRequest = new AuctionImagePresignRequest(
+                "keyboard.png",
+                "image/png",
+                128_000L
+        );
+        String firstObjectKey = "auction-images/image-id-1.jpg";
+        String secondObjectKey = "auction-images/image-id-2.png";
+        PresignedPutObjectRequest firstPresignedRequest =
+                mock(PresignedPutObjectRequest.class);
+        PresignedPutObjectRequest secondPresignedRequest =
+                mock(PresignedPutObjectRequest.class);
+
+        when(objectKeyGenerator.generate(AuctionImageFileType.JPEG))
+                .thenReturn(firstObjectKey);
+        when(objectKeyGenerator.generate(AuctionImageFileType.PNG))
+                .thenReturn(secondObjectKey);
+        when(firstPresignedRequest.url()).thenReturn(
+                URI.create("https://example.com/presigned-upload-1").toURL()
+        );
+        when(secondPresignedRequest.url()).thenReturn(
+                URI.create("https://example.com/presigned-upload-2").toURL()
+        );
+        when(s3Presigner.presignPutObject(
+                org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
+        )).thenReturn(firstPresignedRequest, secondPresignedRequest);
+
+        List<AuctionImagePresignResponse> responses = service.issue(
+                List.of(firstRequest, secondRequest)
+        );
+
+        assertAll(
+                () -> assertEquals(2, responses.size()),
+                () -> assertEquals(
+                        firstObjectKey,
+                        responses.get(0).objectKey()
+                ),
+                () -> assertEquals(
+                        secondObjectKey,
+                        responses.get(1).objectKey()
+                )
+        );
+        verify(s3Presigner, times(2))
+                .presignPutObject(
+                        org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
+                );
+    }
+
+    @Test
     void 지원하지_않는_이미지_형식이면_Presigned_URL을_발급하지_않는다() {
         S3Presigner s3Presigner = mock(S3Presigner.class);
         AuctionImageObjectKeyGenerator objectKeyGenerator =
@@ -134,7 +202,7 @@ class AuctionImagePresignServiceTest {
 
         UploadException exception = assertThrows(
                 UploadException.class,
-                () -> service.issue(request)
+                () -> service.issue(List.of(request))
         );
 
         assertEquals(ErrorCode.UNSUPPORTED_IMAGE_TYPE, exception.getErrorCode());
