@@ -1,0 +1,68 @@
+/*
+ * DESIGN.md 토큰을 Tailwind 유틸리티로 매핑하는 단일 소스.
+ * 새 토큰이 필요하면 DESIGN.md를 먼저 갱신한 뒤 이 파일에 대응하는 값을 추가한다.
+ * 컴포넌트에서는 여기서 만들어지는 시멘틱 유틸리티(bg-primary, text-ink 등)만 쓰고
+ * Tailwind 기본 팔레트(bg-blue-500 등)나 색상 하드코딩은 사용하지 않는다.
+ */
+@theme {
+  /* Colors */
+  --color-primary: #0052ff;
+  --color-primary-active: #003ecc;
+  --color-primary-disabled: #a8b8cc;
+  --color-primary-tint: #eaf0ff;
+
+  --color-ink: #0a0b0d;
+  --color-body: #5b616e;
+  --color-body-strong: #0a0b0d;
+  --color-muted: #7c828a;
+  --color-muted-soft: #a8acb3;
+
+  --color-hairline: #dee1e6;
+  --color-hairline-soft: #eef0f3;
+
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-card: #ffffff;
+  --color-surface-strong: #eef0f3;
+  --color-surface-dark: #0a0b0d;
+  --color-surface-dark-elevated: #16181c;
+
+  --color-on-primary: #ffffff;
+  --color-on-dark: #ffffff;
+  --color-on-dark-soft: #a8acb3;
+
+  --color-up: #05b169;
+  --color-up-tint: #e7f8f0;
+  --color-down: #cf202f;
+  --color-down-tint: #fdecee;
+  --color-accent-yellow: #f4b000;
+
+  /* Typography */
+  --font-sans:
+    'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Radius — DESIGN.md 스케일로 Tailwind 기본 rounded-* 스케일을 대체한다 */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 100px;
+
+  /* Spacing — 기본 숫자 스케일(p-4 등)에 이름 있는 스케일을 더한다 */
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-base: 16px;
+  --spacing-md: 20px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 96px;
+
+  /* Shadow */
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 2px 8px rgba(10, 11, 13, 0.06);
+}
