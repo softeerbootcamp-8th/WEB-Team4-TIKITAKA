@@ -2,10 +2,12 @@ package com.tikitaka.bidwinback.upload.application;
 
 import com.tikitaka.bidwinback.global.config.S3Properties;
 import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
@@ -13,6 +15,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,12 +23,28 @@ public class AuctionImagePresignService {
     private final S3Presigner s3Presigner;
     private final S3Properties s3Properties;
     private final AuctionImageObjectKeyGenerator objectKeyGenerator;
+    private final PendingAuctionImageStore pendingAuctionImageStore;
 
-    public List<AuctionImagePresignResponse> issue(List<AuctionImagePresignRequest> requests) {
-        return requests
+    @Transactional
+    public List<AuctionImagePresignResponse> issue(
+            long memberId,
+            UUID draftId,
+            List<AuctionImagePresignRequest> requests
+    ) {
+        List<AuctionImagePresignResponse> responses = requests
                 .stream()
                 .map(this::issueOne)
                 .toList();
+
+        pendingAuctionImageStore.saveAll(
+                memberId,
+                draftId,
+                responses.stream()
+                        .map(AuctionImagePresignResponse::objectKey)
+                        .toList()
+        );
+
+        return responses;
     }
 
     private AuctionImagePresignResponse issueOne(AuctionImagePresignRequest request) {

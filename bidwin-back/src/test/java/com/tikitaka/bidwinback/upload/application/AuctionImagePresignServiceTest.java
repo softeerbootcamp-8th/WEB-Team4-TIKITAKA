@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.upload.application;
 import com.tikitaka.bidwinback.global.config.S3Properties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.domain.UploadException;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,6 +41,8 @@ class AuctionImagePresignServiceTest {
         S3Presigner s3Presigner = mock(S3Presigner.class);
         AuctionImageObjectKeyGenerator objectKeyGenerator =
                 mock(AuctionImageObjectKeyGenerator.class);
+        PendingAuctionImageStore pendingAuctionImageStore =
+                mock(PendingAuctionImageStore.class);
         S3Properties properties = new S3Properties(
                 BUCKET,
                 "ap-northeast-2",
@@ -47,8 +51,11 @@ class AuctionImagePresignServiceTest {
         AuctionImagePresignService service = new AuctionImagePresignService(
                 s3Presigner,
                 properties,
-                objectKeyGenerator
+                objectKeyGenerator,
+                pendingAuctionImageStore
         );
+        long memberId = 1L;
+        UUID draftId = UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09");
         AuctionImagePresignRequest request = new AuctionImagePresignRequest(
                 "headphone.jpeg",
                 "image/jpeg",
@@ -73,7 +80,11 @@ class AuctionImagePresignServiceTest {
                 org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
         )).thenReturn(presignedRequest);
 
-        AuctionImagePresignResponse response = service.issue(List.of(request)).getFirst();
+        AuctionImagePresignResponse response = service.issue(
+                memberId,
+                draftId,
+                List.of(request)
+        ).getFirst();
 
         ArgumentCaptor<PutObjectPresignRequest> captor =
                 ArgumentCaptor.forClass(PutObjectPresignRequest.class);
@@ -110,6 +121,11 @@ class AuctionImagePresignServiceTest {
                 )
         );
         verify(objectKeyGenerator).generate(AuctionImageFileType.JPEG);
+        verify(pendingAuctionImageStore).saveAll(
+                memberId,
+                draftId,
+                List.of(objectKey)
+        );
     }
 
     @Test
@@ -117,6 +133,8 @@ class AuctionImagePresignServiceTest {
         S3Presigner s3Presigner = mock(S3Presigner.class);
         AuctionImageObjectKeyGenerator objectKeyGenerator =
                 mock(AuctionImageObjectKeyGenerator.class);
+        PendingAuctionImageStore pendingAuctionImageStore =
+                mock(PendingAuctionImageStore.class);
         S3Properties properties = new S3Properties(
                 BUCKET,
                 "ap-northeast-2",
@@ -125,8 +143,11 @@ class AuctionImagePresignServiceTest {
         AuctionImagePresignService service = new AuctionImagePresignService(
                 s3Presigner,
                 properties,
-                objectKeyGenerator
+                objectKeyGenerator,
+                pendingAuctionImageStore
         );
+        long memberId = 1L;
+        UUID draftId = UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09");
         AuctionImagePresignRequest firstRequest = new AuctionImagePresignRequest(
                 "headphone.jpg",
                 "image/jpeg",
@@ -159,6 +180,8 @@ class AuctionImagePresignServiceTest {
         )).thenReturn(firstPresignedRequest, secondPresignedRequest);
 
         List<AuctionImagePresignResponse> responses = service.issue(
+                memberId,
+                draftId,
                 List.of(firstRequest, secondRequest)
         );
 
@@ -177,6 +200,11 @@ class AuctionImagePresignServiceTest {
                 .presignPutObject(
                         org.mockito.ArgumentMatchers.any(PutObjectPresignRequest.class)
                 );
+        verify(pendingAuctionImageStore).saveAll(
+                memberId,
+                draftId,
+                List.of(firstObjectKey, secondObjectKey)
+        );
     }
 
     @Test
@@ -184,6 +212,8 @@ class AuctionImagePresignServiceTest {
         S3Presigner s3Presigner = mock(S3Presigner.class);
         AuctionImageObjectKeyGenerator objectKeyGenerator =
                 mock(AuctionImageObjectKeyGenerator.class);
+        PendingAuctionImageStore pendingAuctionImageStore =
+                mock(PendingAuctionImageStore.class);
         S3Properties properties = new S3Properties(
                 BUCKET,
                 "ap-northeast-2",
@@ -192,7 +222,8 @@ class AuctionImagePresignServiceTest {
         AuctionImagePresignService service = new AuctionImagePresignService(
                 s3Presigner,
                 properties,
-                objectKeyGenerator
+                objectKeyGenerator,
+                pendingAuctionImageStore
         );
         AuctionImagePresignRequest request = new AuctionImagePresignRequest(
                 "malware.exe",
@@ -202,10 +233,18 @@ class AuctionImagePresignServiceTest {
 
         UploadException exception = assertThrows(
                 UploadException.class,
-                () -> service.issue(List.of(request))
+                () -> service.issue(
+                        1L,
+                        UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09"),
+                        List.of(request)
+                )
         );
 
         assertEquals(ErrorCode.UNSUPPORTED_IMAGE_TYPE, exception.getErrorCode());
-        verifyNoInteractions(objectKeyGenerator, s3Presigner);
+        verifyNoInteractions(
+                objectKeyGenerator,
+                s3Presigner,
+                pendingAuctionImageStore
+        );
     }
 }

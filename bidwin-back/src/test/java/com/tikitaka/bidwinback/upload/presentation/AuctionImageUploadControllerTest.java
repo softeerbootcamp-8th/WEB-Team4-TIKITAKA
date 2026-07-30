@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
+import com.tikitaka.bidwinback.upload.application.AuctionImageDraftService;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
@@ -24,6 +25,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,23 +39,33 @@ class AuctionImageUploadControllerTest {
 
     private static final String ENDPOINT =
             "/api/v1/uploads/auction-images/presign";
+    private static final String DRAFT_ENDPOINT =
+            "/api/v1/uploads/auction-images/drafts";
+    private static final UUID DRAFT_ID =
+            UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09");
     private static final String VALID_REQUEST = """
-            [
-              {
-                "fileName": "headphone.jpg",
-                "contentType": "image/jpeg",
-                "size": 248392
-              },
-              {
-                "fileName": "keyboard.png",
-                "contentType": "image/png",
-                "size": 128000
-              }
-            ]
+            {
+              "draftId": "44eac1aa-827d-40c3-b3e9-c44abb94ed09",
+              "images": [
+                {
+                  "fileName": "headphone.jpg",
+                  "contentType": "image/jpeg",
+                  "size": 248392
+                },
+                {
+                  "fileName": "keyboard.png",
+                  "contentType": "image/png",
+                  "size": 128000
+                }
+              ]
+            }
             """;
 
     @Mock
     private AuctionImagePresignService presignService;
+
+    @Mock
+    private AuctionImageDraftService draftService;
 
     @Mock
     private SessionAuthService sessionAuthService;
@@ -63,7 +75,10 @@ class AuctionImageUploadControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuctionImageUploadController(presignService))
+                .standaloneSetup(new AuctionImageUploadController(
+                        presignService,
+                        draftService
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(
                         new AuthExceptionFilter(new ObjectMapper()),
@@ -73,6 +88,20 @@ class AuctionImageUploadControllerTest {
                         )
                 )
                 .build();
+    }
+
+    @Test
+    void 로그인한_회원이_작성_페이지에_진입하면_draftId를_발급한다()
+            throws Exception {
+        when(draftService.issue()).thenReturn(DRAFT_ID);
+
+        mockMvc.perform(post(DRAFT_ENDPOINT)
+                        .session(authenticatedSession()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.draftId").value(DRAFT_ID.toString()));
+
+        verify(draftService).issue();
     }
 
     @Test
@@ -104,7 +133,7 @@ class AuctionImageUploadControllerTest {
                         Instant.parse("2026-07-28T06:10:00Z")
                 )
         );
-        when(presignService.issue(requests)).thenReturn(responses);
+        when(presignService.issue(1L, DRAFT_ID, requests)).thenReturn(responses);
 
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
@@ -127,7 +156,7 @@ class AuctionImageUploadControllerTest {
                         "$.data[1].signedHeaders['Content-Type'][0]"
                 ).value("image/png"));
 
-        verify(presignService).issue(requests);
+        verify(presignService).issue(1L, DRAFT_ID, requests);
     }
 
     @Test
@@ -136,13 +165,16 @@ class AuctionImageUploadControllerTest {
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                [
-                                  {
-                                    "fileName": "headphone.jpg",
-                                    "contentType": "image/jpeg",
-                                    "size": 10485761
-                                  }
-                                ]
+                                {
+                                  "draftId": "44eac1aa-827d-40c3-b3e9-c44abb94ed09",
+                                  "images": [
+                                    {
+                                      "fileName": "headphone.jpg",
+                                      "contentType": "image/jpeg",
+                                      "size": 10485761
+                                    }
+                                  ]
+                                }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
@@ -159,7 +191,12 @@ class AuctionImageUploadControllerTest {
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[]"))
+                        .content("""
+                                {
+                                  "draftId": "44eac1aa-827d-40c3-b3e9-c44abb94ed09",
+                                  "images": []
+                                }
+                                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code")
