@@ -1,5 +1,6 @@
 import { Clock, Flame, TrendingDown, TrendingUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import { useCountdown } from '../hooks/useCountdown'
 import { formatClock, formatWon } from '../lib/format'
@@ -132,14 +133,10 @@ function AuctionSummaryCard({ auction }: { auction: AuctionSummary }) {
       <Card className="flex h-full flex-col gap-sm hover:shadow-soft">
         <div className="aspect-square rounded-md bg-surface-soft" />
 
-        <span
-          className={`inline-flex w-fit items-center gap-1 rounded-pill px-sm py-0.5 text-xs font-semibold ${
-            isDown ? 'bg-down-tint text-down' : 'bg-surface-strong text-body'
-          }`}
-        >
+        <Badge tone={isDown ? 'danger' : 'neutral'}>
           {isDown ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
           {isDown ? DOWN_AUCTION_LABEL : UP_AUCTION_LABEL}
-        </span>
+        </Badge>
 
         <h2 className="line-clamp-2 min-h-[2.5em] text-sm font-semibold text-ink">
           {auction.title}
