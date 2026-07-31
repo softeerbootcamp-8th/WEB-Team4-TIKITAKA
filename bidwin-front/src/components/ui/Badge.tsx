@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react'
 
-type BadgeTone = 'live' | 'ended' | 'muted' | 'primary'
+type BadgeTone =
+  | 'live'
+  | 'ended'
+  | 'muted'
+  | 'primary'
+  | 'neutral'
+  | 'dark'
+  | 'success'
+  | 'danger'
 
 interface BadgeProps {
   tone?: BadgeTone
@@ -12,6 +20,10 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
   ended: 'bg-surface-strong text-muted',
   muted: 'bg-surface-strong text-body',
   primary: 'bg-primary-tint text-primary',
+  neutral: 'bg-surface-strong text-body',
+  dark: 'bg-ink text-on-dark',
+  success: 'bg-up-tint text-up',
+  danger: 'bg-down-tint text-down',
 }
 
 function Badge({ tone = 'muted', children }: BadgeProps) {
