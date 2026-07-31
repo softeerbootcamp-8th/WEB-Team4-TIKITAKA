@@ -46,3 +46,7 @@ app:
       bucket: ${AWS_S3_BUCKET}
       region: ${AWS_REGION:ap-northeast-2}
       presign-duration: ${AWS_S3_PRESIGN_DURATION:5m}
+      pending-auction-image:
+        retention: ${PENDING_AUCTION_IMAGE_RETENTION:24h}
+        cleanup-interval: ${PENDING_AUCTION_IMAGE_CLEANUP_INTERVAL:1h}
+        cleanup-batch-size: ${PENDING_AUCTION_IMAGE_CLEANUP_BATCH_SIZE:1000}
