@@ -21,10 +21,6 @@ import static lombok.AccessLevel.PROTECTED;
         name = "pending_auction_image",
         indexes = {
                 @Index(
-                        name = "idx_pending_auction_image_member_draft",
-                        columnList = "member_id,draft_id"
-                ),
-                @Index(
                         name = "idx_pending_auction_image_created_at",
                         columnList = "created_at"
                 )
