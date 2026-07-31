@@ -49,18 +49,16 @@ async function readEnvelope<TData>(response: Response) {
   }
 }
 
-async function postJson<TData, TBody>(
+async function requestEnvelope<TData>(
   path: string,
-  body: TBody,
+  init: RequestInit,
 ): Promise<ApiResult<TData>> {
   let response: Response
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      method: POST_METHOD,
-      headers: { [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE },
       credentials: CREDENTIALS_MODE,
-      body: JSON.stringify(body),
+      ...init,
     })
   } catch {
     return { ok: false, message: NETWORK_ERROR_MESSAGE, code: null, status: null }
@@ -78,6 +76,14 @@ async function postJson<TData, TBody>(
   }
 
   return { ok: true, data: envelope.data as TData }
+}
+
+function postJson<TData, TBody>(path: string, body: TBody): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, {
+    method: POST_METHOD,
+    headers: { [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE },
+    body: JSON.stringify(body),
+  })
 }
 
 export { postJson }
