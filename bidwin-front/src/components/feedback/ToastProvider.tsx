@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { ToastTone } from './toast-context'
 import { ToastContext } from './toast-context'
 
@@ -29,18 +30,20 @@ function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {toast && (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-pill bg-ink px-lg py-sm text-sm font-semibold text-on-dark shadow-card">
-            {toast.tone === 'info' ? (
-              <Clock size={16} className="text-accent-yellow" />
-            ) : (
-              <CheckCircle2 size={16} className="text-up" />
-            )}
-            <span>{toast.message}</span>
-          </div>
-        </div>
-      )}
+      {toast &&
+        createPortal(
+          <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center">
+            <div className="flex items-center gap-2 rounded-pill bg-ink px-lg py-sm text-sm font-semibold text-on-dark shadow-card">
+              {toast.tone === 'info' ? (
+                <Clock size={16} className="text-accent-yellow" />
+              ) : (
+                <CheckCircle2 size={16} className="text-up" />
+              )}
+              <span>{toast.message}</span>
+            </div>
+          </div>,
+          document.body,
+        )}
     </ToastContext.Provider>
   )
 }
