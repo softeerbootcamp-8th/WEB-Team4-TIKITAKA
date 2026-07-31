@@ -9,6 +9,27 @@ export function formatClock(totalSeconds: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+
+/*
+ * 마감까지 남은 시간을 가장 큰 단위 하나로만 보여준다("2일", "3시간", "12분").
+ * formatClock은 분·초 단위 카운트다운용이라 며칠 남은 결제·수령 기한에는 맞지 않는다.
+ * 이미 지난 기한은 호출하는 쪽에서 따로 표시하라고 null을 돌려준다.
+ */
+export function formatRemainingDuration(remainingMs: number) {
+  if (remainingMs <= 0) return null
+  if (remainingMs >= DAY_MS) return `${Math.floor(remainingMs / DAY_MS)}일`
+  if (remainingMs >= HOUR_MS) return `${Math.floor(remainingMs / HOUR_MS)}시간`
+  return `${Math.max(1, Math.floor(remainingMs / MINUTE_MS))}분`
+}
+
+/** 가입일처럼 시각이 필요 없는 날짜를 "2026년 7월 19일"로 보여준다. */
+export function formatDate(date: Date) {
+  return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 export function formatTimeOfDay(date: Date) {
   return date.toLocaleTimeString('ko-KR', {
     hour: '2-digit',
