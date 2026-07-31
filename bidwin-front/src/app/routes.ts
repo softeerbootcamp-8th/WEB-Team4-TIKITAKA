@@ -17,6 +17,10 @@ export const pageRoutes: RouteObject[] = [
   { path: 'mypage/history', lazy: () => import('../routes/mypage/history/page') },
   { path: 'email-verification', lazy: () => import('../routes/email-verification/page') },
   { path: 'password-reset', lazy: () => import('../routes/password-reset/page') },
+  {
+    path: 'password-reset/confirm',
+    lazy: () => import('../routes/password-reset/confirm/page'),
+  },
 ].map((route) => ({
   ...route,
   lazy: async () => ({ Component: (await route.lazy()).default }),
