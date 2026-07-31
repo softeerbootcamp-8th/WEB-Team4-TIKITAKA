@@ -5,8 +5,7 @@ import { CheckCircle2, KeyRound, ShieldAlert } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import TextInput from '../../../components/ui/TextInput'
-
-const MIN_PASSWORD_LENGTH = 8
+import { getPasswordError } from '../../../lib/validation'
 
 function PasswordResetConfirmPage() {
   const [searchParams] = useSearchParams()
@@ -20,8 +19,9 @@ function PasswordResetConfirmPage() {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 해요.`)
+    const passwordError = getPasswordError(password)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (password !== passwordConfirm) {
@@ -98,7 +98,7 @@ function PasswordResetConfirmPage() {
             <TextInput
               label="새 비밀번호"
               type="password"
-              placeholder={`${MIN_PASSWORD_LENGTH}자 이상`}
+              placeholder="8~64자, 특수문자 1개 이상 포함"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoFocus
