@@ -29,7 +29,8 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
 function Badge({ tone = 'muted', children }: BadgeProps) {
   return (
     <span
-      className={`inline-flex h-7 items-center gap-1.5 rounded-pill px-sm text-xs font-semibold ${TONE_CLASSES[tone]}`}
+      /* 배지는 옆 요소가 넓어져도 줄바꿈되거나 찌그러지지 않는다. 한 줄짜리 알약 모양을 유지한다. */
+      className={`inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill px-sm text-xs font-semibold ${TONE_CLASSES[tone]}`}
     >
       {tone === 'live' && (
         <span className="h-1.5 w-1.5 rounded-full bg-up motion-safe:animate-pulse" />
