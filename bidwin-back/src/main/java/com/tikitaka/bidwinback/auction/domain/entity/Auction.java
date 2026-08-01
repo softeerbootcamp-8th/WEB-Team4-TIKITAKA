@@ -8,6 +8,8 @@ import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
 
 import java.time.LocalDateTime;
 
@@ -48,6 +50,18 @@ public abstract class Auction extends BaseTimeEntity {
 
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
+
+    @CreationTimestamp(source = SourceType.DB)
+    @Column(
+            name = "started_at",
+            nullable = false,
+            updatable = false,
+            columnDefinition = "datetime(6) default current_timestamp(6)"
+    )
+    private LocalDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_type", nullable = false)
