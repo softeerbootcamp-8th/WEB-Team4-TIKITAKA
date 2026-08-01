@@ -22,6 +22,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(
         name = "buy_now_request_log",
+        // 요구사항: 멱등 키 하나는 하나의 완료된 구매 요청만 식별해야 한다.
         uniqueConstraints = @UniqueConstraint(
                 name = BuyNowRequestLog.IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT,
                 columnNames = "idempotency_key"

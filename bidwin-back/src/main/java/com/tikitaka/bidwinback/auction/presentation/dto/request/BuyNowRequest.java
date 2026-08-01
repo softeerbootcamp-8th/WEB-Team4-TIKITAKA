@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record BuyNowRequest(
+        // 요구사항: 재시도와 중복 요청 식별을 위한 유효한 멱등 키를 필수로 받는다.
         @NotBlank(message = "멱등 키는 필수입니다.")
         @Size(max = 100, message = "멱등 키는 100자 이하여야 합니다.")
         @Pattern(

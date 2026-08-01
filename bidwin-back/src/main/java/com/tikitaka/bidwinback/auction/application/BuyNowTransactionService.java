@@ -52,6 +52,7 @@ public class BuyNowTransactionService {
             Long auctionId,
             String idempotencyKey
     ) {
+        // 요구사항: 완료된 동일 요청은 새 거래를 만들지 않고 기존 결과를 반환한다.
         Optional<BuyNowResult> replay = replayIfPresent(
                 memberId,
                 auctionId,
@@ -70,22 +71,26 @@ public class BuyNowTransactionService {
         validateAuction(auction);
         validateDeposit(memberId, auctionId);
 
+        // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
         int completed = auctionRepository.completeForBuyNow(auctionId, memberId);
         if (completed != 1) {
             throw new BidException(CONCURRENT_TRADE_CONFLICT);
         }
 
+        // 요구사항: 서버 간 시각 차이 없이 DB가 확정한 완료 시각으로 최종가를 계산한다.
         LocalDateTime purchasedAt = auctionRepository.findCompletedAt(auctionId)
                 .orElseThrow(() -> new IllegalStateException(
                         "즉시구매 완료 시각을 조회할 수 없습니다."
                 ));
         long finalPrice = priceCalculator.calculate(auction, purchasedAt);
 
+        // 요구사항: 낙찰자의 HELD 보증금은 같은 트랜잭션에서 한 번만 USED로 전환한다.
         int usedDeposits = auctionDepositRepository.useHeldDeposit(memberId, auctionId);
         if (usedDeposits != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
 
+        // 요구사항: 거래와 멱등 요청 로그를 함께 저장해 재요청 결과를 동일하게 보장한다.
         AuctionTrade trade = auctionTradeRepository.saveAndFlush(
                 AuctionTrade.builder()
                         .auction(auction)
@@ -136,32 +141,39 @@ public class BuyNowTransactionService {
             Long memberId,
             Long auctionId
     ) {
+        // 요구사항: 하나의 멱등 키를 다른 회원이나 경매 요청에 재사용할 수 없다.
         if (!requestLog.matches(memberId, auctionId)) {
             throw new BidException(IDEMPOTENCY_KEY_REUSED);
         }
     }
 
     private void validateBuyer(Member buyer, Auction auction) {
+        // 요구사항: ACTIVE 회원만 즉시구매할 수 있다.
         if (buyer.getStatus() != MemberStatus.ACTIVE) {
             throw new MemberException(MEMBER_NOT_ACTIVE);
         }
+        // 요구사항: 판매자는 자신의 경매를 구매할 수 없다.
         if (auction.getSeller().getId().equals(buyer.getId())) {
             throw new BidException(SELF_PURCHASE_NOT_ALLOWED);
         }
     }
 
     private void validateAuction(Auction auction) {
+        // 요구사항: 이미 거래가 확정된 경매는 다시 구매할 수 없다.
         if (auction.getStatus() == AuctionStatus.COMPLETED) {
             throw new AuctionException(AUCTION_ALREADY_TRADED);
         }
+        // 요구사항: 첫 입찰 전 OPEN 상태의 경매만 즉시구매할 수 있다.
         if (auction.getStatus() != AuctionStatus.OPEN) {
             throw new AuctionException(AUCTION_NOT_ONGOING);
         }
+        // 요구사항: 상향 경매는 판매자가 즉시구매가를 설정한 경우에만 구매할 수 있다.
         if (auction instanceof UpAuction upAuction
                 && upAuction.getBuyNowPrice() == null) {
             throw new BidException(BUY_NOW_PRICE_NOT_SET);
         }
 
+        // 요구사항: DB 현재 시각이 종료 시각과 같거나 지난 경매는 구매할 수 없다.
         LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
         if (!auction.getEndedAt().isAfter(databaseTime)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
@@ -169,6 +181,7 @@ public class BuyNowTransactionService {
     }
 
     private void validateDeposit(Long memberId, Long auctionId) {
+        // 요구사항: 0원보다 큰 HELD 보증금이 있어야 즉시구매할 수 있다.
         boolean hasDeposit = auctionDepositRepository
                 .existsByMemberIdAndAuctionIdAndStatusAndReservedAmountGreaterThan(
                         memberId,

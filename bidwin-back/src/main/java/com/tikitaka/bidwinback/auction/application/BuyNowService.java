@@ -24,9 +24,11 @@ public class BuyNowService {
             if (exception.getErrorCode() != CONCURRENT_TRADE_CONFLICT) {
                 throw exception;
             }
+            // 요구사항: 동일 멱등 키의 동시 요청은 선행 요청이 만든 거래 결과를 반환한다.
             return transactionService.replay(memberId, auctionId, idempotencyKey)
                     .orElseThrow(() -> exception);
         } catch (DataIntegrityViolationException exception) {
+            // 요구사항: 멱등 로그 UNIQUE 경합 시에도 완료된 기존 거래를 재조회한다.
             return transactionService.replay(memberId, auctionId, idempotencyKey)
                     .orElseThrow(() -> exception);
         }

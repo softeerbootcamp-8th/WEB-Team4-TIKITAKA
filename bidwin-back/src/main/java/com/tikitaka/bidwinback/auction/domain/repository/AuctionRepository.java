@@ -20,6 +20,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             """)
     Optional<Auction> findWithSellerById(@Param("auctionId") Long auctionId);
 
+    // 요구사항: 구매 자격과 경매 상태를 DB에서 다시 검사하고 한 요청만 완료 처리한다.
     @Modifying(flushAutomatically = true)
     @Query(value = """
             UPDATE Auction auction
@@ -51,6 +52,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("buyerId") Long buyerId
     );
 
+    // 요구사항: 낙찰 시각과 하향 경매 가격 계산은 DB가 기록한 동일 시각을 사용한다.
     @Query(value = """
             SELECT completed_at
             FROM Auction

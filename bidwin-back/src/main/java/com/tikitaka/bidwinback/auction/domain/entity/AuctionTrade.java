@@ -27,6 +27,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(
         name = "Auction_trade",
+        // 요구사항: 하나의 경매에는 최종 거래가 하나만 존재해야 한다.
         uniqueConstraints = @UniqueConstraint(
                 name = AuctionTrade.AUCTION_UNIQUE_CONSTRAINT,
                 columnNames = "auction_id"

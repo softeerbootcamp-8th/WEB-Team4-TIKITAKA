@@ -25,6 +25,7 @@ public class BuyNowPriceCalculator {
     }
 
     private long calculateUpAuctionPrice(UpAuction auction) {
+        // 요구사항: 상향 경매의 최종가는 판매자가 설정한 즉시구매가로 확정한다.
         Long buyNowPrice = auction.getBuyNowPrice();
         if (buyNowPrice == null) {
             throw new BidException(BUY_NOW_PRICE_NOT_SET);
@@ -38,6 +39,7 @@ public class BuyNowPriceCalculator {
     ) {
         validateDownAuctionPricing(auction);
 
+        // 요구사항: 하향 경매는 완료 시각까지 지난 하락 주기만큼 가격을 내린다.
         long elapsedMinutes = Math.max(
                 0,
                 ChronoUnit.MINUTES.between(auction.getStartedAt(), purchasedAt)
@@ -46,6 +48,7 @@ public class BuyNowPriceCalculator {
         long priceRange = auction.getStartPrice() - auction.getMinimumPrice();
         long dropsBeforeFloor = priceRange / auction.getDropPrice();
 
+        // 요구사항: 하향 경매의 최종가는 설정된 최저가보다 낮아질 수 없다.
         if (elapsedDrops > dropsBeforeFloor) {
             return auction.getMinimumPrice();
         }

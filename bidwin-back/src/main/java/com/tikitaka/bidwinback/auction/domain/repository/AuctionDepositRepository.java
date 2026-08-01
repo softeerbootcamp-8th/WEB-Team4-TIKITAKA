@@ -16,6 +16,7 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
             long minimumAmount
     );
 
+    // 요구사항: 이미 사용되었거나 금액이 없는 보증금은 중복 사용하지 않는다.
     @Modifying(flushAutomatically = true)
     @Query(value = """
             UPDATE auction_deposit
