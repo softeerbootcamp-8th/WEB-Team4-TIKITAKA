@@ -14,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,9 +23,17 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "Auction_trade")
+@Table(
+        name = "Auction_trade",
+        uniqueConstraints = @UniqueConstraint(
+                name = AuctionTrade.AUCTION_UNIQUE_CONSTRAINT,
+                columnNames = "auction_id"
+        )
+)
 @NoArgsConstructor(access = PROTECTED)
 public class AuctionTrade extends BaseTimeEntity {
+
+    public static final String AUCTION_UNIQUE_CONSTRAINT = "uk_auction_trade_auction";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

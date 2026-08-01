@@ -193,6 +193,11 @@ public enum ErrorCode {
             "BID_403_1",
             "본인이 등록한 경매에는 입찰할 수 없습니다."
     ),
+    SELF_PURCHASE_NOT_ALLOWED(
+            HttpStatus.FORBIDDEN,
+            "BID_403_2",
+            "본인이 등록한 경매는 즉시구매할 수 없습니다."
+    ),
     INSUFFICIENT_DEPOSIT(
             HttpStatus.UNPROCESSABLE_CONTENT,
             "BID_422_2",
@@ -203,10 +208,10 @@ public enum ErrorCode {
             "BID_400_1",
             "즉시구매가가 설정되지 않은 경매입니다."
     ),
-    BUY_NOW_PRICE_CHANGED(
+    IDEMPOTENCY_KEY_REUSED(
             HttpStatus.CONFLICT,
             "BID_409_1",
-            "즉시구매가가 변경되어 처리할 수 없습니다. 최신 가격을 다시 확인해주세요."
+            "이미 다른 즉시구매 요청에 사용된 멱등키입니다."
     ),
     CONCURRENT_TRADE_CONFLICT(
             HttpStatus.CONFLICT,
