@@ -3,13 +3,17 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
+import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
+import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository.InstantPurchaseTarget;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.InstantPurchaseRequestRepository;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
@@ -58,7 +62,7 @@ class BuyNowServiceTest {
     private AuctionTradeRepository auctionTradeRepository;
 
     @Mock
-    private InstantPurchaseIdempotencyStore idempotencyStore;
+    private InstantPurchaseRequestRepository instantPurchaseRequestRepository;
 
     private BuyNowService buyNowService;
 
@@ -69,20 +73,20 @@ class BuyNowServiceTest {
                 memberRepository,
                 auctionDepositRepository,
                 auctionTradeRepository,
-                idempotencyStore
+                instantPurchaseRequestRepository
         );
     }
 
     @Test
     void 하향_경매는_DB_시각으로_계산한_가격에_즉시구매된다() {
         // given
-        InstantPurchaseTarget target = activeTarget("DOWN");
-        when(target.getStartPrice()).thenReturn(100_000L);
-        when(target.getStartedAt()).thenReturn(DATABASE_NOW.minusMinutes(31));
-        when(target.getMinimumPrice()).thenReturn(50_000L);
-        when(target.getDropPrice()).thenReturn(10_000L);
-        when(target.getPriceDropInterval()).thenReturn(10L);
-        givenNewRequest(target);
+        DownAuction auction = activeDownAuction();
+        when(auction.getStartPrice()).thenReturn(100_000L);
+        when(auction.getCreatedAt()).thenReturn(DATABASE_NOW.minusMinutes(31));
+        when(auction.getMinimumPrice()).thenReturn(50_000L);
+        when(auction.getDropPrice()).thenReturn(10_000L);
+        when(auction.getPriceDropInterval()).thenReturn(10L);
+        InstantPurchaseRequest idempotencyRequest = givenNewRequest(auction);
         AuctionTrade savedTrade = givenSuccessfulPersistence(11L);
 
         // when
@@ -97,7 +101,7 @@ class BuyNowServiceTest {
         assertThat(result.finalPrice()).isEqualTo(70_000L);
         assertThat(result.replayed()).isFalse();
         verify(memberRepository).movePointToLockedIfEnough(BUYER_ID, 70_000L);
-        verify(idempotencyStore).complete(IDEMPOTENCY_KEY, savedTrade, 70_000L);
+        verify(idempotencyRequest).complete(savedTrade, 70_000L);
 
         ArgumentCaptor<AuctionDeposit> depositCaptor =
                 ArgumentCaptor.forClass(AuctionDeposit.class);
@@ -115,13 +119,13 @@ class BuyNowServiceTest {
     @Test
     void 하향_경매의_계산값이_최저가보다_낮으면_최저가로_구매된다() {
         // given
-        InstantPurchaseTarget target = activeTarget("DOWN");
-        when(target.getStartPrice()).thenReturn(100_000L);
-        when(target.getStartedAt()).thenReturn(DATABASE_NOW.minusHours(10));
-        when(target.getMinimumPrice()).thenReturn(50_000L);
-        when(target.getDropPrice()).thenReturn(10_000L);
-        when(target.getPriceDropInterval()).thenReturn(10L);
-        givenNewRequest(target);
+        DownAuction auction = activeDownAuction();
+        when(auction.getStartPrice()).thenReturn(100_000L);
+        when(auction.getCreatedAt()).thenReturn(DATABASE_NOW.minusHours(10));
+        when(auction.getMinimumPrice()).thenReturn(50_000L);
+        when(auction.getDropPrice()).thenReturn(10_000L);
+        when(auction.getPriceDropInterval()).thenReturn(10L);
+        givenNewRequest(auction);
         givenSuccessfulPersistence(12L);
 
         // when
@@ -139,9 +143,9 @@ class BuyNowServiceTest {
     @Test
     void 상향_경매는_DB에_저장된_즉시구매가로_구매된다() {
         // given
-        InstantPurchaseTarget target = activeTarget("UP");
-        when(target.getBuyNowPrice()).thenReturn(320_000L);
-        givenNewRequest(target);
+        UpAuction auction = activeUpAuction();
+        when(auction.getBuyNowPrice()).thenReturn(320_000L);
+        givenNewRequest(auction);
         givenSuccessfulPersistence(13L);
 
         // when
@@ -159,13 +163,19 @@ class BuyNowServiceTest {
     @Test
     void 완료된_멱등요청을_재시도하면_저장된_결과만_반환한다() {
         // given
-        InstantPurchaseTarget target = mock(InstantPurchaseTarget.class);
-        when(auctionRepository.findInstantPurchaseTarget(AUCTION_ID))
-                .thenReturn(Optional.of(target));
-        when(idempotencyStore.claim(IDEMPOTENCY_KEY, BUYER_ID, AUCTION_ID))
-                .thenReturn(Optional.of(
-                        new InstantPurchaseIdempotencyStore.SavedPurchase(21L, 150_000L)
-                ));
+        Auction auction = mock(Auction.class);
+        AuctionTrade savedTrade = mock(AuctionTrade.class);
+        InstantPurchaseRequest request = mock(InstantPurchaseRequest.class);
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(auction));
+        when(instantPurchaseRequestRepository.findByIdempotencyKeyForUpdate(
+                IDEMPOTENCY_KEY
+        )).thenReturn(Optional.of(request));
+        when(request.belongsTo(BUYER_ID, AUCTION_ID)).thenReturn(true);
+        when(request.isCompleted()).thenReturn(true);
+        when(request.getTrade()).thenReturn(savedTrade);
+        when(savedTrade.getId()).thenReturn(21L);
+        when(request.getFinalPrice()).thenReturn(150_000L);
 
         // when
         BuyNowService.BuyNowResult result = buyNowService.purchase(
@@ -183,11 +193,37 @@ class BuyNowServiceTest {
     }
 
     @Test
+    void 선점한_멱등요청을_조회할_수_없으면_구매를_중단한다() {
+        // given
+        Auction auction = mock(Auction.class);
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(auction));
+        when(instantPurchaseRequestRepository.findByIdempotencyKeyForUpdate(
+                IDEMPOTENCY_KEY
+        )).thenReturn(Optional.empty());
+
+        // when
+        // then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> buyNowService.purchase(
+                        AUCTION_ID,
+                        BUYER_ID,
+                        IDEMPOTENCY_KEY
+                ));
+        verify(auctionRepository, never()).completeForInstantPurchase(any());
+        verifyNoInteractions(
+                memberRepository,
+                auctionDepositRepository,
+                auctionTradeRepository
+        );
+    }
+
+    @Test
     void 다른_요청이_먼저_경매를_마감하면_즉시구매는_충돌로_실패한다() {
         // given
-        InstantPurchaseTarget target = activeTarget("UP");
-        when(target.getBuyNowPrice()).thenReturn(320_000L);
-        givenNewRequest(target);
+        UpAuction auction = activeUpAuction();
+        when(auction.getBuyNowPrice()).thenReturn(320_000L);
+        givenNewRequest(auction);
         when(auctionRepository.completeForInstantPurchase(AUCTION_ID)).thenReturn(0);
 
         // when
@@ -207,9 +243,9 @@ class BuyNowServiceTest {
     @Test
     void 이미_구매_완료된_경매의_새_즉시구매는_충돌로_실패한다() {
         // given
-        InstantPurchaseTarget target = mock(InstantPurchaseTarget.class);
-        when(target.getStatus()).thenReturn("COMPLETED");
-        givenNewRequest(target);
+        Auction auction = mock(Auction.class);
+        when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        givenNewRequest(auction);
 
         // when
         // then
@@ -227,11 +263,10 @@ class BuyNowServiceTest {
     @Test
     void DB_시각이_종료시각과_같으면_즉시구매할_수_없다() {
         // given
-        InstantPurchaseTarget target = mock(InstantPurchaseTarget.class);
-        when(target.getStatus()).thenReturn("OPEN");
-        when(target.getEndedAt()).thenReturn(DATABASE_NOW);
-        when(target.getDatabaseNow()).thenReturn(DATABASE_NOW);
-        givenNewRequest(target);
+        Auction auction = mock(Auction.class);
+        when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
+        when(auction.getEndedAt()).thenReturn(DATABASE_NOW);
+        givenNewRequest(auction);
 
         // when
         // then
@@ -249,9 +284,9 @@ class BuyNowServiceTest {
     @Test
     void 구매대금이_부족하면_거래와_보증금을_생성하지_않는다() {
         // given
-        InstantPurchaseTarget target = activeTarget("UP");
-        when(target.getBuyNowPrice()).thenReturn(320_000L);
-        givenNewRequest(target);
+        UpAuction auction = activeUpAuction();
+        when(auction.getBuyNowPrice()).thenReturn(320_000L);
+        givenNewRequest(auction);
         when(auctionRepository.completeForInstantPurchase(AUCTION_ID)).thenReturn(1);
         when(memberRepository.movePointToLockedIfEnough(BUYER_ID, 320_000L))
                 .thenReturn(0);
@@ -272,12 +307,13 @@ class BuyNowServiceTest {
     @Test
     void 판매자는_자신의_경매를_즉시구매할_수_없다() {
         // given
-        InstantPurchaseTarget target = mock(InstantPurchaseTarget.class);
-        when(target.getStatus()).thenReturn("OPEN");
-        when(target.getEndedAt()).thenReturn(DATABASE_NOW.plusMinutes(1));
-        when(target.getDatabaseNow()).thenReturn(DATABASE_NOW);
-        when(target.getSellerId()).thenReturn(BUYER_ID);
-        givenNewRequest(target);
+        Auction auction = mock(Auction.class);
+        Member seller = mock(Member.class);
+        when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
+        when(auction.getEndedAt()).thenReturn(DATABASE_NOW.plusMinutes(1));
+        when(auction.getSeller()).thenReturn(seller);
+        when(seller.getId()).thenReturn(BUYER_ID);
+        givenNewRequest(auction);
 
         // when
         // then
@@ -295,9 +331,9 @@ class BuyNowServiceTest {
     @Test
     void 즉시구매가가_없는_상향_경매는_즉시구매할_수_없다() {
         // given
-        InstantPurchaseTarget target = activeTarget("UP");
-        when(target.getBuyNowPrice()).thenReturn(null);
-        givenNewRequest(target);
+        UpAuction auction = activeUpAuction();
+        when(auction.getBuyNowPrice()).thenReturn(null);
+        givenNewRequest(auction);
 
         // when
         // then
@@ -315,9 +351,9 @@ class BuyNowServiceTest {
     @Test
     void DB의_즉시구매가가_0_이하면_포인트를_변경하지_않는다() {
         // given
-        InstantPurchaseTarget target = activeTarget("UP");
-        when(target.getBuyNowPrice()).thenReturn(0L);
-        givenNewRequest(target);
+        UpAuction auction = activeUpAuction();
+        when(auction.getBuyNowPrice()).thenReturn(0L);
+        givenNewRequest(auction);
 
         // when
         // then
@@ -334,7 +370,7 @@ class BuyNowServiceTest {
     @Test
     void 존재하지_않는_경매는_즉시구매할_수_없다() {
         // given
-        when(auctionRepository.findInstantPurchaseTarget(AUCTION_ID))
+        when(auctionRepository.findById(AUCTION_ID))
                 .thenReturn(Optional.empty());
 
         // when
@@ -347,7 +383,7 @@ class BuyNowServiceTest {
                 ))
                 .extracting(AuctionException::getErrorCode)
                 .isEqualTo(ErrorCode.AUCTION_NOT_FOUND);
-        verifyNoInteractions(idempotencyStore);
+        verifyNoInteractions(instantPurchaseRequestRepository);
     }
 
     @Test
@@ -365,24 +401,39 @@ class BuyNowServiceTest {
                 ))
                 .extracting(AuctionException::getErrorCode)
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
-        verifyNoInteractions(auctionRepository, idempotencyStore);
+        verifyNoInteractions(auctionRepository, instantPurchaseRequestRepository);
     }
 
-    private InstantPurchaseTarget activeTarget(String auctionType) {
-        InstantPurchaseTarget target = mock(InstantPurchaseTarget.class);
-        when(target.getStatus()).thenReturn("BID_ONGOING");
-        when(target.getEndedAt()).thenReturn(DATABASE_NOW.plusHours(1));
-        when(target.getDatabaseNow()).thenReturn(DATABASE_NOW);
-        when(target.getSellerId()).thenReturn(SELLER_ID);
-        when(target.getAuctionType()).thenReturn(auctionType);
-        return target;
+    private UpAuction activeUpAuction() {
+        UpAuction auction = mock(UpAuction.class);
+        givenActiveAuction(auction);
+        return auction;
     }
 
-    private void givenNewRequest(InstantPurchaseTarget target) {
-        when(auctionRepository.findInstantPurchaseTarget(AUCTION_ID))
-                .thenReturn(Optional.of(target));
-        when(idempotencyStore.claim(IDEMPOTENCY_KEY, BUYER_ID, AUCTION_ID))
-                .thenReturn(Optional.empty());
+    private DownAuction activeDownAuction() {
+        DownAuction auction = mock(DownAuction.class);
+        givenActiveAuction(auction);
+        return auction;
+    }
+
+    private void givenActiveAuction(Auction auction) {
+        Member seller = mock(Member.class);
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_NOW.plusHours(1));
+        when(auction.getSeller()).thenReturn(seller);
+        when(seller.getId()).thenReturn(SELLER_ID);
+    }
+
+    private InstantPurchaseRequest givenNewRequest(Auction auction) {
+        InstantPurchaseRequest request = mock(InstantPurchaseRequest.class);
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(auction));
+        when(auctionRepository.findDatabaseNow()).thenReturn(DATABASE_NOW);
+        when(instantPurchaseRequestRepository.findByIdempotencyKeyForUpdate(
+                IDEMPOTENCY_KEY
+        )).thenReturn(Optional.of(request));
+        when(request.belongsTo(BUYER_ID, AUCTION_ID)).thenReturn(true);
+        return request;
     }
 
     private AuctionTrade givenSuccessfulPersistence(Long tradeId) {

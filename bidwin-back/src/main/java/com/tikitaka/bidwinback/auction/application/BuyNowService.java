@@ -3,22 +3,25 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
+import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
+import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository.InstantPurchaseTarget;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.InstantPurchaseRequestRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_ENDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
@@ -26,6 +29,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BUY_NOW_PRICE_NOT_SET;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_TRADE_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.IDEMPOTENCY_KEY_REUSED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
 
@@ -38,7 +42,7 @@ public class BuyNowService {
     private final MemberRepository memberRepository;
     private final AuctionDepositRepository auctionDepositRepository;
     private final AuctionTradeRepository auctionTradeRepository;
-    private final InstantPurchaseIdempotencyStore idempotencyStore;
+    private final InstantPurchaseRequestRepository instantPurchaseRequestRepository;
 
     @Transactional
     public BuyNowResult purchase(
@@ -48,32 +52,41 @@ public class BuyNowService {
     ) {
         validateRequest(auctionId, buyerId, idempotencyKey);
 
-        //옥션 가져오기(없으면 예외)
-        InstantPurchaseTarget target = auctionRepository
-                .findInstantPurchaseTarget(auctionId)
+        // JOINED 상속 매핑에 맡겨 실제 UpAuction 또는 DownAuction 인스턴스를 복원한다.
+        Auction auction = auctionRepository
+                .findById(auctionId)
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
 
-
-        Optional<InstantPurchaseIdempotencyStore.SavedPurchase> savedPurchase =
-                idempotencyStore.claim(idempotencyKey, buyerId, auctionId);
-        if (savedPurchase.isPresent()) {
-            InstantPurchaseIdempotencyStore.SavedPurchase saved = savedPurchase.get();
+        instantPurchaseRequestRepository.insertOrKeep(
+                idempotencyKey,
+                buyerId,
+                auctionId
+        );
+        InstantPurchaseRequest request = findIdempotencyRequestForUpdate(
+                idempotencyKey
+        );
+        if (!request.belongsTo(buyerId, auctionId)) {
+            throw new AuctionException(IDEMPOTENCY_KEY_REUSED);
+        }
+        if (request.isCompleted()) {
             return new BuyNowResult(
-                    saved.tradeId(),
+                    request.getTrade().getId(),
                     auctionId,
                     buyerId,
-                    saved.finalPrice(),
+                    request.getFinalPrice(),
                     true
             );
         }
 
-        validatePurchasable(target, buyerId);
-        long finalPrice = calculateFinalPrice(target);
+        // 애플리케이션 서버별 시계 차이가 가격과 마감 판정에 섞이지 않게 DB 시각만 사용한다.
+        LocalDateTime databaseNow = auctionRepository.findDatabaseNow();
+        validatePurchasable(auction, databaseNow, buyerId);
+        long finalPrice = calculateFinalPrice(auction, databaseNow);
         if (finalPrice <= 0) {
             throw new IllegalStateException("즉시구매 가격은 0보다 커야 합니다.");
         }
 
-        // 가격을 계산한 요청 중 DB의 상태·마감 조건을 먼저 바꾼 단 하나만 구매를 계속한다.
+        // 가격을 계산한 요청 중 경매 DB의 상태·마감 조건을 먼저 바꾼 단 하나만 구매를 계속한다.
         if (auctionRepository.completeForInstantPurchase(auctionId) != 1) {
             throw new AuctionException(CONCURRENT_TRADE_CONFLICT);
         }
@@ -83,26 +96,28 @@ public class BuyNowService {
             throw new AuctionException(INSUFFICIENT_DEPOSIT);
         }
 
-        Auction auction = auctionRepository.getReferenceById(auctionId);
+        // Native CAS 이후 새 관리 참조로 보증금과 거래의 외래키를 연결한다.
+        Auction completedAuction = auctionRepository.getReferenceById(auctionId);
         Member buyer = memberRepository.getReferenceById(buyerId);
 
         auctionDepositRepository.save(AuctionDeposit.builder()
                 .member(buyer)
-                .auction(auction)
+                .auction(completedAuction)
                 .reservedAmount(finalPrice)
                 .status(DepositStatus.HELD)
                 .build());
 
         AuctionTrade trade = auctionTradeRepository.saveAndFlush(
                 AuctionTrade.builder()
-                        .auction(auction)
+                        .auction(completedAuction)
                         .buyer(buyer)
                         .status(TradeStatus.PAID)
                         .finalPrice(finalPrice)
                         .build()
         );
 
-        idempotencyStore.complete(idempotencyKey, trade, finalPrice);
+        // 경매 CAS가 영속성 컨텍스트를 비웠으므로 멱등 요청을 다시 관리 상태로 조회한다.
+        findIdempotencyRequestForUpdate(idempotencyKey).complete(trade, finalPrice);
         return new BuyNowResult(
                 trade.getId(),
                 auctionId,
@@ -110,6 +125,16 @@ public class BuyNowService {
                 finalPrice,
                 false
         );
+    }
+
+    private InstantPurchaseRequest findIdempotencyRequestForUpdate(
+            String idempotencyKey
+    ) {
+        return instantPurchaseRequestRepository
+                .findByIdempotencyKeyForUpdate(idempotencyKey)
+                .orElseThrow(() -> new IllegalStateException(
+                        "선점한 즉시구매 멱등 요청을 찾을 수 없습니다."
+                ));
     }
 
     private void validateRequest(
@@ -129,73 +154,80 @@ public class BuyNowService {
     }
 
     private void validatePurchasable(
-            InstantPurchaseTarget target,
+            Auction auction,
+            LocalDateTime databaseNow,
             Long buyerId
     ) {
-        AuctionStatus status = AuctionStatus.valueOf(target.getStatus());
+        AuctionStatus status = auction.getStatus();
         if (status == AuctionStatus.COMPLETED) {
             throw new AuctionException(CONCURRENT_TRADE_CONFLICT);
         }
         if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
             throw new AuctionException(AUCTION_NOT_ONGOING);
         }
-        if (!target.getEndedAt().isAfter(target.getDatabaseNow())) {
+        if (!auction.getEndedAt().isAfter(databaseNow)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
         }
-        if (target.getSellerId().equals(buyerId)) {
+        if (auction.getSeller().getId().equals(buyerId)) {
             throw new AuctionException(SELF_PURCHASE_NOT_ALLOWED);
         }
     }
 
-    private long calculateFinalPrice(InstantPurchaseTarget target) {
-        return switch (target.getAuctionType()) {
-            case "UP" -> calculateUpAuctionPrice(target);
-            case "DOWN" -> calculateDownAuctionPrice(target);
-            default -> throw new IllegalStateException(
-                    "지원하지 않는 경매 유형입니다: " + target.getAuctionType()
-            );
-        };
+    private long calculateFinalPrice(
+            Auction auction,
+            LocalDateTime databaseNow
+    ) {
+        if (auction instanceof UpAuction upAuction) {
+            return calculateUpAuctionPrice(upAuction);
+        }
+        if (auction instanceof DownAuction downAuction) {
+            return calculateDownAuctionPrice(downAuction, databaseNow);
+        }
+        throw new IllegalStateException(
+                "지원하지 않는 경매 유형입니다: " + auction.getClass().getSimpleName()
+        );
     }
 
-    private long calculateUpAuctionPrice(InstantPurchaseTarget target) {
-        Long buyNowPrice = target.getBuyNowPrice();
+    private long calculateUpAuctionPrice(UpAuction auction) {
+        Long buyNowPrice = auction.getBuyNowPrice();
         if (buyNowPrice == null) {
             throw new AuctionException(BUY_NOW_PRICE_NOT_SET);
         }
         return buyNowPrice;
     }
 
-    private long calculateDownAuctionPrice(InstantPurchaseTarget target) {
-        Long minimumPrice = target.getMinimumPrice();
-        Long dropPrice = target.getDropPrice();
-        Long dropIntervalMinutes = target.getPriceDropInterval();
-        if (minimumPrice == null
-                || dropPrice == null
-                || dropPrice <= 0
-                || dropIntervalMinutes == null
+    private long calculateDownAuctionPrice(
+            DownAuction auction,
+            LocalDateTime databaseNow
+    ) {
+        long minimumPrice = auction.getMinimumPrice();
+        long dropPrice = auction.getDropPrice();
+        long dropIntervalMinutes = auction.getPriceDropInterval();
+        if (dropPrice <= 0
                 || dropIntervalMinutes <= 0
-                || target.getStartedAt() == null
-                || target.getDatabaseNow() == null
-                || target.getStartPrice() < minimumPrice) {
+                || auction.getCreatedAt() == null
+                || databaseNow == null
+                || auction.getStartPrice() < minimumPrice) {
             throw new IllegalStateException("하향 경매 가격 조건이 올바르지 않습니다.");
         }
 
         long elapsedMinutes = Math.max(
                 0,
                 ChronoUnit.MINUTES.between(
-                        target.getStartedAt(),
-                        target.getDatabaseNow()
+                        auction.getCreatedAt(),
+                        databaseNow
                 )
         );
         long elapsedDrops = elapsedMinutes / dropIntervalMinutes;
-        long priceRange = target.getStartPrice() - minimumPrice;
+        long priceRange = auction.getStartPrice() - minimumPrice;
+        // 최저가까지 남은 금액이 하락폭으로 나누어떨어지지 않아도 마지막 하락을 한 회로 센다.
         long dropsToFloor = priceRange / dropPrice
                 + (priceRange % dropPrice == 0 ? 0 : 1);
 
         if (elapsedDrops >= dropsToFloor) {
             return minimumPrice;
         }
-        return target.getStartPrice() - elapsedDrops * dropPrice;
+        return auction.getStartPrice() - elapsedDrops * dropPrice;
     }
 
     public record BuyNowResult(

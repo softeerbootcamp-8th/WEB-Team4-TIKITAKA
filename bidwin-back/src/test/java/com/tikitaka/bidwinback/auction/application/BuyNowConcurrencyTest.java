@@ -220,7 +220,7 @@ class BuyNowConcurrencyTest {
     }
 
     @Test
-    void 하향_경매는_DB의_등록시각과_현재시각으로_최종가격을_확정한다() {
+    void 부모_타입으로_조회한_하향_경매는_DB_시각으로_최종가격을_확정한다() {
         // given
         String idempotencyKey = UUID.randomUUID().toString();
 
