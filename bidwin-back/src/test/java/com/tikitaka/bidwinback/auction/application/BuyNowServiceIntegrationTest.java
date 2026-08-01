@@ -8,6 +8,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -45,7 +46,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class BuyNowServiceIntegrationTest {
 
     private static final long BUY_NOW_PRICE = 150_000L;
-    private static final long DEPOSIT_AMOUNT = 30_000L;
+    private static final long INITIAL_POINT = 2_000_000L;
 
     @Autowired
     private BuyNowService buyNowService;
@@ -69,7 +70,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             for (Long auctionId : auctionIds) {
                 executeDelete(entityManager,
-                        "DELETE FROM buy_now_request_log WHERE auction_id = :id", auctionId);
+                        "DELETE FROM instant_purchase_request WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
@@ -91,7 +92,7 @@ class BuyNowServiceIntegrationTest {
 
     @Test
     void 동일한_멱등키의_동시요청은_같은_거래를_반환한다() throws Exception {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 1, true, false);
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 1);
         Long buyerId = fixture.buyerIds().getFirst();
         String idempotencyKey = idempotencyKey("same-key");
         CyclicBarrier barrier = new CyclicBarrier(2);
@@ -116,7 +117,7 @@ class BuyNowServiceIntegrationTest {
 
     @Test
     void 서로_다른_구매자가_동시에_구매하면_한명만_낙찰된다() throws Exception {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 2, true, false);
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 2);
         Long firstBuyerId = fixture.buyerIds().get(0);
         Long secondBuyerId = fixture.buyerIds().get(1);
         CyclicBarrier barrier = new CyclicBarrier(2);
@@ -157,8 +158,8 @@ class BuyNowServiceIntegrationTest {
             Long winnerId = successes.getFirst().memberId();
             Long loserId = failures.getFirst().memberId();
             assertSuccessfulPurchase(fixture.auctionId(), winnerId, 1L);
-            assertThat(findDepositStatus(fixture.auctionId(), loserId))
-                    .isEqualTo(DepositStatus.HELD.name());
+            assertThat(countDeposits(fixture.auctionId(), loserId)).isZero();
+            assertMemberPoints(loserId, INITIAL_POINT, 0L);
         } finally {
             executor.shutdownNow();
         }
@@ -207,12 +208,14 @@ class BuyNowServiceIntegrationTest {
             assertThat(result.purchasedAt()).isEqualTo(auction.getCompletedAt());
             assertThat(trade.getFinalPrice()).isEqualTo(90_000L);
             assertThat(countRows(entityManager,
-                    "SELECT COUNT(*) FROM buy_now_request_log WHERE auction_id = :id",
+                    "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id",
                     fixture.auctionId())).isEqualTo(1L);
             return null;
         });
         assertThat(findDepositStatus(fixture.auctionId(), buyerId))
-                .isEqualTo(DepositStatus.USED.name());
+                .isEqualTo(DepositStatus.HELD.name());
+        assertThat(findDepositAmount(fixture.auctionId(), buyerId)).isEqualTo(90_000L);
+        assertMemberPoints(buyerId, INITIAL_POINT - 90_000L, 90_000L);
     }
 
     @ParameterizedTest
@@ -220,7 +223,7 @@ class BuyNowServiceIntegrationTest {
     void OPEN이_아닌_경매는_즉시구매할_수_없고_상태가_되돌아가지_않는다(
             AuctionStatus status
     ) {
-        Fixture fixture = createFixture(status, 1, true, false);
+        Fixture fixture = createFixture(status, 1);
         Long buyerId = fixture.buyerIds().getFirst();
         ErrorCode expected = status == AuctionStatus.COMPLETED
                 ? ErrorCode.AUCTION_ALREADY_TRADED
@@ -234,13 +237,12 @@ class BuyNowServiceIntegrationTest {
         );
 
         assertNoPurchaseEffects(fixture.auctionId(), status);
-        assertThat(findDepositStatus(fixture.auctionId(), buyerId))
-                .isEqualTo(DepositStatus.HELD.name());
+        assertMemberPoints(buyerId, INITIAL_POINT, 0L);
     }
 
     @Test
     void 종료시각과_같은_시각에는_즉시구매할_수_없다() {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 1, true, false);
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 1);
         Long buyerId = fixture.buyerIds().getFirst();
         executeInTransaction(entityManager -> {
             entityManager.createNativeQuery("""
@@ -261,13 +263,12 @@ class BuyNowServiceIntegrationTest {
         );
 
         assertNoPurchaseEffects(fixture.auctionId(), AuctionStatus.OPEN);
-        assertThat(findDepositStatus(fixture.auctionId(), buyerId))
-                .isEqualTo(DepositStatus.HELD.name());
+        assertMemberPoints(buyerId, INITIAL_POINT, 0L);
     }
 
     @Test
     void 판매자는_자신의_경매를_즉시구매할_수_없다() {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 0, false, true);
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 0);
 
         assertFailure(
                 fixture.sellerId(),
@@ -277,14 +278,24 @@ class BuyNowServiceIntegrationTest {
         );
 
         assertNoPurchaseEffects(fixture.auctionId(), AuctionStatus.OPEN);
-        assertThat(findDepositStatus(fixture.auctionId(), fixture.sellerId()))
-                .isEqualTo(DepositStatus.HELD.name());
+        assertMemberPoints(fixture.sellerId(), INITIAL_POINT, 0L);
     }
 
     @Test
-    void 보증금이_없으면_즉시구매할_수_없다() {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 1, false, false);
+    void 낙찰가_전액을_잠글_포인트가_없으면_즉시구매할_수_없다() {
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 1);
         Long buyerId = fixture.buyerIds().getFirst();
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE Member
+                            SET total_point = :point
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("point", BUY_NOW_PRICE - 1)
+                    .setParameter("memberId", buyerId)
+                    .executeUpdate();
+            return null;
+        });
 
         assertFailure(
                 buyerId,
@@ -294,11 +305,12 @@ class BuyNowServiceIntegrationTest {
         );
 
         assertNoPurchaseEffects(fixture.auctionId(), AuctionStatus.OPEN);
+        assertMemberPoints(buyerId, BUY_NOW_PRICE - 1, 0L);
     }
 
     @Test
-    void 비활성_회원은_보증금이_있어도_즉시구매할_수_없다() {
-        Fixture fixture = createFixture(AuctionStatus.OPEN, 1, true, false);
+    void 비활성_회원은_포인트가_있어도_즉시구매할_수_없다() {
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 1);
         Long buyerId = fixture.buyerIds().getFirst();
         executeInTransaction(entityManager -> {
             entityManager.createNativeQuery("""
@@ -319,8 +331,7 @@ class BuyNowServiceIntegrationTest {
         );
 
         assertNoPurchaseEffects(fixture.auctionId(), AuctionStatus.OPEN);
-        assertThat(findDepositStatus(fixture.auctionId(), buyerId))
-                .isEqualTo(DepositStatus.HELD.name());
+        assertMemberPoints(buyerId, INITIAL_POINT, 0L);
     }
 
     private Callable<BuyNowResult> buyAfterBarrier(
@@ -379,7 +390,10 @@ class BuyNowServiceIntegrationTest {
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
             assertThat(countRows(entityManager,
-                    "SELECT COUNT(*) FROM buy_now_request_log WHERE auction_id = :id", auctionId))
+                    "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
+                    .isEqualTo(1L);
+            assertThat(countRows(entityManager,
+                    "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
                     .isEqualTo(expectedRequestLogCount);
 
             Number buyerId = (Number) entityManager.createNativeQuery("""
@@ -396,13 +410,28 @@ class BuyNowServiceIntegrationTest {
                             """)
                     .setParameter("auctionId", auctionId)
                     .getSingleResult();
+            String tradeStatus = (String) entityManager.createNativeQuery("""
+                            SELECT status
+                            FROM auction_trade
+                            WHERE auction_id = :auctionId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .getSingleResult();
 
             assertThat(buyerId.longValue()).isEqualTo(expectedBuyerId);
             assertThat(finalPrice.longValue()).isEqualTo(BUY_NOW_PRICE);
+            assertThat(tradeStatus).isEqualTo(TradeStatus.CONFIRMED.name());
             return null;
         });
         assertThat(findDepositStatus(auctionId, expectedBuyerId))
-                .isEqualTo(DepositStatus.USED.name());
+                .isEqualTo(DepositStatus.HELD.name());
+        assertThat(findDepositAmount(auctionId, expectedBuyerId))
+                .isEqualTo(BUY_NOW_PRICE);
+        assertMemberPoints(
+                expectedBuyerId,
+                INITIAL_POINT - BUY_NOW_PRICE,
+                BUY_NOW_PRICE
+        );
     }
 
     private void assertNoPurchaseEffects(Long auctionId, AuctionStatus expectedStatus) {
@@ -413,7 +442,10 @@ class BuyNowServiceIntegrationTest {
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isZero();
             assertThat(countRows(entityManager,
-                    "SELECT COUNT(*) FROM buy_now_request_log WHERE auction_id = :id", auctionId))
+                    "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
+                    .isZero();
+            assertThat(countRows(entityManager,
+                    "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
                     .isZero();
             return null;
         });
@@ -431,11 +463,58 @@ class BuyNowServiceIntegrationTest {
                 .getSingleResult());
     }
 
+    private long findDepositAmount(Long auctionId, Long memberId) {
+        return executeInTransaction(entityManager -> {
+            Number amount = (Number) entityManager.createNativeQuery("""
+                            SELECT reserved_amount
+                            FROM auction_deposit
+                            WHERE auction_id = :auctionId
+                              AND member_id = :memberId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .setParameter("memberId", memberId)
+                    .getSingleResult();
+            return amount.longValue();
+        });
+    }
+
+    private long countDeposits(Long auctionId, Long memberId) {
+        return executeInTransaction(entityManager -> {
+            Number count = (Number) entityManager.createNativeQuery("""
+                            SELECT COUNT(*)
+                            FROM auction_deposit
+                            WHERE auction_id = :auctionId
+                              AND member_id = :memberId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .setParameter("memberId", memberId)
+                    .getSingleResult();
+            return count.longValue();
+        });
+    }
+
+    private void assertMemberPoints(
+            Long memberId,
+            long expectedTotalPoint,
+            long expectedLockedPoint
+    ) {
+        executeInTransaction(entityManager -> {
+            Object[] points = (Object[]) entityManager.createNativeQuery("""
+                            SELECT total_point, locked_point
+                            FROM Member
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("memberId", memberId)
+                    .getSingleResult();
+            assertThat(((Number) points[0]).longValue()).isEqualTo(expectedTotalPoint);
+            assertThat(((Number) points[1]).longValue()).isEqualTo(expectedLockedPoint);
+            return null;
+        });
+    }
+
     private Fixture createFixture(
             AuctionStatus status,
-            int buyerCount,
-            boolean createBuyerDeposits,
-            boolean createSellerDeposit
+            int buyerCount
     ) {
         Fixture fixture = executeInTransaction(entityManager -> {
             Member seller = persistMember(entityManager, MemberStatus.ACTIVE);
@@ -457,14 +536,6 @@ class BuyNowServiceIntegrationTest {
                     .buyNowPrice(BUY_NOW_PRICE)
                     .build();
             entityManager.persist(auction);
-            entityManager.flush();
-
-            if (createSellerDeposit) {
-                persistDeposit(entityManager, seller, auction);
-            }
-            if (createBuyerDeposits) {
-                buyers.forEach(buyer -> persistDeposit(entityManager, buyer, auction));
-            }
             entityManager.flush();
 
             return new Fixture(
@@ -500,8 +571,6 @@ class BuyNowServiceIntegrationTest {
                     .build();
             entityManager.persist(auction);
             entityManager.flush();
-            persistDeposit(entityManager, buyer, auction);
-            entityManager.flush();
 
             return new Fixture(
                     seller.getId(),
@@ -529,19 +598,6 @@ class BuyNowServiceIntegrationTest {
                 .build();
         entityManager.persist(member);
         return member;
-    }
-
-    private void persistDeposit(
-            EntityManager entityManager,
-            Member member,
-            Auction auction
-    ) {
-        entityManager.persist(AuctionDeposit.builder()
-                .member(member)
-                .auction(auction)
-                .reservedAmount(DEPOSIT_AMOUNT)
-                .status(DepositStatus.HELD)
-                .build());
     }
 
     private String idempotencyKey(String suffix) {

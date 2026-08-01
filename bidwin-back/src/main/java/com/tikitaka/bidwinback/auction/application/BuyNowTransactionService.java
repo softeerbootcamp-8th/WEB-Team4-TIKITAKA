@@ -1,17 +1,18 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
-import com.tikitaka.bidwinback.auction.domain.entity.BuyNowRequestLog;
+import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.BuyNowIdempotencyStore;
+import com.tikitaka.bidwinback.auction.domain.repository.InstantPurchaseRequestRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
@@ -21,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_ENDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_TRADED;
@@ -43,7 +43,7 @@ public class BuyNowTransactionService {
     private final AuctionRepository auctionRepository;
     private final AuctionDepositRepository auctionDepositRepository;
     private final AuctionTradeRepository auctionTradeRepository;
-    private final BuyNowIdempotencyStore idempotencyStore;
+    private final InstantPurchaseRequestRepository requestRepository;
     private final BuyNowPriceCalculator priceCalculator;
 
     @Transactional
@@ -52,14 +52,11 @@ public class BuyNowTransactionService {
             Long auctionId,
             String idempotencyKey
     ) {
-        // 요구사항: 완료된 동일 요청은 새 거래를 만들지 않고 기존 결과를 반환한다.
-        Optional<BuyNowResult> replay = replayIfPresent(
-                memberId,
-                auctionId,
-                idempotencyKey
-        );
-        if (replay.isPresent()) {
-            return replay.get();
+        requestRepository.insertOrKeep(idempotencyKey, memberId, auctionId);
+        InstantPurchaseRequest request = findRequestForUpdate(idempotencyKey);
+        validateIdempotencyKey(request, memberId, auctionId);
+        if (request.isCompleted()) {
+            return BuyNowResult.from(request.getTrade());
         }
 
         Member buyer = memberRepository.findById(memberId)
@@ -69,7 +66,6 @@ public class BuyNowTransactionService {
 
         validateBuyer(buyer, auction);
         validateAuction(auction);
-        validateDeposit(memberId, auctionId);
 
         // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
         int completed = auctionRepository.completeForBuyNow(auctionId, memberId);
@@ -83,66 +79,56 @@ public class BuyNowTransactionService {
                         "즉시구매 완료 시각을 조회할 수 없습니다."
                 ));
         long finalPrice = priceCalculator.calculate(auction, purchasedAt);
+        if (finalPrice <= 0) {
+            throw new IllegalStateException("즉시구매 가격은 0보다 커야 합니다.");
+        }
 
-        // 요구사항: 낙찰자의 HELD 보증금은 같은 트랜잭션에서 한 번만 USED로 전환한다.
-        int usedDeposits = auctionDepositRepository.useHeldDeposit(memberId, auctionId);
-        if (usedDeposits != 1) {
+        // 잔액 확인과 전액 잠금을 한 UPDATE로 처리해 동시 구매의 초과 사용을 막는다.
+        int lockedPoints = memberRepository.movePointToLockedIfEnough(
+                memberId,
+                finalPrice
+        );
+        if (lockedPoints != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
 
-        // 요구사항: 거래와 멱등 요청 로그를 함께 저장해 재요청 결과를 동일하게 보장한다.
+        auctionDepositRepository.saveAndFlush(AuctionDeposit.builder()
+                .member(buyer)
+                .auction(auction)
+                .reservedAmount(finalPrice)
+                .build());
+
+        // 거래와 멱등 요청을 함께 완료해 재요청 결과를 동일하게 보장한다.
         AuctionTrade trade = auctionTradeRepository.saveAndFlush(
                 AuctionTrade.builder()
                         .auction(auction)
                         .buyer(buyer)
+                        .status(TradeStatus.CONFIRMED)
                         .finalPrice(finalPrice)
                         .purchasedAt(purchasedAt)
                         .build()
         );
-        idempotencyStore.saveAndFlush(BuyNowRequestLog.completed(
-                idempotencyKey,
-                buyer,
-                auction,
-                trade
-        ));
+        request.complete(trade, finalPrice);
 
         return BuyNowResult.from(trade);
     }
 
-    @Transactional(readOnly = true)
-    public Optional<BuyNowResult> replay(
-            Long memberId,
-            Long auctionId,
+    private InstantPurchaseRequest findRequestForUpdate(
             String idempotencyKey
     ) {
-        return replayIfPresent(memberId, auctionId, idempotencyKey);
-    }
-
-    private Optional<BuyNowResult> replayIfPresent(
-            Long memberId,
-            Long auctionId,
-            String idempotencyKey
-    ) {
-        return idempotencyStore.findByKey(idempotencyKey)
-                .map(requestLog -> {
-                    validateIdempotencyKey(requestLog, memberId, auctionId);
-                    AuctionTrade trade = requestLog.getTrade();
-                    if (trade == null) {
-                        throw new IllegalStateException(
-                                "완료되지 않은 즉시구매 요청 로그입니다."
-                        );
-                    }
-                    return BuyNowResult.from(trade);
-                });
+        return requestRepository.findByIdempotencyKeyForUpdate(idempotencyKey)
+                .orElseThrow(() -> new IllegalStateException(
+                        "선점한 즉시구매 멱등 요청을 찾을 수 없습니다."
+                ));
     }
 
     private void validateIdempotencyKey(
-            BuyNowRequestLog requestLog,
+            InstantPurchaseRequest request,
             Long memberId,
             Long auctionId
     ) {
         // 요구사항: 하나의 멱등 키를 다른 회원이나 경매 요청에 재사용할 수 없다.
-        if (!requestLog.matches(memberId, auctionId)) {
+        if (!request.belongsTo(memberId, auctionId)) {
             throw new BidException(IDEMPOTENCY_KEY_REUSED);
         }
     }
@@ -180,17 +166,4 @@ public class BuyNowTransactionService {
         }
     }
 
-    private void validateDeposit(Long memberId, Long auctionId) {
-        // 요구사항: 0원보다 큰 HELD 보증금이 있어야 즉시구매할 수 있다.
-        boolean hasDeposit = auctionDepositRepository
-                .existsByMemberIdAndAuctionIdAndStatusAndReservedAmountGreaterThan(
-                        memberId,
-                        auctionId,
-                        DepositStatus.HELD,
-                        0
-                );
-        if (!hasDeposit) {
-            throw new BidException(INSUFFICIENT_DEPOSIT);
-        }
-    }
 }

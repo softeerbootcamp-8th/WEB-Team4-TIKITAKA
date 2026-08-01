@@ -20,7 +20,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             """)
     Optional<Auction> findWithSellerById(@Param("auctionId") Long auctionId);
 
-    // 요구사항: 구매 자격과 경매 상태를 DB에서 다시 검사하고 한 요청만 완료 처리한다.
+    // 경매 상태·마감·판매자를 DB에서 다시 검사하고 한 요청만 완료 처리한다.
     @Modifying(flushAutomatically = true)
     @Query(value = """
             UPDATE Auction auction
@@ -32,20 +32,6 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND auction.completed_at IS NULL
               AND auction.ended_at > CURRENT_TIMESTAMP(6)
               AND auction.seller_id <> :buyerId
-              AND EXISTS (
-                  SELECT 1
-                  FROM Member member
-                  WHERE member.id = :buyerId
-                    AND member.status = 'ACTIVE'
-              )
-              AND EXISTS (
-                  SELECT 1
-                  FROM auction_deposit deposit
-                  WHERE deposit.auction_id = auction.id
-                    AND deposit.member_id = :buyerId
-                    AND deposit.status = 'HELD'
-                    AND deposit.reserved_amount > 0
-              )
             """, nativeQuery = true)
     int completeForBuyNow(
             @Param("auctionId") Long auctionId,
