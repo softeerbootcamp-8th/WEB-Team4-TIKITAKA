@@ -3,15 +3,18 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
+import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.InstantPurchaseRequestRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
@@ -43,6 +46,7 @@ public class BuyNowTransactionService {
     private final AuctionRepository auctionRepository;
     private final AuctionDepositRepository auctionDepositRepository;
     private final AuctionTradeRepository auctionTradeRepository;
+    private final BidRepository bidRepository;
     private final InstantPurchaseRequestRepository requestRepository;
     private final BuyNowPriceCalculator priceCalculator;
 
@@ -100,6 +104,13 @@ public class BuyNowTransactionService {
                 .member(buyer)
                 .auction(auction)
                 .reservedAmount(finalPrice)
+                .build());
+
+        bidRepository.save(Bid.builder()
+                .auction(auction)
+                .bidder(buyer)
+                .price(finalPrice)
+                .status(BidStatus.BUY_NOW)
                 .build());
 
         // 거래와 멱등 요청을 함께 완료해 재요청 결과를 동일하게 보장한다.
