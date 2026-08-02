@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 
 import static lombok.AccessLevel.PROTECTED;
 
+// TODO 멤버 먼저 보증금을 빼고, Auction 처리
 @Getter
 @Entity
 @Table(name = "Bid")
