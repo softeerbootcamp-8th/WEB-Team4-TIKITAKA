@@ -7,7 +7,6 @@ import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
@@ -48,20 +47,21 @@ public class BuyNowTransactionService {
     private final AuctionTradeRepository auctionTradeRepository;
     private final BidRepository bidRepository;
     private final InstantPurchaseRequestRepository requestRepository;
-    private final BuyNowPriceCalculator priceCalculator;
 
     @Transactional
-    public BuyNowResult buy(
-            Long memberId,
-            Long auctionId,
-            String idempotencyKey
-    ) {
+    public BuyNowResult buy(BuyNowCommand command) {
 
         // 멱등 키 저장
-        requestRepository.insertOrKeep(idempotencyKey, memberId, auctionId);
+        requestRepository.insertOrKeep(
+                command.idempotencyKey(),
+                command.memberId(),
+                command.auctionId()
+        );
         // 멱등 키 비관락을 조회, 동시요청은 여기서 앞썬 트랜잭션이 락을 풀어야 진입가능
-        InstantPurchaseRequest request = findRequestForUpdate(idempotencyKey);
-        validateIdempotencyKey(request, memberId, auctionId);
+        InstantPurchaseRequest request = findRequestForUpdate(
+                command.idempotencyKey()
+        );
+        validateIdempotencyKey(request, command.memberId(), command.auctionId());
 
         // 앞선 트랜잭션이 커밋되면 후에 들어온 트랜잭션은 대기했다가 앞 트랜잭션이 커밋된것이므로
         // 변경된 값을 읽어옴 따라서 여기서 바로 isComplted()가 true가 된다.
@@ -69,25 +69,22 @@ public class BuyNowTransactionService {
             return BuyNowResult.from(request.getTrade());
         }
 
-        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
-        Member buyer = memberRepository.findById(memberId)
+        Member buyer = memberRepository.findById(command.memberId())
                 .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
-        Auction auction = auctionRepository.findWithSellerById(auctionId)
+        Auction auction = auctionRepository.findWithSellerById(command.auctionId())
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
 
         validateBuyer(buyer, auction);
-        validateAuction(auction, purchasedAt);
+        validateAuction(auction, command.purchasedAt());
 
-        // 요구사항: 서버 간 시각 차이 없이 DB가 확정한 완료 시각으로 최종가를 계산한다.
-        long finalPrice = priceCalculator.calculate(auction, purchasedAt);
-        if (finalPrice <= 0) {
+        if (command.finalPrice() <= 0) {
             throw new IllegalStateException("즉시구매 가격은 0보다 커야 합니다.");
         }
 
         // 잔액 확인과 전액 잠금을 한 UPDATE로 처리해 동시 구매의 초과 사용을 막는다.
         int lockedPoints = memberRepository.movePointToLockedIfEnough(
-                memberId,
-                finalPrice
+                command.memberId(),
+                command.finalPrice()
         );
 
         if (lockedPoints != 1) {
@@ -95,7 +92,11 @@ public class BuyNowTransactionService {
         }
 
         // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
-        int completed = auctionRepository.completeForBuyNow(auctionId, memberId, purchasedAt);
+        int completed = auctionRepository.completeForBuyNow(
+                command.auctionId(),
+                command.memberId(),
+                command.purchasedAt()
+        );
         if (completed != 1) {
             throw new BidException(CONCURRENT_TRADE_CONFLICT);
         }
@@ -103,14 +104,14 @@ public class BuyNowTransactionService {
         auctionDepositRepository.save(AuctionDeposit.builder()
                 .member(buyer)
                 .auction(auction)
-                .reservedAmount(finalPrice)
+                .reservedAmount(command.finalPrice())
                 .build());
 
         bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(buyer)
-                .price(finalPrice)
-                .status(BidStatus.BUY_NOW)
+                .price(command.finalPrice())
+                .status(command.bidStatus())
                 .build());
 
         // 거래와 멱등 요청을 함께 완료해 재요청 결과를 동일하게 보장한다.
@@ -119,11 +120,11 @@ public class BuyNowTransactionService {
                         .auction(auction)
                         .buyer(buyer)
                         .status(TradeStatus.CONFIRMED)
-                        .finalPrice(finalPrice)
-                        .purchasedAt(purchasedAt)
+                        .finalPrice(command.finalPrice())
+                        .purchasedAt(command.purchasedAt())
                         .build()
         );
-        request.complete(trade, finalPrice);
+        request.complete(trade, command.finalPrice());
 
         return BuyNowResult.from(trade);
     }
