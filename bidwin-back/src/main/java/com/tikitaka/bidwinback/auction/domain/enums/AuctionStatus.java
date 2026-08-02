@@ -5,6 +5,5 @@ public enum AuctionStatus {
     BID_ONGOING,
     WINNER_DETERMINING,
     COMPLETED,
-    UNSOLD,
-    CANCELED
+    UNSOLD
 }

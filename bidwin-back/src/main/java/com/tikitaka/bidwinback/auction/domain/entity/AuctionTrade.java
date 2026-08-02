@@ -54,7 +54,7 @@ public class AuctionTrade extends BaseTimeEntity {
     ) {
         this.auction = auction;
         this.buyer = buyer;
-        this.status = status == null ? TradeStatus.WAITING_PAYMENT : status;
+        this.status = status == null ? TradeStatus.WAITING_CONFIRM : status;
         this.finalPrice = finalPrice;
     }
 }
