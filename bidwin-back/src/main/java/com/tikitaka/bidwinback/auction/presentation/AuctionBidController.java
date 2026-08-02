@@ -25,8 +25,7 @@ public class AuctionBidController {
 
     private final BidService bidService;
 
-    // 하향 경매는 즉시구매로만 거래되므로 입찰 경로는 상향 경매 아래에만 둔다.
-    @PostMapping("/up/{auctionId}/bids")
+    @PostMapping("/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidResponse>> bid(
             @RequestAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY) AuthMember authMember,
             @PathVariable Long auctionId,

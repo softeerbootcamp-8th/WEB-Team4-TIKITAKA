@@ -2,8 +2,10 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
+import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +38,11 @@ public class BidService {
                 .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+
+        // 하향 경매는 즉시구매로만 거래되므로 입찰은 상향 경매에만 허용한다.
+        if (!(auction instanceof UpAuction)) {
+            throw new BidException(NOT_UP_AUCTION);
+        }
 
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)

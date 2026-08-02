@@ -1,9 +1,11 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
+import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
+import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -21,6 +23,7 @@ import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -54,6 +57,9 @@ class BidServiceTest {
 
     @Mock
     private UpAuction auction;
+
+    @Mock
+    private DownAuction downAuction;
 
     @Mock
     private Bid persistedBid;
@@ -119,6 +125,24 @@ class BidServiceTest {
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
+        verify(bidRepository, never()).save(any());
+    }
+
+    @Test
+    void 하향_경매에는_입찰할_수_없다() {
+        // given
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(downAuction));
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
         verify(bidRepository, never()).save(any());
     }
 
