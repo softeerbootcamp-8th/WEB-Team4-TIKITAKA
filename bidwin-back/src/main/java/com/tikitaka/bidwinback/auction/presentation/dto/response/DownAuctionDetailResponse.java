@@ -22,6 +22,7 @@ public record DownAuctionDetailResponse(
         TradeType tradeType,
         String contact,
         AuctionSellerResponse seller,
+        Long finalPrice,
         long minimumPrice,
         long dropPrice,
         long priceDropIntervalMs

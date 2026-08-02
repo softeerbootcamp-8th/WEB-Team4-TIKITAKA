@@ -141,6 +141,7 @@ class AuctionControllerTest {
                         true,
                         12L
                 ),
+                null,
                 150_000L,
                 10_000L,
                 600_000L

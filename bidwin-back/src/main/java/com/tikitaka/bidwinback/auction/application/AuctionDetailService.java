@@ -56,6 +56,7 @@ public class AuctionDetailService {
                 .map(Image::getObjectKey)
                 .map(imageUrlResolver::resolve)
                 .toList();
+
         AuctionSellerResponse seller = toSellerResponse(auction.getSeller());
 
         if (auction instanceof UpAuction upAuction) {
@@ -64,8 +65,13 @@ public class AuctionDetailService {
                     : Optional.empty();
             return toUpAuctionResponse(upAuction, imageUrls, seller, finalPrice);
         }
+
         if (auction instanceof DownAuction downAuction) {
-            return toDownAuctionResponse(downAuction, imageUrls, seller);
+            // 경매가 종료되었고, 유찰이 아닌경우 최종 가격을 가져온다. 그외의 경우 빈 값을 반환하여 시간 대비 계산된 가격을 표시
+            Optional<Long> finalPrice = downAuction.getStatus() == AuctionStatus.COMPLETED
+                    ? auctionTradeRepository.findFinalPriceByAuctionId(auctionId)
+                    : Optional.empty();
+            return toDownAuctionResponse(downAuction, imageUrls, seller, finalPrice);
         }
 
         throw new IllegalStateException("Unsupported auction type: " + auction.getClass().getName());
@@ -106,7 +112,8 @@ public class AuctionDetailService {
     private DownAuctionDetailResponse toDownAuctionResponse(
             DownAuction auction,
             List<String> imageUrls,
-            AuctionSellerResponse seller
+            AuctionSellerResponse seller,
+            Optional<Long> finalPrice
     ) {
         long intervalMs = toIntervalMillis(auction.getPriceDropInterval());
         LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
@@ -126,6 +133,7 @@ public class AuctionDetailService {
                 auction.getTradeType(),
                 auction.getContact(),
                 seller,
+                finalPrice.orElse(null),
                 auction.getMinimumPrice(),
                 auction.getDropPrice(),
                 intervalMs

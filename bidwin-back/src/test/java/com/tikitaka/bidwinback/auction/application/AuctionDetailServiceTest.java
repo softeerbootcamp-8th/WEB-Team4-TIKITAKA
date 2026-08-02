@@ -175,6 +175,36 @@ class AuctionDetailServiceTest {
         assertThat(response.priceDropIntervalMs()).isEqualTo(600_000L);
         assertThat(response.startedAt()).isEqualTo(toEpochMilli(startedAt));
         assertThat(response.serverTime()).isEqualTo(toEpochMilli(serverTime));
+        assertThat(response.finalPrice()).isNull();
+        verify(auctionTradeRepository, never()).findFinalPriceByAuctionId(1L);
+    }
+
+    @Test
+    void 완료된_하락_경매는_최종_거래가를_응답한다() {
+        DownAuction auction = mock(DownAuction.class);
+        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
+        LocalDateTime serverTime = LocalDateTime.of(2026, 8, 1, 12, 35);
+        stubCommonAuction(
+                auction,
+                mockSeller(),
+                LocalDateTime.of(2026, 8, 1, 13, 0)
+        );
+        when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        when(auction.getCreatedAt()).thenReturn(startedAt);
+        when(auction.getMinimumPrice()).thenReturn(150_000L);
+        when(auction.getDropPrice()).thenReturn(10_000L);
+        when(auction.getPriceDropInterval()).thenReturn(10L);
+        when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
+        when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(auctionRepository.currentDatabaseTime()).thenReturn(serverTime);
+        when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
+                .thenReturn(Optional.of(170_000L));
+
+        DownAuctionDetailResponse response = (DownAuctionDetailResponse)
+                auctionDetailService.getDetail(1L);
+
+        assertThat(response.finalPrice()).isEqualTo(170_000L);
+        verify(auctionTradeRepository).findFinalPriceByAuctionId(1L);
     }
 
     @Test
