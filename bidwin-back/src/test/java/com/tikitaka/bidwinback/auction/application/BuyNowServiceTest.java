@@ -114,27 +114,29 @@ class BuyNowServiceTest {
     @Test
     void OPEN_경매를_ACTIVE_회원이_낙찰가_전액을_잠그고_즉시구매한다() {
         stubReadyToPurchase();
-        when(auctionRepository.completeForBuyNow(AUCTION_ID, MEMBER_ID))
+        when(auctionRepository.completeForBuyNow(
+                AUCTION_ID,
+                MEMBER_ID,
+                PURCHASED_AT
+        ))
                 .thenReturn(1);
-        when(auctionRepository.findCompletedAt(AUCTION_ID))
-                .thenReturn(Optional.of(PURCHASED_AT));
         when(priceCalculator.calculate(auction, PURCHASED_AT))
                 .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(1);
         stubPersistedTrade();
-        when(auctionTradeRepository.saveAndFlush(any(AuctionTrade.class)))
+        when(auctionTradeRepository.save(any(AuctionTrade.class)))
                 .thenReturn(persistedTrade);
 
         BuyNowResult result = buyInTransaction();
 
         ArgumentCaptor<AuctionTrade> tradeCaptor =
                 ArgumentCaptor.forClass(AuctionTrade.class);
-        verify(auctionTradeRepository).saveAndFlush(tradeCaptor.capture());
+        verify(auctionTradeRepository).save(tradeCaptor.capture());
         AuctionTrade trade = tradeCaptor.getValue();
         ArgumentCaptor<AuctionDeposit> depositCaptor =
                 ArgumentCaptor.forClass(AuctionDeposit.class);
-        verify(auctionDepositRepository).saveAndFlush(depositCaptor.capture());
+        verify(auctionDepositRepository).save(depositCaptor.capture());
         AuctionDeposit deposit = depositCaptor.getValue();
         assertAll(
                 () -> assertThat(trade.getAuction()).isSameAs(auction),
@@ -152,7 +154,11 @@ class BuyNowServiceTest {
                 () -> assertThat(result.finalPrice()).isEqualTo(FINAL_PRICE),
                 () -> assertThat(result.purchasedAt()).isEqualTo(PURCHASED_AT)
         );
-        verify(auctionRepository).completeForBuyNow(AUCTION_ID, MEMBER_ID);
+        verify(auctionRepository).completeForBuyNow(
+                AUCTION_ID,
+                MEMBER_ID,
+                PURCHASED_AT
+        );
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
         verify(request).complete(persistedTrade, FINAL_PRICE);
     }
@@ -226,10 +232,6 @@ class BuyNowServiceTest {
     @Test
     void 낙찰가_전액을_잠글_포인트가_없으면_구매할_수_없다() {
         stubReadyToPurchase();
-        when(auctionRepository.completeForBuyNow(AUCTION_ID, MEMBER_ID))
-                .thenReturn(1);
-        when(auctionRepository.findCompletedAt(AUCTION_ID))
-                .thenReturn(Optional.of(PURCHASED_AT));
         when(priceCalculator.calculate(auction, PURCHASED_AT))
                 .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
@@ -241,32 +243,38 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INSUFFICIENT_DEPOSIT);
-        verify(auctionDepositRepository, never()).saveAndFlush(any());
-        verify(auctionTradeRepository, never()).saveAndFlush(any());
+        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionDepositRepository, never()).save(any());
+        verify(auctionTradeRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 
     @Test
     void 낙찰가가_0_이하면_포인트와_보증금을_변경하지_않는다() {
         stubReadyToPurchase();
-        when(auctionRepository.completeForBuyNow(AUCTION_ID, MEMBER_ID))
-                .thenReturn(1);
-        when(auctionRepository.findCompletedAt(AUCTION_ID))
-                .thenReturn(Optional.of(PURCHASED_AT));
         when(priceCalculator.calculate(auction, PURCHASED_AT)).thenReturn(0L);
 
         assertThrows(IllegalStateException.class, this::buyInTransaction);
 
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verify(auctionDepositRepository, never()).saveAndFlush(any());
-        verify(auctionTradeRepository, never()).saveAndFlush(any());
+        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionDepositRepository, never()).save(any());
+        verify(auctionTradeRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 
     @Test
     void 경매_CAS가_실패하면_동시구매_충돌로_처리한다() {
         stubReadyToPurchase();
-        when(auctionRepository.completeForBuyNow(AUCTION_ID, MEMBER_ID))
+        when(priceCalculator.calculate(auction, PURCHASED_AT))
+                .thenReturn(FINAL_PRICE);
+        when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
+                .thenReturn(1);
+        when(auctionRepository.completeForBuyNow(
+                AUCTION_ID,
+                MEMBER_ID,
+                PURCHASED_AT
+        ))
                 .thenReturn(0);
 
         BidException exception = assertThrows(
@@ -275,11 +283,10 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_TRADE_CONFLICT);
-        verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verify(auctionDepositRepository, never()).saveAndFlush(any());
-        verify(auctionTradeRepository, never()).saveAndFlush(any());
+        verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
+        verify(auctionDepositRepository, never()).save(any());
+        verify(auctionTradeRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
-        verifyNoInteractions(priceCalculator);
     }
 
     @Test
@@ -300,7 +307,7 @@ class BuyNowServiceTest {
                 () -> assertThat(result.purchasedAt()).isEqualTo(PURCHASED_AT)
         );
         verifyNoInteractions(memberRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong());
+        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(auctionDepositRepository, auctionTradeRepository, priceCalculator);
     }
@@ -322,7 +329,7 @@ class BuyNowServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(IDEMPOTENCY_KEY_REUSED);
         verifyNoInteractions(memberRepository, auctionRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong());
+        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(auctionDepositRepository, auctionTradeRepository, priceCalculator);
     }
@@ -374,7 +381,8 @@ class BuyNowServiceTest {
     private void stubOpenAuctionBeforeEnd() {
         when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
         when(auction.getEndedAt()).thenReturn(ENDED_AT);
-        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        when(auctionRepository.currentDatabaseTime())
+                .thenReturn(DATABASE_TIME, PURCHASED_AT);
     }
 
     private void stubReadyToPurchase() {
@@ -393,10 +401,10 @@ class BuyNowServiceTest {
 
     private void verifyNoPurchaseMutation() {
         verify(auctionRepository, never())
-                .completeForBuyNow(anyLong(), anyLong());
+                .completeForBuyNow(anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verify(auctionDepositRepository, never()).saveAndFlush(any());
-        verify(auctionTradeRepository, never()).saveAndFlush(any());
+        verify(auctionDepositRepository, never()).save(any());
+        verify(auctionTradeRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 }

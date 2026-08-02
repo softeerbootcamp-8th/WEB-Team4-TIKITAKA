@@ -21,11 +21,11 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     Optional<Auction> findWithSellerById(@Param("auctionId") Long auctionId);
 
     // 경매 상태·마감·판매자를 DB에서 다시 검사하고 한 요청만 완료 처리한다.
-    @Modifying(flushAutomatically = true)
+    @Modifying
     @Query(value = """
             UPDATE Auction auction
             SET status = 'COMPLETED',
-                completed_at = CURRENT_TIMESTAMP(6),
+                completed_at = :completedAt,
                 last_modified_at = CURRENT_TIMESTAMP(6)
             WHERE auction.id = :auctionId
               AND auction.status = 'OPEN'
@@ -35,7 +35,8 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             """, nativeQuery = true)
     int completeForBuyNow(
             @Param("auctionId") Long auctionId,
-            @Param("buyerId") Long buyerId
+            @Param("buyerId") Long buyerId,
+            @Param("completedAt") LocalDateTime completedAt
     );
 
     // 요구사항: 낙찰 시각과 하향 경매 가격 계산은 DB가 기록한 동일 시각을 사용한다.

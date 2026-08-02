@@ -24,7 +24,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     boolean existsByNickname(String nickname);
 
     // 잔액 확인과 전액 잠금을 한 UPDATE로 처리한다.
-    @Modifying(flushAutomatically = true)
+    @Modifying
     @Query(value = """
             UPDATE Member
             SET total_point = total_point - :amount,

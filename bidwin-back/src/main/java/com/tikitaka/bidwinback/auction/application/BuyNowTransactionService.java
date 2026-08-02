@@ -67,17 +67,8 @@ public class BuyNowTransactionService {
         validateBuyer(buyer, auction);
         validateAuction(auction);
 
-        // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
-        int completed = auctionRepository.completeForBuyNow(auctionId, memberId);
-        if (completed != 1) {
-            throw new BidException(CONCURRENT_TRADE_CONFLICT);
-        }
-
         // 요구사항: 서버 간 시각 차이 없이 DB가 확정한 완료 시각으로 최종가를 계산한다.
-        LocalDateTime purchasedAt = auctionRepository.findCompletedAt(auctionId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "즉시구매 완료 시각을 조회할 수 없습니다."
-                ));
+        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
         long finalPrice = priceCalculator.calculate(auction, purchasedAt);
         if (finalPrice <= 0) {
             throw new IllegalStateException("즉시구매 가격은 0보다 커야 합니다.");
@@ -88,18 +79,25 @@ public class BuyNowTransactionService {
                 memberId,
                 finalPrice
         );
+
         if (lockedPoints != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
 
-        auctionDepositRepository.saveAndFlush(AuctionDeposit.builder()
+        // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
+        int completed = auctionRepository.completeForBuyNow(auctionId, memberId, purchasedAt);
+        if (completed != 1) {
+            throw new BidException(CONCURRENT_TRADE_CONFLICT);
+        }
+
+        auctionDepositRepository.save(AuctionDeposit.builder()
                 .member(buyer)
                 .auction(auction)
                 .reservedAmount(finalPrice)
                 .build());
 
         // 거래와 멱등 요청을 함께 완료해 재요청 결과를 동일하게 보장한다.
-        AuctionTrade trade = auctionTradeRepository.saveAndFlush(
+        AuctionTrade trade = auctionTradeRepository.save(
                 AuctionTrade.builder()
                         .auction(auction)
                         .buyer(buyer)
