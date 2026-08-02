@@ -52,23 +52,29 @@ public class BuyNowTransactionService {
             Long auctionId,
             String idempotencyKey
     ) {
+
+        // 멱등 키 저장
         requestRepository.insertOrKeep(idempotencyKey, memberId, auctionId);
+        // 멱등 키 비관락을 조회, 동시요청은 여기서 앞썬 트랜잭션이 락을 풀어야 진입가능
         InstantPurchaseRequest request = findRequestForUpdate(idempotencyKey);
         validateIdempotencyKey(request, memberId, auctionId);
+
+        // 앞선 트랜잭션이 커밋되면 후에 들어온 트랜잭션은 대기했다가 앞 트랜잭션이 커밋된것이므로
+        // 변경된 값을 읽어옴 따라서 여기서 바로 isComplted()가 true가 된다.
         if (request.isCompleted()) {
             return BuyNowResult.from(request.getTrade());
         }
 
+        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
         Member buyer = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
         Auction auction = auctionRepository.findWithSellerById(auctionId)
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
 
         validateBuyer(buyer, auction);
-        validateAuction(auction);
+        validateAuction(auction, purchasedAt);
 
         // 요구사항: 서버 간 시각 차이 없이 DB가 확정한 완료 시각으로 최종가를 계산한다.
-        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
         long finalPrice = priceCalculator.calculate(auction, purchasedAt);
         if (finalPrice <= 0) {
             throw new IllegalStateException("즉시구매 가격은 0보다 커야 합니다.");
@@ -142,7 +148,7 @@ public class BuyNowTransactionService {
         }
     }
 
-    private void validateAuction(Auction auction) {
+    private void validateAuction(Auction auction, LocalDateTime databaseTime) {
         // 요구사항: 이미 거래가 확정된 경매는 다시 구매할 수 없다.
         if (auction.getStatus() == AuctionStatus.COMPLETED) {
             throw new AuctionException(AUCTION_ALREADY_TRADED);
@@ -158,7 +164,6 @@ public class BuyNowTransactionService {
         }
 
         // 요구사항: DB 현재 시각이 종료 시각과 같거나 지난 경매는 구매할 수 없다.
-        LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
         if (!auction.getEndedAt().isAfter(databaseTime)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
         }

@@ -175,7 +175,7 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_ALREADY_TRADED);
-        verify(auctionRepository, never()).currentDatabaseTime();
+        verify(auctionRepository).currentDatabaseTime();
         verifyNoPurchaseMutation();
         verifyNoInteractions(priceCalculator);
     }
@@ -192,7 +192,7 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_ONGOING);
-        verify(auctionRepository, never()).currentDatabaseTime();
+        verify(auctionRepository).currentDatabaseTime();
         verifyNoPurchaseMutation();
         verifyNoInteractions(priceCalculator);
     }
@@ -382,7 +382,7 @@ class BuyNowServiceTest {
         when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
         when(auction.getEndedAt()).thenReturn(ENDED_AT);
         when(auctionRepository.currentDatabaseTime())
-                .thenReturn(DATABASE_TIME, PURCHASED_AT);
+                .thenReturn(PURCHASED_AT);
     }
 
     private void stubReadyToPurchase() {

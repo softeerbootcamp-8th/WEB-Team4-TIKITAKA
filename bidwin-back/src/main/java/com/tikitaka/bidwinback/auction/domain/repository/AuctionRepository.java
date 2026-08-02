@@ -26,11 +26,11 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             UPDATE Auction auction
             SET status = 'COMPLETED',
                 completed_at = :completedAt,
-                last_modified_at = CURRENT_TIMESTAMP(6)
+                last_modified_at = :completedAt
             WHERE auction.id = :auctionId
               AND auction.status = 'OPEN'
               AND auction.completed_at IS NULL
-              AND auction.ended_at > CURRENT_TIMESTAMP(6)
+              AND auction.ended_at > :completedAt
               AND auction.seller_id <> :buyerId
             """, nativeQuery = true)
     int completeForBuyNow(
