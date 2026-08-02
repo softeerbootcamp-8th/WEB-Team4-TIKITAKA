@@ -1,9 +1,12 @@
 package com.tikitaka.bidwinback.auction.domain.entity;
 
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,6 +20,7 @@ import lombok.NoArgsConstructor;
 
 import static lombok.AccessLevel.PROTECTED;
 
+// TODO 멤버 먼저 보증금을 빼고, Auction 처리
 @Getter
 @Entity
 @Table(name = "Bid")
@@ -38,10 +42,15 @@ public class Bid extends BaseTimeEntity {
     @Column(nullable = false)
     private long price;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BidStatus status;
+
     @Builder
-    private Bid(Auction auction, Member bidder, long price) {
+    private Bid(Auction auction, Member bidder, long price, BidStatus status) {
         this.auction = auction;
         this.bidder = bidder;
         this.price = price;
+        this.status = status;
     }
 }
