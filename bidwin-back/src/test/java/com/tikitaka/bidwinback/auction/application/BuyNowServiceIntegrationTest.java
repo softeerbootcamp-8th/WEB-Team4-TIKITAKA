@@ -396,7 +396,7 @@ class BuyNowServiceIntegrationTest {
                     "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
             assertThat(countRows(entityManager,
-                    "SELECT COUNT(*) FROM Bid WHERE auction_id = :id", auctionId))
+                    "SELECT COUNT(*) FROM bid WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
@@ -430,7 +430,7 @@ class BuyNowServiceIntegrationTest {
 
             Object[] bid = (Object[]) entityManager.createNativeQuery("""
                             SELECT bidder_id, price, status
-                            FROM Bid
+                            FROM bid
                             WHERE auction_id = :auctionId
                             """)
                     .setParameter("auctionId", auctionId)
@@ -462,7 +462,7 @@ class BuyNowServiceIntegrationTest {
                     "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
                     .isZero();
             assertThat(countRows(entityManager,
-                    "SELECT COUNT(*) FROM Bid WHERE auction_id = :id", auctionId))
+                    "SELECT COUNT(*) FROM bid WHERE auction_id = :id", auctionId))
                     .isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
