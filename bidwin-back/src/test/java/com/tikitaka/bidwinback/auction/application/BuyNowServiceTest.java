@@ -2,9 +2,11 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
+import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -12,6 +14,7 @@ import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.InstantPurchaseRequestRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
@@ -72,6 +75,9 @@ class BuyNowServiceTest {
     private AuctionTradeRepository auctionTradeRepository;
 
     @Mock
+    private BidRepository bidRepository;
+
+    @Mock
     private InstantPurchaseRequestRepository requestRepository;
 
     @Mock
@@ -105,10 +111,43 @@ class BuyNowServiceTest {
                 auctionRepository,
                 auctionDepositRepository,
                 auctionTradeRepository,
+                bidRepository,
                 requestRepository,
                 priceCalculator
         );
         buyNowService = new BuyNowService(transactionBoundary);
+    }
+
+    @Test
+    void 즉시구매하면_BUY_NOW_상태의_입찰_기록을_생성한다() {
+        // given
+        stubReadyToPurchase();
+        when(priceCalculator.calculate(auction, PURCHASED_AT))
+                .thenReturn(FINAL_PRICE);
+        when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
+                .thenReturn(1);
+        when(auctionRepository.completeForBuyNow(
+                AUCTION_ID,
+                MEMBER_ID,
+                PURCHASED_AT
+        )).thenReturn(1);
+        stubPersistedTrade();
+        when(auctionTradeRepository.save(any(AuctionTrade.class)))
+                .thenReturn(persistedTrade);
+
+        // when
+        buyInTransaction();
+
+        // then
+        ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
+        verify(bidRepository).save(bidCaptor.capture());
+        Bid bid = bidCaptor.getValue();
+        assertAll(
+                () -> assertThat(bid.getAuction()).isSameAs(auction),
+                () -> assertThat(bid.getBidder()).isSameAs(buyer),
+                () -> assertThat(bid.getPrice()).isEqualTo(FINAL_PRICE),
+                () -> assertThat(bid.getStatus()).isEqualTo(BidStatus.BUY_NOW)
+        );
     }
 
     @Test
@@ -246,6 +285,7 @@ class BuyNowServiceTest {
         verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
+        verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 
@@ -260,6 +300,7 @@ class BuyNowServiceTest {
         verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
+        verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 
@@ -286,6 +327,7 @@ class BuyNowServiceTest {
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
+        verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 
@@ -309,7 +351,12 @@ class BuyNowServiceTest {
         verifyNoInteractions(memberRepository);
         verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verifyNoInteractions(auctionDepositRepository, auctionTradeRepository, priceCalculator);
+        verifyNoInteractions(
+                auctionDepositRepository,
+                auctionTradeRepository,
+                bidRepository,
+                priceCalculator
+        );
     }
 
     @Test
@@ -331,7 +378,12 @@ class BuyNowServiceTest {
         verifyNoInteractions(memberRepository, auctionRepository);
         verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verifyNoInteractions(auctionDepositRepository, auctionTradeRepository, priceCalculator);
+        verifyNoInteractions(
+                auctionDepositRepository,
+                auctionTradeRepository,
+                bidRepository,
+                priceCalculator
+        );
     }
 
     @Test
@@ -405,6 +457,7 @@ class BuyNowServiceTest {
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
+        verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
     }
 }

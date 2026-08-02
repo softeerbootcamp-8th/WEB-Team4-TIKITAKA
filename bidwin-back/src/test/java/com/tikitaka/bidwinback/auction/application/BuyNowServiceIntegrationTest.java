@@ -7,6 +7,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
@@ -75,6 +76,8 @@ class BuyNowServiceIntegrationTest {
                         "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
+                executeDelete(entityManager,
+                        "DELETE FROM bid WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
@@ -287,7 +290,7 @@ class BuyNowServiceIntegrationTest {
         Long buyerId = fixture.buyerIds().getFirst();
         executeInTransaction(entityManager -> {
             entityManager.createNativeQuery("""
-                            UPDATE Member
+                            UPDATE member
                             SET total_point = :point
                             WHERE id = :memberId
                             """)
@@ -393,6 +396,9 @@ class BuyNowServiceIntegrationTest {
                     "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
             assertThat(countRows(entityManager,
+                    "SELECT COUNT(*) FROM Bid WHERE auction_id = :id", auctionId))
+                    .isEqualTo(1L);
+            assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
                     .isEqualTo(expectedRequestLogCount);
 
@@ -421,6 +427,17 @@ class BuyNowServiceIntegrationTest {
             assertThat(buyerId.longValue()).isEqualTo(expectedBuyerId);
             assertThat(finalPrice.longValue()).isEqualTo(BUY_NOW_PRICE);
             assertThat(tradeStatus).isEqualTo(TradeStatus.CONFIRMED.name());
+
+            Object[] bid = (Object[]) entityManager.createNativeQuery("""
+                            SELECT bidder_id, price, status
+                            FROM Bid
+                            WHERE auction_id = :auctionId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .getSingleResult();
+            assertThat(((Number) bid[0]).longValue()).isEqualTo(expectedBuyerId);
+            assertThat(((Number) bid[1]).longValue()).isEqualTo(BUY_NOW_PRICE);
+            assertThat(bid[2]).isEqualTo(BidStatus.BUY_NOW.name());
             return null;
         });
         assertThat(findDepositStatus(auctionId, expectedBuyerId))
@@ -443,6 +460,9 @@ class BuyNowServiceIntegrationTest {
                     .isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_deposit WHERE auction_id = :id", auctionId))
+                    .isZero();
+            assertThat(countRows(entityManager,
+                    "SELECT COUNT(*) FROM Bid WHERE auction_id = :id", auctionId))
                     .isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
@@ -501,7 +521,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             Object[] points = (Object[]) entityManager.createNativeQuery("""
                             SELECT total_point, locked_point
-                            FROM Member
+                            FROM member
                             WHERE id = :memberId
                             """)
                     .setParameter("memberId", memberId)

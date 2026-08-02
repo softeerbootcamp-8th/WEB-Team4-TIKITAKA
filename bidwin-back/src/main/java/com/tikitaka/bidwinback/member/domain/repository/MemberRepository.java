@@ -26,7 +26,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // 잔액 확인과 전액 잠금을 한 UPDATE로 처리한다.
     @Modifying
     @Query(value = """
-            UPDATE Member
+            UPDATE member
             SET total_point = total_point - :amount,
                 locked_point = locked_point + :amount
             WHERE id = :memberId
