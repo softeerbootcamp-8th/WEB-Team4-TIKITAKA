@@ -208,6 +208,11 @@ public enum ErrorCode {
             "BID_400_1",
             "즉시구매가가 설정되지 않은 경매입니다."
     ),
+    NOT_UP_AUCTION(
+            HttpStatus.BAD_REQUEST,
+            "BID_400_2",
+            "상향 경매만 입찰할 수 있습니다."
+    ),
     BUY_NOW_PRICE_CHANGED(
             HttpStatus.CONFLICT,
             "BID_409_1",
