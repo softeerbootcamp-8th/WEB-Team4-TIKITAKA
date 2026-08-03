@@ -38,7 +38,7 @@ class AuctionBidControllerTest {
     private static final long BID_ID = 7L;
     private static final long PRICE = 232_000L;
     private static final String ENDPOINT =
-            "/api/v1/auctions/" + AUCTION_ID + "/bids";
+            "/api/v1/auctions/up/" + AUCTION_ID + "/bids";
     private static final String VALID_REQUEST = """
             {
               "price": 232000
