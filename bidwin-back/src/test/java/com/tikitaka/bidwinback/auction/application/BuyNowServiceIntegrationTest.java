@@ -183,7 +183,7 @@ class BuyNowServiceIntegrationTest {
             return null;
         });
 
-        BuyNowResult result = buyNowService.buy(
+        BuyNowResult result = buyNowService.buyDownAuction(
                 buyerId,
                 fixture.auctionId(),
                 idempotencyKey("drop-boundary")
@@ -210,6 +210,14 @@ class BuyNowServiceIntegrationTest {
             assertThat(trade.getPurchasedAt()).isEqualTo(auction.getCompletedAt());
             assertThat(result.purchasedAt()).isEqualTo(auction.getCompletedAt());
             assertThat(trade.getFinalPrice()).isEqualTo(90_000L);
+            String bidStatus = (String) entityManager.createNativeQuery("""
+                            SELECT status
+                            FROM bid
+                            WHERE auction_id = :auctionId
+                            """)
+                    .setParameter("auctionId", fixture.auctionId())
+                    .getSingleResult();
+            assertThat(bidStatus).isEqualTo(BidStatus.DOWN.name());
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id",
                     fixture.auctionId())).isEqualTo(1L);
@@ -345,7 +353,7 @@ class BuyNowServiceIntegrationTest {
     ) {
         return () -> {
             barrier.await(5, TimeUnit.SECONDS);
-            return buyNowService.buy(memberId, auctionId, idempotencyKey);
+            return buyNowService.buyUpAuction(memberId, auctionId, idempotencyKey);
         };
     }
 
@@ -360,7 +368,7 @@ class BuyNowServiceIntegrationTest {
             try {
                 return Attempt.success(
                         memberId,
-                        buyNowService.buy(memberId, auctionId, idempotencyKey)
+                        buyNowService.buyUpAuction(memberId, auctionId, idempotencyKey)
                 );
             } catch (BusinessException exception) {
                 return Attempt.failure(memberId, exception.getErrorCode());
@@ -375,7 +383,11 @@ class BuyNowServiceIntegrationTest {
             ErrorCode expected
     ) {
         Throwable thrown = catchThrowable(
-                () -> buyNowService.buy(memberId, auctionId, idempotencyKey));
+                () -> buyNowService.buyUpAuction(
+                        memberId,
+                        auctionId,
+                        idempotencyKey
+                ));
 
         assertThat(thrown).isInstanceOf(BusinessException.class);
         assertThat(((BusinessException) thrown).getErrorCode()).isEqualTo(expected);

@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.auth.LoginMemberArgumentResolver;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,8 +35,10 @@ class AuctionBuyNowControllerTest {
 
     private static final long MEMBER_ID = 1L;
     private static final long AUCTION_ID = 42L;
-    private static final String ENDPOINT =
-            "/api/v1/auctions/" + AUCTION_ID + "/buy-now";
+    private static final String UP_ENDPOINT =
+            "/api/v1/auctions/up/" + AUCTION_ID + "/buy-now";
+    private static final String DOWN_ENDPOINT =
+            "/api/v1/auctions/down/" + AUCTION_ID + "/buy-now";
     private static final String IDEMPOTENCY_KEY = "buy-now-42-request-1";
     private static final String VALID_REQUEST = """
             {
@@ -56,6 +59,7 @@ class AuctionBuyNowControllerTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuctionBuyNowController(buyNowService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .addFilters(
                         new AuthExceptionFilter(new ObjectMapper()),
                         new SessionAuthenticationFilter(
@@ -67,26 +71,45 @@ class AuctionBuyNowControllerTest {
     }
 
     @Test
-    void 로그인한_회원이_즉시구매하면_확정된_거래와_200을_응답한다()
-            throws Exception {
-        LocalDateTime purchasedAt = LocalDateTime.of(
-                2026,
-                7,
-                30,
-                12,
-                34,
-                56
-        );
-        BuyNowResult result = new BuyNowResult(
-                7L,
+    void 상향_API는_상향_서비스_메서드를_호출한다() throws Exception {
+        // given
+        BuyNowResult result = completedResult();
+        when(buyNowService.buyUpAuction(
+                MEMBER_ID,
                 AUCTION_ID,
-                232_000L,
-                purchasedAt
-        );
-        when(buyNowService.buy(MEMBER_ID, AUCTION_ID, IDEMPOTENCY_KEY))
-                .thenReturn(result);
+                IDEMPOTENCY_KEY
+        )).thenReturn(result);
 
-        mockMvc.perform(post(ENDPOINT)
+        // when & then
+        performSuccessfulBuy(UP_ENDPOINT);
+        verify(buyNowService).buyUpAuction(
+                MEMBER_ID,
+                AUCTION_ID,
+                IDEMPOTENCY_KEY
+        );
+    }
+
+    @Test
+    void 하향_API는_하향_서비스_메서드를_호출한다() throws Exception {
+        // given
+        BuyNowResult result = completedResult();
+        when(buyNowService.buyDownAuction(
+                MEMBER_ID,
+                AUCTION_ID,
+                IDEMPOTENCY_KEY
+        )).thenReturn(result);
+
+        // when & then
+        performSuccessfulBuy(DOWN_ENDPOINT);
+        verify(buyNowService).buyDownAuction(
+                MEMBER_ID,
+                AUCTION_ID,
+                IDEMPOTENCY_KEY
+        );
+    }
+
+    private void performSuccessfulBuy(String endpoint) throws Exception {
+        mockMvc.perform(post(endpoint)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_REQUEST))
@@ -96,14 +119,12 @@ class AuctionBuyNowControllerTest {
                 .andExpect(jsonPath("$.data.auctionId").value(AUCTION_ID))
                 .andExpect(jsonPath("$.data.finalPrice").value(232_000L))
                 .andExpect(jsonPath("$.data.purchasedAt")
-                        .value(purchasedAt.toString()));
-
-        verify(buyNowService).buy(MEMBER_ID, AUCTION_ID, IDEMPOTENCY_KEY);
+                        .value("2026-07-30T12:34:56"));
     }
 
     @Test
     void 멱등_키_형식이_올바르지_않으면_400을_응답한다() throws Exception {
-        mockMvc.perform(post(ENDPOINT)
+        mockMvc.perform(post(UP_ENDPOINT)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -122,7 +143,7 @@ class AuctionBuyNowControllerTest {
 
     @Test
     void 로그인_세션이_없으면_401을_응답한다() throws Exception {
-        mockMvc.perform(post(ENDPOINT)
+        mockMvc.perform(post(DOWN_ENDPOINT)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_REQUEST))
                 .andExpect(status().isUnauthorized())
@@ -141,5 +162,14 @@ class AuctionBuyNowControllerTest {
         when(sessionAuthService.isAuthenticatable(MEMBER_ID, 0L))
                 .thenReturn(true);
         return session;
+    }
+
+    private BuyNowResult completedResult() {
+        return new BuyNowResult(
+                7L,
+                AUCTION_ID,
+                232_000L,
+                LocalDateTime.of(2026, 7, 30, 12, 34, 56)
+        );
     }
 }

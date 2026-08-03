@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.InstantPurchaseRequest;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
@@ -23,6 +24,8 @@ import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -96,6 +99,9 @@ class BuyNowServiceTest {
     private DownAuction auction;
 
     @Mock
+    private UpAuction upAuction;
+
+    @Mock
     private InstantPurchaseRequest request;
 
     @Mock
@@ -112,18 +118,22 @@ class BuyNowServiceTest {
                 auctionDepositRepository,
                 auctionTradeRepository,
                 bidRepository,
-                requestRepository,
-                priceCalculator
+                requestRepository
         );
-        buyNowService = new BuyNowService(transactionBoundary);
+        buyNowService = new BuyNowService(
+                auctionRepository,
+                priceCalculator,
+                transactionBoundary
+        );
     }
 
-    @Test
-    void 즉시구매하면_BUY_NOW_상태의_입찰_기록을_생성한다() {
+    @ParameterizedTest
+    @EnumSource(value = BidStatus.class, names = {"BUY_NOW", "DOWN"})
+    void 서비스가_정한_입찰_상태로_입찰_기록을_생성한다(
+            BidStatus bidStatus
+    ) {
         // given
         stubReadyToPurchase();
-        when(priceCalculator.calculate(auction, PURCHASED_AT))
-                .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(1);
         when(auctionRepository.completeForBuyNow(
@@ -136,7 +146,11 @@ class BuyNowServiceTest {
                 .thenReturn(persistedTrade);
 
         // when
-        buyInTransaction();
+        transactionService.buy(command(
+                AUCTION_ID,
+                FINAL_PRICE,
+                bidStatus
+        ));
 
         // then
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
@@ -146,7 +160,7 @@ class BuyNowServiceTest {
                 () -> assertThat(bid.getAuction()).isSameAs(auction),
                 () -> assertThat(bid.getBidder()).isSameAs(buyer),
                 () -> assertThat(bid.getPrice()).isEqualTo(FINAL_PRICE),
-                () -> assertThat(bid.getStatus()).isEqualTo(BidStatus.BUY_NOW)
+                () -> assertThat(bid.getStatus()).isEqualTo(bidStatus)
         );
     }
 
@@ -159,8 +173,6 @@ class BuyNowServiceTest {
                 PURCHASED_AT
         ))
                 .thenReturn(1);
-        when(priceCalculator.calculate(auction, PURCHASED_AT))
-                .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(1);
         stubPersistedTrade();
@@ -214,7 +226,6 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_ALREADY_TRADED);
-        verify(auctionRepository).currentDatabaseTime();
         verifyNoPurchaseMutation();
         verifyNoInteractions(priceCalculator);
     }
@@ -231,7 +242,6 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_ONGOING);
-        verify(auctionRepository).currentDatabaseTime();
         verifyNoPurchaseMutation();
         verifyNoInteractions(priceCalculator);
     }
@@ -271,8 +281,6 @@ class BuyNowServiceTest {
     @Test
     void 낙찰가_전액을_잠글_포인트가_없으면_구매할_수_없다() {
         stubReadyToPurchase();
-        when(priceCalculator.calculate(auction, PURCHASED_AT))
-                .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(0);
 
@@ -292,9 +300,14 @@ class BuyNowServiceTest {
     @Test
     void 낙찰가가_0_이하면_포인트와_보증금을_변경하지_않는다() {
         stubReadyToPurchase();
-        when(priceCalculator.calculate(auction, PURCHASED_AT)).thenReturn(0L);
-
-        assertThrows(IllegalStateException.class, this::buyInTransaction);
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionService.buy(command(
+                        AUCTION_ID,
+                        0L,
+                        BidStatus.BUY_NOW
+                ))
+        );
 
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
@@ -307,8 +320,6 @@ class BuyNowServiceTest {
     @Test
     void 경매_CAS가_실패하면_동시구매_충돌로_처리한다() {
         stubReadyToPurchase();
-        when(priceCalculator.calculate(auction, PURCHASED_AT))
-                .thenReturn(FINAL_PRICE);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(1);
         when(auctionRepository.completeForBuyNow(
@@ -367,11 +378,11 @@ class BuyNowServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> transactionService.buy(
-                        MEMBER_ID,
+                () -> transactionService.buy(command(
                         OTHER_AUCTION_ID,
-                        IDEMPOTENCY_KEY
-                )
+                        FINAL_PRICE,
+                        BidStatus.BUY_NOW
+                ))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(IDEMPOTENCY_KEY_REUSED);
@@ -387,22 +398,96 @@ class BuyNowServiceTest {
     }
 
     @Test
-    void 애플리케이션_서비스는_트랜잭션_서비스_결과를_반환한다() {
+    void 상향_서비스는_즉시구매가와_BUY_NOW_상태를_트랜잭션에_전달한다() {
+        // given
         BuyNowResult expected = completedResult();
-        when(transactionBoundary.buy(MEMBER_ID, AUCTION_ID, IDEMPOTENCY_KEY))
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(upAuction));
+        when(auctionRepository.currentDatabaseTime())
+                .thenReturn(PURCHASED_AT);
+        when(priceCalculator.calculate(upAuction, PURCHASED_AT))
+                .thenReturn(FINAL_PRICE);
+        when(transactionBoundary.buy(any(BuyNowCommand.class)))
                 .thenReturn(expected);
 
-        BuyNowResult result = buyNowService.buy(
+        // when
+        BuyNowResult result = buyNowService.buyUpAuction(
                 MEMBER_ID,
                 AUCTION_ID,
                 IDEMPOTENCY_KEY
         );
 
-        assertThat(result).isSameAs(expected);
+        // then
+        ArgumentCaptor<BuyNowCommand> commandCaptor =
+                ArgumentCaptor.forClass(BuyNowCommand.class);
+        verify(transactionBoundary).buy(commandCaptor.capture());
+        assertAll(
+                () -> assertThat(result).isSameAs(expected),
+                () -> assertThat(commandCaptor.getValue().finalPrice())
+                        .isEqualTo(FINAL_PRICE),
+                () -> assertThat(commandCaptor.getValue().purchasedAt())
+                        .isEqualTo(PURCHASED_AT),
+                () -> assertThat(commandCaptor.getValue().bidStatus())
+                        .isEqualTo(BidStatus.BUY_NOW)
+        );
+    }
+
+    @Test
+    void 하향_서비스는_계산가와_DOWN_상태를_트랜잭션에_전달한다() {
+        // given
+        BuyNowResult expected = completedResult();
+        when(auctionRepository.findById(AUCTION_ID))
+                .thenReturn(Optional.of(auction));
+        when(auctionRepository.currentDatabaseTime())
+                .thenReturn(PURCHASED_AT);
+        when(priceCalculator.calculate(auction, PURCHASED_AT))
+                .thenReturn(FINAL_PRICE);
+        when(transactionBoundary.buy(any(BuyNowCommand.class)))
+                .thenReturn(expected);
+
+        // when
+        BuyNowResult result = buyNowService.buyDownAuction(
+                MEMBER_ID,
+                AUCTION_ID,
+                IDEMPOTENCY_KEY
+        );
+
+        // then
+        ArgumentCaptor<BuyNowCommand> commandCaptor =
+                ArgumentCaptor.forClass(BuyNowCommand.class);
+        verify(transactionBoundary).buy(commandCaptor.capture());
+        assertAll(
+                () -> assertThat(result).isSameAs(expected),
+                () -> assertThat(commandCaptor.getValue().finalPrice())
+                        .isEqualTo(FINAL_PRICE),
+                () -> assertThat(commandCaptor.getValue().purchasedAt())
+                        .isEqualTo(PURCHASED_AT),
+                () -> assertThat(commandCaptor.getValue().bidStatus())
+                        .isEqualTo(BidStatus.DOWN)
+        );
+    }
+
+    private BuyNowCommand command(
+            Long auctionId,
+            long finalPrice,
+            BidStatus bidStatus
+    ) {
+        return new BuyNowCommand(
+                MEMBER_ID,
+                auctionId,
+                IDEMPOTENCY_KEY,
+                finalPrice,
+                PURCHASED_AT,
+                bidStatus
+        );
     }
 
     private BuyNowResult buyInTransaction() {
-        return transactionService.buy(MEMBER_ID, AUCTION_ID, IDEMPOTENCY_KEY);
+        return transactionService.buy(command(
+                AUCTION_ID,
+                FINAL_PRICE,
+                BidStatus.BUY_NOW
+        ));
     }
 
     private BuyNowResult completedResult() {
@@ -433,8 +518,6 @@ class BuyNowServiceTest {
     private void stubOpenAuctionBeforeEnd() {
         when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
         when(auction.getEndedAt()).thenReturn(ENDED_AT);
-        when(auctionRepository.currentDatabaseTime())
-                .thenReturn(PURCHASED_AT);
     }
 
     private void stubReadyToPurchase() {
