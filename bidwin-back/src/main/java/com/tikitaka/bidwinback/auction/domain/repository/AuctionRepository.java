@@ -1,16 +1,28 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({
+            @QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"),
+            @QueryHint(name = "jakarta.persistence.query.timeout", value = "3000")
+    })
+    @Query("select auction from Auction auction where auction.id = :auctionId")
+    Optional<Auction> findByIdForUpdate(@Param("auctionId") Long auctionId);
 
     @Query("""
             select auction

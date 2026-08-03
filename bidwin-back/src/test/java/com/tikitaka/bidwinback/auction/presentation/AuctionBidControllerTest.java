@@ -30,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -164,6 +165,20 @@ class AuctionBidControllerTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("BID_422_1"));
+    }
+
+    @Test
+    void 동시_입찰_락_획득에_실패하면_409를_응답한다() throws Exception {
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+                .thenThrow(new BidException(CONCURRENT_BID_CONFLICT));
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REQUEST))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("BID_409_4"));
     }
 
     @Test

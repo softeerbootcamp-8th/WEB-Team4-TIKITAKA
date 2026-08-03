@@ -11,11 +11,14 @@ import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 
@@ -33,8 +36,7 @@ public class BidService {
     public BidResult place(Long memberId, Long auctionId, long price) {
         validateBidUnit(price);
 
-        Auction auction = auctionRepository.findById(auctionId)
-                .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+        Auction auction = findAuctionForUpdate(auctionId);
 
         // 하향 경매는 즉시구매로만 거래되므로 입찰은 상향 경매에만 허용한다.
         if (!(auction instanceof UpAuction)) {
@@ -62,6 +64,15 @@ public class BidService {
     private void validateBidUnit(long price) {
         if (price <= 0 || price % BID_UNIT != 0) {
             throw new BidException(INVALID_BID_UNIT);
+        }
+    }
+
+    private Auction findAuctionForUpdate(Long auctionId) {
+        try {
+            return auctionRepository.findByIdForUpdate(auctionId)
+                    .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_BID_CONFLICT);
         }
     }
 }

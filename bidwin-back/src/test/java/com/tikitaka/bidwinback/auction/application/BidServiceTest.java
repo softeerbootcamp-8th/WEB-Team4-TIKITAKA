@@ -19,20 +19,23 @@ import org.mockito.InjectMocks;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -116,7 +119,7 @@ class BidServiceTest {
 
     @Test
     void 첫_입찰은_시작가보다_천원_높으면_성공한다() {
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID)).thenReturn(null);
         when(auction.getStartPrice()).thenReturn(CURRENT_PRICE);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
@@ -131,7 +134,7 @@ class BidServiceTest {
 
     @Test
     void 첫_입찰이_시작가와_같으면_거절한다() {
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID)).thenReturn(null);
         when(auction.getStartPrice()).thenReturn(CURRENT_PRICE);
 
@@ -148,7 +151,7 @@ class BidServiceTest {
     @ParameterizedTest
     @ValueSource(longs = {230_000L, 231_000L, 232_000L})
     void 현재가_이하이거나_증가액이_천원보다_작으면_입찰할_수_없다(long price) {
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID))
                 .thenReturn(price == 232_000L ? 231_500L : CURRENT_PRICE);
 
@@ -171,7 +174,7 @@ class BidServiceTest {
         bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
 
         InOrder order = inOrder(auctionRepository, bidRepository, memberRepository);
-        order.verify(auctionRepository).findById(AUCTION_ID);
+        order.verify(auctionRepository).findByIdForUpdate(AUCTION_ID);
         order.verify(bidRepository).findHighestPriceByAuctionId(AUCTION_ID);
         order.verify(memberRepository).getReferenceById(MEMBER_ID);
         order.verify(bidRepository).save(any(Bid.class));
@@ -195,7 +198,7 @@ class BidServiceTest {
     @Test
     void 존재하지_않는_경매에는_입찰할_수_없다() {
         // given
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.empty());
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID)).thenReturn(Optional.empty());
 
         // when
         AuctionException exception = assertThrows(
@@ -211,7 +214,7 @@ class BidServiceTest {
     @Test
     void 하향_경매에는_입찰할_수_없다() {
         // given
-        when(auctionRepository.findById(AUCTION_ID))
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
                 .thenReturn(Optional.of(downAuction));
 
         // when
@@ -225,8 +228,36 @@ class BidServiceTest {
         verifyNoInteractions(memberRepository, bidRepository);
     }
 
+    @Test
+    void 비관적_락_획득에_실패하면_동시_입찰_충돌로_변환한다() {
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
+                .thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
+        verifyNoInteractions(memberRepository, bidRepository);
+    }
+
+    @Test
+    void 락_쿼리_타임아웃은_동시_입찰_충돌로_변환한다() {
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
+                .thenThrow(new QueryTimeoutException("lock query timeout"));
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
+        verifyNoInteractions(memberRepository, bidRepository);
+    }
+
     private void stubLoadedEntities() {
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auctionRepository.findByIdForUpdate(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID))
                 .thenReturn(CURRENT_PRICE);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
