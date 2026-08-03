@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionDuration;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
@@ -28,7 +29,6 @@ import java.util.stream.Collectors;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.IMAGE_MIN_COUNT_VIOLATION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BUY_NOW_PRICE;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_DURATION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_REFERENCE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
@@ -40,7 +40,6 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUN
 @RequiredArgsConstructor
 public class AuctionCreateService {
 
-    private static final Set<Integer> ALLOWED_DURATION_MINUTES = Set.of(30, 60, 180, 360);
     private static final long START_PRICE_UNIT = 1_000L;
 
     private final MemberRepository memberRepository;
@@ -54,8 +53,8 @@ public class AuctionCreateService {
                 .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
         validateSellerActive(seller);
         AuctionCategory category = AuctionCategory.from(request.category());
+        AuctionDuration duration = AuctionDuration.from(request.durationMinutes());
 
-        validateDuration(request.durationMinutes());
         validateStartPriceUnit(request.startPrice());
         validatePriceRelations(request);
         List<String> objectKeys = validateImages(request.images());
@@ -63,7 +62,7 @@ public class AuctionCreateService {
         // 하락 경매 최종가 계산 기준과 동일하게, 마감 시각도 애플리케이션 서버 시각이 아닌 DB 시각을 기준으로 계산한다.
         // DB 호출 전에 모든 검증을 끝내, 어차피 실패할 요청 때문에 불필요한 조회가 나가지 않게 한다.
         LocalDateTime endedAt = auctionRepository.currentDatabaseTime()
-                .plusMinutes(request.durationMinutes());
+                .plusMinutes(duration.getMinutes());
 
         Auction auction = buildAuction(seller, category, endedAt, request);
         auctionRepository.save(auction);
@@ -132,12 +131,6 @@ public class AuctionCreateService {
                 .dropPrice(request.dropPrice())
                 .priceDropInterval(request.priceDropInterval())
                 .build();
-    }
-
-    private void validateDuration(Integer durationMinutes) {
-        if (durationMinutes == null || !ALLOWED_DURATION_MINUTES.contains(durationMinutes)) {
-            throw new AuctionException(INVALID_DURATION);
-        }
     }
 
     private void validateStartPriceUnit(long startPrice) {
