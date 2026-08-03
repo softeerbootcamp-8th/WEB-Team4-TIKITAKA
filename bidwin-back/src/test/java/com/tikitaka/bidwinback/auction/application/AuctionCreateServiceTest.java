@@ -11,6 +11,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.request.AuctionCreateRequest;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
@@ -37,6 +38,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_R
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -82,6 +84,7 @@ class AuctionCreateServiceTest {
                 .nickname("seller")
                 .email("seller@example.com")
                 .password("encoded")
+                .status(MemberStatus.ACTIVE)
                 .build();
     }
 
@@ -153,6 +156,30 @@ class AuctionCreateServiceTest {
         // then
         assertThat(exception.getErrorCode()).isEqualTo(MEMBER_NOT_FOUND);
         verifyNoInteractions(auctionRepository, imageRepository, pendingAuctionImageStore);
+    }
+
+    @Test
+    void 비활성_회원은_경매를_등록할_수_없다() {
+        // given
+        Member inactiveSeller = Member.builder()
+                .name("판매자")
+                .phoneNumber("01012345678")
+                .nickname("seller")
+                .email("seller@example.com")
+                .password("encoded")
+                .status(MemberStatus.PENDING)
+                .build();
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(inactiveSeller));
+
+        // when
+        MemberException exception = assertThrows(
+                MemberException.class,
+                () -> auctionCreateService.create(MEMBER_ID, upRequest(null))
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(MEMBER_NOT_ACTIVE);
+        verify(auctionRepository, never()).save(any());
     }
 
     @Test

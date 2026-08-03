@@ -12,6 +12,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.request.AuctionCreateRequest;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionCreateResponse;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
@@ -32,6 +33,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_R
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 
 @Service
@@ -50,6 +52,7 @@ public class AuctionCreateService {
     public AuctionCreateResponse create(Long memberId, AuctionCreateRequest request) {
         Member seller = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
+        validateSellerActive(seller);
         AuctionCategory category = AuctionCategory.from(request.category());
 
         validateDuration(request.durationMinutes());
@@ -68,6 +71,12 @@ public class AuctionCreateService {
         attachImages(auction, memberId, objectKeys);
 
         return AuctionCreateResponse.from(auction);
+    }
+
+    private void validateSellerActive(Member seller) {
+        if (seller.getStatus() != MemberStatus.ACTIVE) {
+            throw new MemberException(MEMBER_NOT_ACTIVE, "활성 상태의 회원만 경매를 등록할 수 있습니다.");
+        }
     }
 
     private void validatePriceRelations(AuctionCreateRequest request) {
