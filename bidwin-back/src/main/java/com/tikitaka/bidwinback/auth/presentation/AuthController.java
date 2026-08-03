@@ -20,6 +20,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -83,6 +84,12 @@ public class AuthController {
         servletRequest.changeSessionId();
         session.setAttribute(AuthConstant.SESSION_KEY, authMember);
 
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<ApiResponse<Void>> session() {
+        // 이 경로는 인증 필터를 통과해야 하므로 200 자체가 유효한 로그인 상태를 뜻한다.
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
