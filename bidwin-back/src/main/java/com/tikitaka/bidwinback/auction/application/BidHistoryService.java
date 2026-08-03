@@ -31,12 +31,13 @@ public class BidHistoryService {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(ErrorCode.AUCTION_NOT_FOUND));
 
+        long bidCount = bidRepository.countByAuctionId(auctionId);
         List<BidHistoryItemResponse> bidLog = bidRepository.findHistoryByAuctionId(auctionId)
                 .stream()
                 .map(bid -> toResponse(bid, memberId))
                 .toList();
 
-        return new BidHistoryResponse(bidLog.size(), bidLog);
+        return new BidHistoryResponse(bidCount, bidLog);
     }
 
     private BidHistoryItemResponse toResponse(BidHistoryRow bid, long memberId) {

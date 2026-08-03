@@ -50,6 +50,7 @@ class BidHistoryServiceTest {
         LocalDateTime latestBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
         LocalDateTime previousBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
         when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(15L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
                 new BidHistoryRow(13L, 7L, "내닉네임", 210_000L, latestBidAt),
                 new BidHistoryRow(12L, 8L, "민준마켓", 200_000L, previousBidAt),
@@ -59,7 +60,7 @@ class BidHistoryServiceTest {
 
         BidHistoryResponse response = bidHistoryService.getBidHistory(1L, 7L);
 
-        assertThat(response.bidCount()).isEqualTo(4L);
+        assertThat(response.bidCount()).isEqualTo(15L);
         assertThat(response.bidLog()).satisfiesExactly(
                 bid -> {
                     assertThat(bid.id()).isEqualTo(13L);
@@ -76,12 +77,14 @@ class BidHistoryServiceTest {
                 bid -> assertThat(bid.bidder()).isEqualTo("*"),
                 bid -> assertThat(bid.bidder()).isEqualTo("김*")
         );
+        verify(bidRepository).countByAuctionId(1L);
         verify(bidRepository).findHistoryByAuctionId(1L);
     }
 
     @Test
     void 입찰이_없으면_빈_목록과_0건을_응답한다() {
         when(auctionRepository.findById(1L)).thenReturn(Optional.of(mock(UpAuction.class)));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of());
 
         BidHistoryResponse response = bidHistoryService.getBidHistory(1L, 7L);
@@ -100,11 +103,13 @@ class BidHistoryServiceTest {
                 .isEqualTo(ErrorCode.AUCTION_NOT_FOUND);
 
         verify(bidRepository, never()).findHistoryByAuctionId(999L);
+        verify(bidRepository, never()).countByAuctionId(999L);
     }
 
     @Test
     void 하락_경매도_구매_기록을_입찰_내역으로_조회한다() {
         when(auctionRepository.findById(2L)).thenReturn(Optional.of(mock(DownAuction.class)));
+        when(bidRepository.countByAuctionId(2L)).thenReturn(1L);
         when(bidRepository.findHistoryByAuctionId(2L)).thenReturn(List.of(
                 new BidHistoryRow(
                         14L,

@@ -19,6 +19,13 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     BidSummary summarizeByAuctionId(@Param("auctionId") long auctionId);
 
     @Query("""
+            select count(bid.id)
+            from Bid bid
+            where bid.auction.id = :auctionId
+            """)
+    long countByAuctionId(@Param("auctionId") long auctionId);
+
+    @Query("""
         select bid.id,
                bidder.id,
                bidder.nickname,
