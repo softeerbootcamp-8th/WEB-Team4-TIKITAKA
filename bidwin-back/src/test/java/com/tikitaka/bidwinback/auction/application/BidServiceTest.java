@@ -9,7 +9,6 @@ import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +21,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -96,25 +94,23 @@ class BidServiceTest {
     }
 
     @Test
-    void 존재하지_않는_회원은_입찰할_수_없다() {
+    void 인증된_회원은_일반_조회하지_않고_JPA_참조로_연결한다() {
         // given
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.empty());
+        stubLoadedEntities();
+        stubPersistedBid();
+        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
         // when
-        MemberException exception = assertThrows(
-                MemberException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
-        );
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
 
         // then
-        assertThat(exception.getErrorCode()).isEqualTo(MEMBER_NOT_FOUND);
-        verifyNoInteractions(auctionRepository, bidRepository);
+        verify(memberRepository).getReferenceById(MEMBER_ID);
+        verify(memberRepository, never()).findById(any());
     }
 
     @Test
     void 존재하지_않는_경매에는_입찰할_수_없다() {
         // given
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.empty());
 
         // when
@@ -125,13 +121,12 @@ class BidServiceTest {
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
-        verify(bidRepository, never()).save(any());
+        verifyNoInteractions(memberRepository, bidRepository);
     }
 
     @Test
     void 하향_경매에는_입찰할_수_없다() {
         // given
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
         when(auctionRepository.findById(AUCTION_ID))
                 .thenReturn(Optional.of(downAuction));
 
@@ -143,12 +138,12 @@ class BidServiceTest {
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
-        verify(bidRepository, never()).save(any());
+        verifyNoInteractions(memberRepository, bidRepository);
     }
 
     private void stubLoadedEntities() {
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
     }
 
     private void stubPersistedBid() {

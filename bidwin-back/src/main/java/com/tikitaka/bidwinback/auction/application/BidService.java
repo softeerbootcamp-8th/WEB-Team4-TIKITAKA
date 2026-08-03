@@ -9,14 +9,12 @@ import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 
 @Service
@@ -33,9 +31,6 @@ public class BidService {
      */
     @Transactional
     public BidResult place(Long memberId, Long auctionId, long price) {
-        // 존재하지 않는 회원·경매로 FK 제약 위반이 나면 500이 되므로 여기서만 미리 확인한다.
-        Member bidder = memberRepository.findById(memberId)
-                .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
 
@@ -44,6 +39,8 @@ public class BidService {
             throw new BidException(NOT_UP_AUCTION);
         }
 
+        // 인증 필터가 검증한 회원이므로 추가 조회 없이 FK 참조만 연결한다.
+        Member bidder = memberRepository.getReferenceById(memberId);
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(bidder)
