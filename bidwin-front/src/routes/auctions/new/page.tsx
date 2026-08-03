@@ -25,6 +25,7 @@ import {
   MAX_IMAGE_COUNT,
   MAX_IMAGE_SIZE_BYTES,
   TEXT,
+  TRADE_TYPE_OPTIONS,
 } from './constants'
 import { validateAuctionFields } from './validation'
 import type { AuctionFormFields } from './validation'
@@ -36,6 +37,7 @@ const ROUTE = {
 
 type AuctionType = (typeof AUCTION_TYPE_OPTIONS)[number]['value']
 type AuctionDurationMinutes = (typeof AUCTION_DURATION_OPTIONS)[number]['value']
+type TradeType = (typeof TRADE_TYPE_OPTIONS)[number]['value']
 
 let nextImageItemId = 0
 function createImageItemId() {
@@ -65,6 +67,7 @@ function AuctionRegisterPage() {
     AUCTION_DURATION_OPTIONS[0].value,
   )
   const [auctionType, setAuctionType] = useState<AuctionType>('DOWN')
+  const [tradeType, setTradeType] = useState<TradeType>(TRADE_TYPE_OPTIONS[0].value)
   const [startPrice, setStartPrice] = useState('')
   const [buyNowPrice, setBuyNowPrice] = useState('')
   const [minimumPrice, setMinimumPrice] = useState('')
@@ -189,6 +192,7 @@ function AuctionRegisterPage() {
       category,
       contact: contact.trim(),
       auctionType,
+      tradeType,
       startPrice,
       buyNowPrice,
       minimumPrice,
@@ -313,6 +317,12 @@ function AuctionRegisterPage() {
             options={AUCTION_DURATION_OPTIONS}
             value={durationMinutes}
             onChange={setDurationMinutes}
+          />
+          <SegmentedControl
+            label={TEXT.tradeTypeLabel}
+            options={TRADE_TYPE_OPTIONS}
+            value={tradeType}
+            onChange={setTradeType}
           />
           <TextInput
             label={TEXT.startPriceLabel}
