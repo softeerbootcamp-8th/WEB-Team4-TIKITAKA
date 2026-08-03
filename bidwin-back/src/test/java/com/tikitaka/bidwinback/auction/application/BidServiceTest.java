@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -143,6 +144,22 @@ class BidServiceTest {
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
+        verify(bidRepository, never()).save(any());
+    }
+
+    @Test
+    void 입찰가는_1000원_단위여야_한다() {
+        // given
+        stubLoadedEntities();
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, 232_500L)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
         verify(bidRepository, never()).save(any());
     }
 
