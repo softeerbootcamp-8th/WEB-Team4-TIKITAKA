@@ -30,7 +30,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             WHERE id = :auctionId
               AND status = 'OPEN'
               AND completed_at IS NULL
-              AND ended_at > :completedAt
+              AND ended_at > current_timestamp(6)   
               AND seller_id <> :buyerId
             """, nativeQuery = true)
     int completeForBuyNow(
