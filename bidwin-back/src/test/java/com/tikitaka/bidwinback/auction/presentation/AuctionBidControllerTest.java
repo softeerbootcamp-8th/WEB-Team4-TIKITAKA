@@ -1,12 +1,16 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
+import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.BidResult;
 import com.tikitaka.bidwinback.auction.application.BidService;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.auth.LoginMemberArgumentResolver;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,10 +26,12 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,12 +57,19 @@ class AuctionBidControllerTest {
     @Mock
     private SessionAuthService sessionAuthService;
 
+    @Mock
+    private BidHistoryService bidHistoryService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuctionBidController(bidService))
+                .standaloneSetup(new AuctionBidController(
+                        bidService,
+                        bidHistoryService
+                ))
+                .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(
                         new AuthExceptionFilter(new ObjectMapper()),
@@ -131,13 +144,70 @@ class AuctionBidControllerTest {
     }
 
     private MockHttpSession authenticatedSession() {
+        return authenticatedSession(MEMBER_ID);
+    }
+
+    private MockHttpSession authenticatedSession(long memberId) {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(
                 AuthConstant.SESSION_KEY,
-                AuthMemberFixture.of(MEMBER_ID)
+                AuthMemberFixture.of(memberId)
         );
-        when(sessionAuthService.isAuthenticatable(MEMBER_ID, 0L))
+        when(sessionAuthService.isAuthenticatable(memberId, 0L))
                 .thenReturn(true);
         return session;
+    }
+
+    @Test
+    void 입찰_내역을_조회하면_200과_최신순_목록을_응답한다() throws Exception {
+        when(bidHistoryService.getBidHistory(1L, 7L)).thenReturn(
+                new BidHistoryResponse(
+                        2L,
+                        List.of(
+                                new BidHistoryItemResponse(
+                                        13L,
+                                        "나",
+                                        210_000L,
+                                        1_754_122_920_000L,
+                                        true
+                                ),
+                                new BidHistoryItemResponse(
+                                        12L,
+                                        "민**켓",
+                                        200_000L,
+                                        1_754_122_860_000L,
+                                        false
+                                )
+                        )
+                )
+        );
+
+        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 1L)
+                        .session(authenticatedSession(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.bidCount").value(2L))
+                .andExpect(jsonPath("$.data.bidLog[0].id").value(13L))
+                .andExpect(jsonPath("$.data.bidLog[0].bidder").value("나"))
+                .andExpect(jsonPath("$.data.bidLog[0].amount").value(210_000L))
+                .andExpect(jsonPath("$.data.bidLog[0].biddedAt")
+                        .value(1_754_122_920_000L))
+                .andExpect(jsonPath("$.data.bidLog[0].isMe").value(true))
+                .andExpect(jsonPath("$.data.bidLog[1].bidder").value("민**켓"))
+                .andExpect(jsonPath("$.data.bidLog[1].isMe").value(false));
+
+        verify(bidHistoryService).getBidHistory(1L, 7L);
+    }
+
+    @Test
+    void 입찰_내역이_없으면_빈_목록을_응답한다() throws Exception {
+        when(bidHistoryService.getBidHistory(2L, 7L))
+                .thenReturn(new BidHistoryResponse(0L, List.of()));
+
+        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 2L)
+                        .session(authenticatedSession(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bidCount").value(0L))
+                .andExpect(jsonPath("$.data.bidLog").isEmpty());
     }
 }
