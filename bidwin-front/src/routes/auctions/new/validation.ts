@@ -6,6 +6,7 @@ interface AuctionFormFields {
   category: string
   contact: string
   auctionType: 'UP' | 'DOWN'
+  tradeType: 'DELIVERY' | 'DIRECT'
   startPrice: string
   buyNowPrice: string
   minimumPrice: string
@@ -30,17 +31,20 @@ function validateAuctionFields(fields: AuctionFormFields) {
 
   const startPrice = toPositiveNumber(fields.startPrice)
   if (startPrice === null || startPrice < MIN_PRICE) return ERROR_MESSAGE.invalidStartPrice
+  if (startPrice % MIN_PRICE !== 0) return ERROR_MESSAGE.invalidStartPriceUnit
 
   if (auctionType === 'UP') {
     const buyNowPrice = toPositiveNumber(fields.buyNowPrice)
-    if (fields.buyNowPrice.trim() !== '' && (buyNowPrice === null || buyNowPrice < MIN_PRICE)) {
-      return ERROR_MESSAGE.invalidBuyNowPrice
+    if (fields.buyNowPrice.trim() !== '') {
+      if (buyNowPrice === null || buyNowPrice < MIN_PRICE) return ERROR_MESSAGE.invalidBuyNowPrice
+      if (buyNowPrice <= startPrice) return ERROR_MESSAGE.buyNowPriceMustExceedStartPrice
     }
     return null
   }
 
   const minimumPrice = toPositiveNumber(fields.minimumPrice)
   if (minimumPrice === null || minimumPrice < MIN_PRICE) return ERROR_MESSAGE.invalidMinimumPrice
+  if (minimumPrice >= startPrice) return ERROR_MESSAGE.minimumPriceMustBeLowerThanStartPrice
 
   const dropPrice = toPositiveNumber(fields.dropPrice)
   if (dropPrice === null || dropPrice <= 0) return ERROR_MESSAGE.invalidDropPrice
