@@ -37,6 +37,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_DURATIO
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_REFERENCE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
@@ -234,6 +235,23 @@ class AuctionCreateServiceTest {
     }
 
     @Test
+    void 즉시구매가가_1000원_단위가_아니면_등록할_수_없다() {
+        // given
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+        AuctionCreateRequest request = upRequest(500_500L);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, request)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
     void 즉시구매가는_시작가보다_높아야_한다() {
         // given
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
@@ -264,6 +282,40 @@ class AuctionCreateServiceTest {
 
         // then
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_MINIMUM_PRICE);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 최저가가_1000원_단위가_아니면_등록할_수_없다() {
+        // given
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+        AuctionCreateRequest request = downRequest(150_500L, 10_000L, 30L);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, request)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 인하_금액이_1000원_단위가_아니면_등록할_수_없다() {
+        // given
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+        AuctionCreateRequest request = downRequest(150_000L, 10_500L, 30L);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, request)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
         verify(auctionRepository, never()).save(any());
     }
 

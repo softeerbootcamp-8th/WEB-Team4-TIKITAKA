@@ -154,6 +154,11 @@ public enum ErrorCode {
             "AUCTION_400_7",
             "직거래를 선택한 경우 거래 희망 위치를 입력해야 합니다."
     ),
+    INVALID_PRICE_UNIT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_8",
+            "가격은 1,000원 단위로 입력해야 합니다."
+    ),
     AUCTION_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "AUCTION_403_1",

@@ -32,6 +32,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BUY_NOW
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_REFERENCE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
@@ -40,7 +41,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUN
 @RequiredArgsConstructor
 public class AuctionCreateService {
 
-    private static final long START_PRICE_UNIT = 1_000L;
+    private static final long PRICE_UNIT = 1_000L;
 
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
@@ -81,8 +82,11 @@ public class AuctionCreateService {
     private void validatePriceRelations(AuctionCreateRequest request) {
         if (request.auctionType() == AuctionType.UP) {
             Long buyNowPrice = request.buyNowPrice();
-            if (buyNowPrice != null && buyNowPrice <= request.startPrice()) {
-                throw new AuctionException(INVALID_BUY_NOW_PRICE);
+            if (buyNowPrice != null) {
+                validatePriceUnit(buyNowPrice, "즉시구매가");
+                if (buyNowPrice <= request.startPrice()) {
+                    throw new AuctionException(INVALID_BUY_NOW_PRICE);
+                }
             }
             return;
         }
@@ -90,11 +94,19 @@ public class AuctionCreateService {
         if (request.minimumPrice() == null || request.dropPrice() == null || request.priceDropInterval() == null) {
             throw new AuctionException(
                     INVALID_INPUT_VALUE,
-                    "하락 경매는 최저가·인하 금액·인하 주기를 모두 입력해야 합니다."
+                    "하향 경매는 최저가·인하 금액·인하 주기를 모두 입력해야 합니다."
             );
         }
+        validatePriceUnit(request.minimumPrice(), "최저가");
+        validatePriceUnit(request.dropPrice(), "인하 금액");
         if (request.minimumPrice() >= request.startPrice()) {
             throw new AuctionException(INVALID_MINIMUM_PRICE);
+        }
+    }
+
+    private void validatePriceUnit(long price, String fieldName) {
+        if (price % PRICE_UNIT != 0) {
+            throw new AuctionException(INVALID_PRICE_UNIT, fieldName + "는 1,000원 단위로 입력해주세요.");
         }
     }
 
@@ -134,7 +146,7 @@ public class AuctionCreateService {
     }
 
     private void validateStartPriceUnit(long startPrice) {
-        if (startPrice % START_PRICE_UNIT != 0) {
+        if (startPrice % PRICE_UNIT != 0) {
             throw new AuctionException(INVALID_START_PRICE_UNIT);
         }
     }
