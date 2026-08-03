@@ -12,6 +12,13 @@ import java.util.List;
 public interface BidRepository extends JpaRepository<Bid, Long> {
 
     @Query("""
+            select max(bid.price)
+            from Bid bid
+            where bid.auction.id = :auctionId
+            """)
+    Long findHighestPriceByAuctionId(@Param("auctionId") long auctionId);
+
+    @Query("""
             select max(bid.price), count(bid.id)
             from Bid bid
             where bid.auction.id = :auctionId

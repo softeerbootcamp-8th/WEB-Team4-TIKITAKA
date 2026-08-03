@@ -12,8 +12,11 @@ import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -21,12 +24,15 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -37,6 +43,7 @@ class BidServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long AUCTION_ID = 42L;
     private static final Long BID_ID = 7L;
+    private static final long CURRENT_PRICE = 231_000L;
     private static final long PRICE = 232_000L;
     private static final LocalDateTime BID_AT =
             LocalDateTime.of(2026, 7, 30, 12, 34, 56);
@@ -93,6 +100,83 @@ class BidServiceTest {
         );
     }
 
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1_000L, 232_500L})
+    void 양수가_아니거나_천원_단위가_아닌_가격은_Repository_호출_없이_거절한다(
+            long invalidPrice
+    ) {
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, invalidPrice)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
+        verifyNoInteractions(memberRepository, auctionRepository, bidRepository);
+    }
+
+    @Test
+    void 첫_입찰은_시작가보다_천원_높으면_성공한다() {
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID)).thenReturn(null);
+        when(auction.getStartPrice()).thenReturn(CURRENT_PRICE);
+        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        stubPersistedBid();
+        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
+
+        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
+
+        assertThat(result.price()).isEqualTo(PRICE);
+        verify(bidRepository).save(any(Bid.class));
+    }
+
+    @Test
+    void 첫_입찰이_시작가와_같으면_거절한다() {
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID)).thenReturn(null);
+        when(auction.getStartPrice()).thenReturn(CURRENT_PRICE);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, CURRENT_PRICE)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
+        verifyNoInteractions(memberRepository);
+        verify(bidRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {230_000L, 231_000L, 232_000L})
+    void 현재가_이하이거나_증가액이_천원보다_작으면_입찰할_수_없다(long price) {
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID))
+                .thenReturn(price == 232_000L ? 231_500L : CURRENT_PRICE);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, price)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
+        verifyNoInteractions(memberRepository);
+        verify(bidRepository, never()).save(any());
+    }
+
+    @Test
+    void 경매_조회_후_최고가를_확인하고_회원을_참조해_저장한다() {
+        stubLoadedEntities();
+        stubPersistedBid();
+        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
+
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
+
+        InOrder order = inOrder(auctionRepository, bidRepository, memberRepository);
+        order.verify(auctionRepository).findById(AUCTION_ID);
+        order.verify(bidRepository).findHighestPriceByAuctionId(AUCTION_ID);
+        order.verify(memberRepository).getReferenceById(MEMBER_ID);
+        order.verify(bidRepository).save(any(Bid.class));
+    }
+
     @Test
     void 인증된_회원은_일반_조회하지_않고_JPA_참조로_연결한다() {
         // given
@@ -143,6 +227,8 @@ class BidServiceTest {
 
     private void stubLoadedEntities() {
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(bidRepository.findHighestPriceByAuctionId(AUCTION_ID))
+                .thenReturn(CURRENT_PRICE);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
     }
 
