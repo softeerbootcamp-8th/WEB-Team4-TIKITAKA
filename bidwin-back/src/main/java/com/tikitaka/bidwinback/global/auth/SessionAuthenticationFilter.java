@@ -37,6 +37,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets/confirm")
     );
     private static final List<PathPattern> PUBLIC_GET_PATHS = List.of(
+            PathPatternParser.defaultInstance.parse("/api/v1/health"),
             PathPatternParser.defaultInstance.parse("/swagger-ui.html"),
             PathPatternParser.defaultInstance.parse("/swagger-ui/**"),
             PathPatternParser.defaultInstance.parse("/v3/api-docs"),
