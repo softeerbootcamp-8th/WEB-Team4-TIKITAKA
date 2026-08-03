@@ -45,11 +45,14 @@ public class BidService {
 
         Long highestPrice = bidRepository.findHighestPriceByAuctionId(auctionId);
         long currentPrice = highestPrice == null ? auction.getStartPrice() : highestPrice;
-        if (price - currentPrice < BID_UNIT) {
+        long priceIncrease = price - currentPrice;
+
+        // 현재가보다 최소 1,000원 이상 높은 입찰만 허용한다.
+        if (price <= currentPrice || priceIncrease < BID_UNIT) {
             throw new BidException(BID_PRICE_TOO_LOW);
         }
 
-        // 인증 필터가 검증한 회원이므로 추가 조회 없이 FK 참조만 연결한다.
+        // 인증 필터가 검증한 회원은 추가 조회 없이 프록시 참조로 FK만 연결한다.
         Member bidder = memberRepository.getReferenceById(memberId);
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)
