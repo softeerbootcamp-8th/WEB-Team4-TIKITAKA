@@ -3,13 +3,16 @@ name: Build and test
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-test-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: build-test-${{ github.event.pull_request.number || github.ref }}
+  # PR 검증은 최신 커밋만 남기되, 운영 배포는 중간 취소로 일부만 반영되지 않게 직렬화한다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   frontend:
@@ -30,9 +33,18 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Build
+        env:
+          VITE_API_BASE_URL: https://api.bidwin.site
         run: npm run build
       - name: Test
         run: npm test --if-present
+      - name: Upload frontend artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend
+          path: bidwin-front/dist
+          if-no-files-found: error
 
   backend:
     name: Backend
@@ -77,8 +89,20 @@ jobs:
         id: backend-build
         continue-on-error: true
         run: ./gradlew clean build --no-daemon
+      - name: Upload backend artifact
+        if: github.event_name == 'push' && steps.backend-build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend
+          path: |
+            bidwin-back/build/libs/*.jar
+            !bidwin-back/build/libs/*-plain.jar
+          if-no-files-found: error
       - name: Comment test result
-        if: always() && steps.backend-build.outcome != 'skipped'
+        if: >-
+          always()
+          && github.event_name == 'pull_request'
+          && steps.backend-build.outcome != 'skipped'
         uses: actions/github-script@v9
         with:
           script: |
@@ -234,3 +258,72 @@ jobs:
       - name: Fail when backend build or tests fail
         if: always() && steps.backend-build.outcome == 'failure'
         run: exit 1
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      FRONTEND_S3_URI: ${{ vars.FRONTEND_S3_URI }}
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: backend
+          path: backend-artifact
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend
+          path: frontend-artifact
+      - name: Validate deployment configuration
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          : "${AWS_DEFAULT_REGION:?Set the AWS_REGION variable}"
+          : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN variable}"
+          : "${FRONTEND_S3_URI:?Set the FRONTEND_S3_URI variable}"
+          : "${EC2_HOST:?Set the EC2_HOST variable}"
+          : "${EC2_USER:?Set the EC2_USER variable}"
+          : "${BACKEND_DEPLOY_PATH:?Set the BACKEND_DEPLOY_PATH variable}"
+          : "${EC2_SSH_PRIVATE_KEY:?Set the EC2_SSH_PRIVATE_KEY secret}"
+          : "${EC2_KNOWN_HOSTS:?Set the EC2_KNOWN_HOSTS secret}"
+      - name: Deploy backend
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          key_file="$RUNNER_TEMP/ec2_key"
+          known_hosts_file="$RUNNER_TEMP/known_hosts"
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > "$key_file"
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$known_hosts_file"
+          chmod 600 "$key_file" "$known_hosts_file"
+          scp \
+            -i "$key_file" \
+            -o UserKnownHostsFile="$known_hosts_file" \
+            -o StrictHostKeyChecking=yes \
+            backend-artifact/*.jar \
+            "$EC2_USER@$EC2_HOST:$BACKEND_DEPLOY_PATH"
+      - name: Check backend health
+        if: env.BACKEND_HEALTH_URL != ''
+        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors "$BACKEND_HEALTH_URL"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+      - name: Deploy frontend
+        run: |
+          # ponytail: 전체 파일을 재검증하도록 두고, 트래픽이 커지면 해시 자산만 장기 캐시한다.
+          aws s3 sync frontend-artifact/ "$FRONTEND_S3_URI" \
+            --cache-control "no-cache"
