@@ -186,6 +186,11 @@ public enum ErrorCode {
             "UPLOAD_400_1",
             "지원하지 않는 이미지 형식입니다."
     ),
+    INVALID_IMAGE_REFERENCE(
+            HttpStatus.BAD_REQUEST,
+            "UPLOAD_400_2",
+            "존재하지 않거나 본인이 업로드하지 않은 이미지입니다."
+    ),
 
     // Bid
     BID_PRICE_TOO_LOW(
