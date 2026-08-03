@@ -3,7 +3,7 @@
 .idea
 .vscode/*
 !.vscode/extensions.json
-
+.docs
 # root tooling (husky/commitlint deps live only at repo root)
 /node_modules
 

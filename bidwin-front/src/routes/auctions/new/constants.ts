@@ -1,0 +1,98 @@
+/*
+ * 경매 등록 폼 상수.
+ * 길이·용량 제한은 백엔드 Auction 엔티티, AuctionImagePresignRequest 검증값과 같게 맞춘다.
+ */
+
+export const TITLE_MAX_LENGTH = 30
+export const CONTACT_MAX_LENGTH = 100
+
+export const MAX_IMAGE_COUNT = 10
+export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+export const ALLOWED_IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+/* 시작가·최저가·즉시 구매가에 공통으로 적용하는 최소 금액. */
+export const MIN_PRICE = 1000
+
+/* 백엔드 AuctionCategory enum과 1:1 대응(HOUSEHOLD/FOOD/FURNITURE 세 가지뿐이라 고정값으로 둔다). */
+export const CATEGORY_OPTIONS = [
+  { value: 'HOUSEHOLD', label: '생활용품' },
+  { value: 'FOOD', label: '먹거리' },
+  { value: 'FURNITURE', label: '가구' },
+] as const
+
+export const AUCTION_TYPE_OPTIONS = [
+  { value: 'DOWN', label: '가격 인하 (급처 타임어택)' },
+  { value: 'UP', label: '경쟁 입찰 (가격 상승)' },
+] as const
+
+/* 백엔드 TradeType enum과 1:1 대응. 직거래를 선택해도 위치 입력은 받지 않고, 낙찰 후 당사자끼리 협의한다. */
+export const TRADE_TYPE_OPTIONS = [
+  { value: 'DELIVERY', label: '택배' },
+  { value: 'DIRECT', label: '직거래' },
+] as const
+
+export const AUCTION_DURATION_OPTIONS = [
+  { value: '30', label: '30분' },
+  { value: '60', label: '1시간' },
+  { value: '180', label: '3시간' },
+  { value: '360', label: '6시간' },
+] as const
+
+export const TEXT = {
+  pageTitle: '경매 등록',
+  pageSubtitle: '급처 물품 정보를 입력하고 사진을 올려 경매를 시작해보세요.',
+
+  titleLabel: '제목',
+  titlePlaceholder: `${TITLE_MAX_LENGTH}자 이내로 입력하세요`,
+  descriptionLabel: '상품 설명',
+  descriptionPlaceholder: '상품 상태, 사용 기간 등을 자세히 적어주세요',
+  categoryLabel: '카테고리',
+  categoryPlaceholder: '카테고리를 선택하세요',
+  contactLabel: '연락처',
+  contactPlaceholder: '거래 시 연락받을 번호를 입력하세요',
+  durationLabel: '경매 진행 시간',
+  auctionTypeLabel: '경매 방식',
+  tradeTypeLabel: '거래 방식',
+
+  imagesLabel: '상품 이미지',
+  imagesHelper: `최대 ${MAX_IMAGE_COUNT}장, 장당 10MB 이하 (JPEG/PNG/WEBP)`,
+
+  startPriceLabel: '시작가',
+  buyNowPriceLabel: '즉시 구매가 (선택)',
+  minimumPriceLabel: '최저가',
+  dropPriceLabel: '인하 금액',
+  priceDropIntervalLabel: '인하 주기',
+  priceDropIntervalPlaceholder: '몇 분마다 내릴지 입력하세요',
+
+  submit: '경매 등록하기',
+  submitting: '등록 처리 중…',
+
+  completeTitle: '경매 등록이 접수됐어요',
+  completeDescription:
+    '백엔드 경매 등록 API 연동 전까지는 임시로 접수만 처리돼요. API가 준비되면 실제 등록으로 이어집니다.',
+  goToList: '경매 목록으로 이동',
+  goToHome: '홈으로',
+
+  submitSuccessToast: '경매 등록이 임시로 접수됐어요.',
+} as const
+
+export const ERROR_MESSAGE = {
+  emptyRequiredField: '제목, 설명, 카테고리, 연락처를 모두 입력해주세요.',
+  titleTooLong: `제목은 ${TITLE_MAX_LENGTH}자 이하로 입력해주세요.`,
+  contactTooLong: `연락처는 ${CONTACT_MAX_LENGTH}자 이하로 입력해주세요.`,
+  invalidStartPrice: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  invalidStartPriceUnit: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 단위로 입력해주세요.`,
+  invalidBuyNowPrice: `즉시 구매가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  buyNowPriceMustExceedStartPrice: '즉시 구매가는 시작가보다 높아야 해요.',
+  invalidMinimumPrice: `최저가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  minimumPriceMustBeLowerThanStartPrice: '최저가는 시작가보다 낮아야 해요.',
+  invalidDropPrice: '인하 금액은 0보다 큰 숫자로 입력해주세요.',
+  invalidPriceDropInterval: '인하 주기는 0보다 큰 숫자(분)로 입력해주세요.',
+  noImages: '상품 이미지를 1장 이상 올려주세요.',
+  imagesUploading: '이미지 업로드가 끝날 때까지 기다려주세요.',
+  imageUploadFailed: '이미지 업로드에 실패했어요. 다시 시도해주세요.',
+  imageTooLarge: '이미지는 10MB 이하만 올릴 수 있어요.',
+  unsupportedImageType: 'JPEG, PNG, WEBP 형식만 올릴 수 있어요.',
+  tooManyImages: `이미지는 최대 ${MAX_IMAGE_COUNT}장까지 올릴 수 있어요.`,
+  draftInitFailed: '이미지 업로드 준비에 실패했어요. 새로고침 후 다시 시도해주세요.',
+} as const

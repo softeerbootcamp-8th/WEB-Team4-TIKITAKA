@@ -1,0 +1,329 @@
+name: Build and test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-${{ github.event.pull_request.number || github.ref }}
+  # PR 검증은 최신 커밋만 남기되, 운영 배포는 중간 취소로 일부만 반영되지 않게 직렬화한다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bidwin-front
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bidwin-front/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        env:
+          VITE_API_BASE_URL: https://api.bidwin.site
+        run: npm run build
+      - name: Test
+        run: npm test --if-present
+      - name: Upload frontend artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend
+          path: bidwin-front/dist
+          if-no-files-found: error
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: bidwin-back
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: bidwin
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v7
+      # PR 코드는 주입된 값을 읽을 수 있으므로 운영 자격 증명이 아닌 테스트 전용 값만 저장한다.
+      - name: Load backend test environment
+        env:
+          BACKEND_TEST_ENV: ${{ secrets.BACKEND_TEST_ENV }}
+        run: |
+          if [ -z "$BACKEND_TEST_ENV" ]; then
+            echo "::error::BACKEND_TEST_ENV repository secret is required."
+            exit 1
+          fi
+          printf '%s\n' "$BACKEND_TEST_ENV" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Build and test
+        id: backend-build
+        continue-on-error: true
+        run: ./gradlew clean build --no-daemon
+      - name: Upload backend artifact
+        if: github.event_name == 'push' && steps.backend-build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend
+          path: |
+            bidwin-back/build/libs/*.jar
+            !bidwin-back/build/libs/*-plain.jar
+          if-no-files-found: error
+      - name: Comment test result
+        if: >-
+          always()
+          && github.event_name == 'pull_request'
+          && steps.backend-build.outcome != 'skipped'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- backend-test-coverage -->";
+            const testReportDirectory =
+              "bidwin-back/build/test-results/test";
+            const testReportFiles = fs.existsSync(testReportDirectory)
+              ? fs.readdirSync(testReportDirectory)
+                  .filter(file => file.endsWith(".xml"))
+              : [];
+
+            function numberAttribute(tag, name) {
+              return Number(
+                tag.match(new RegExp(`${name}="(\\d+)"`))?.[1] ?? 0
+              );
+            }
+
+            function textAttribute(attributes, name) {
+              const value =
+                attributes.match(new RegExp(`${name}="([^"]*)"`))?.[1]
+                ?? "알 수 없음";
+              const entities = {
+                "&amp;": "&",
+                "&quot;": "\"",
+                "&apos;": "'",
+                "&lt;": "<",
+                "&gt;": ">"
+              };
+              return value.replace(
+                /&(amp|quot|apos|lt|gt);/g,
+                entity => entities[entity]
+              );
+            }
+
+            const tests = {
+              total: 0,
+              skipped: 0,
+              failed: 0,
+              successful: 0
+            };
+            const failedTests = [];
+
+            for (const file of testReportFiles) {
+              const xml = fs.readFileSync(
+                `${testReportDirectory}/${file}`,
+                "utf8"
+              );
+              const testSuite = xml.match(/<testsuite\b[^>]*>/)?.[0];
+              if (testSuite) {
+                const total = numberAttribute(testSuite, "tests");
+                const skipped = numberAttribute(testSuite, "skipped");
+                const failed =
+                  numberAttribute(testSuite, "failures")
+                  + numberAttribute(testSuite, "errors");
+                tests.total += total;
+                tests.skipped += skipped;
+                tests.failed += failed;
+                tests.successful += total - skipped - failed;
+              }
+
+              for (const testCase of xml.matchAll(
+                /<testcase\b([^>]*?)(?<!\/)>([\s\S]*?)<\/testcase>/g
+              )) {
+                if (!/<(?:failure|error)\b/.test(testCase[2])) {
+                  continue;
+                }
+                const className = textAttribute(testCase[1], "classname");
+                const testName = textAttribute(testCase[1], "name");
+                failedTests.push(
+                  `${className}#${testName}`.replaceAll("`", "'")
+                );
+              }
+            }
+
+            const failedTestList = failedTests.length === 0
+              ? testReportFiles.length === 0
+                ? "- 테스트 결과 파일이 생성되지 않았습니다."
+                : "- 없음"
+              : failedTests.map(test => `- \`${test}\``).join("\n");
+
+            const coverageReport =
+              "bidwin-back/build/reports/jacoco/test/jacocoTestReport.xml";
+            const coverageXml = fs.existsSync(coverageReport)
+              ? fs.readFileSync(coverageReport, "utf8")
+              : "";
+
+            function coverage(type) {
+              const pattern = new RegExp(
+                `<counter type="${type}" missed="(\\d+)" covered="(\\d+)"\\s*/>`,
+                "g"
+              );
+              const counter = [...coverageXml.matchAll(pattern)].at(-1);
+              if (!counter) {
+                return "측정 불가";
+              }
+
+              const missed = Number(counter[1]);
+              const covered = Number(counter[2]);
+              const total = missed + covered;
+              const percent = total === 0
+                ? "0.00"
+                : ((covered / total) * 100).toFixed(2);
+              return `${percent}% (${covered}/${total})`;
+            }
+
+            const body = `${marker}
+            ## 백엔드 테스트 결과
+            - 전체 ${tests.total}개
+            - 성공 ${tests.successful}개
+            - 실패 ${tests.failed}개
+            - 건너뜀 ${tests.skipped}개
+
+            ### 실패한 테스트
+            ${failedTestList}
+
+            ## 테스트 커버리지
+            현재 pr 기준 백엔드 테스트 커버리지는 아래와 같습니다.
+            - 클래스 ${coverage("CLASS")}
+            - 메서드 ${coverage("METHOD")}
+            - 줄 ${coverage("LINE")}
+            - 브랜치(분기) ${coverage("BRANCH")}`;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number
+              }
+            );
+            const previous = comments.find(
+              comment =>
+                comment.user.type === "Bot" && comment.body.includes(marker)
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+      # 코멘트 작성을 위해 보류했던 Gradle 실패를 job 결과에 다시 반영한다.
+      - name: Fail when backend build or tests fail
+        if: always() && steps.backend-build.outcome == 'failure'
+        run: exit 1
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      FRONTEND_S3_URI: ${{ vars.FRONTEND_S3_URI }}
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: backend
+          path: backend-artifact
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend
+          path: frontend-artifact
+      - name: Validate deployment configuration
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          : "${AWS_DEFAULT_REGION:?Set the AWS_REGION variable}"
+          : "${AWS_ROLE_ARN:?Set the AWS_ROLE_ARN variable}"
+          : "${FRONTEND_S3_URI:?Set the FRONTEND_S3_URI variable}"
+          : "${EC2_HOST:?Set the EC2_HOST variable}"
+          : "${EC2_USER:?Set the EC2_USER variable}"
+          : "${BACKEND_DEPLOY_PATH:?Set the BACKEND_DEPLOY_PATH variable}"
+          : "${EC2_SSH_PRIVATE_KEY:?Set the EC2_SSH_PRIVATE_KEY secret}"
+          : "${EC2_KNOWN_HOSTS:?Set the EC2_KNOWN_HOSTS secret}"
+      - name: Deploy backend
+        env:
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          key_file="$RUNNER_TEMP/ec2_key"
+          known_hosts_file="$RUNNER_TEMP/known_hosts"
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > "$key_file"
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$known_hosts_file"
+          chmod 600 "$key_file" "$known_hosts_file"
+          scp \
+            -i "$key_file" \
+            -o UserKnownHostsFile="$known_hosts_file" \
+            -o StrictHostKeyChecking=yes \
+            backend-artifact/*.jar \
+            "$EC2_USER@$EC2_HOST:$BACKEND_DEPLOY_PATH"
+      - name: Check backend health
+        if: env.BACKEND_HEALTH_URL != ''
+        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors "$BACKEND_HEALTH_URL"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+      - name: Deploy frontend
+        run: |
+          # ponytail: 전체 파일을 재검증하도록 두고, 트래픽이 커지면 해시 자산만 장기 캐시한다.
+          aws s3 sync frontend-artifact/ "$FRONTEND_S3_URI" \
+            --cache-control "no-cache"

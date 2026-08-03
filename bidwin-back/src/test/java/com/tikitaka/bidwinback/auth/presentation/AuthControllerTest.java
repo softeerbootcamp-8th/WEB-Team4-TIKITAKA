@@ -1,0 +1,207 @@
+package com.tikitaka.bidwinback.auth.presentation;
+
+import com.tikitaka.bidwinback.auth.application.AuthService;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
+import com.tikitaka.bidwinback.global.auth.AuthConstant;
+import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.common.ApiResponse;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class AuthControllerTest {
+
+    @Test
+    void 이메일이_사용_가능하면_확인_결과와_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        EmailAvailabilityRequest request =
+                new EmailAvailabilityRequest("member@example.com");
+        AvailabilityResponse expected = new AvailabilityResponse(true);
+        when(authService.checkEmailAvailability(request)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<AvailabilityResponse>> result =
+                new AuthController(authService).verifyEmail(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertSame(expected, result.getBody().data())
+        );
+    }
+
+    @Test
+    void 닉네임이_사용_가능하면_확인_결과와_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        NicknameAvailabilityRequest request = new NicknameAvailabilityRequest("티키타카");
+        AvailabilityResponse expected = new AvailabilityResponse(true);
+        when(authService.checkNicknameAvailability(request)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<AvailabilityResponse>> result =
+                new AuthController(authService).verifyNickname(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertSame(expected, result.getBody().data())
+        );
+    }
+
+    @Test
+    void 회원가입_성공_시_생성된_회원과_201을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        SignUpRequest request = new SignUpRequest(
+                "member@example.com",
+                "password!",
+                "홍길동",
+                "01012345678",
+                "티키타카"
+        );
+        SignUpResponse expected = new SignUpResponse(1L, request.email(), request.nickname());
+        when(authService.signup(request)).thenReturn(expected);
+
+        ResponseEntity<ApiResponse<SignUpResponse>> result =
+                new AuthController(authService).signup(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.CREATED, result.getStatusCode()),
+                () -> assertSame(expected, result.getBody().data())
+        );
+    }
+
+    @Test
+    void 로그인하면_세션_ID를_교체하고_인증_회원을_저장한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        AuthMember authMember = AuthMemberFixture.of(1L);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        String previousSessionId = servletRequest.getSession().getId();
+        when(authService.login(request)).thenReturn(authMember);
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).login(request, servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertNotEquals(
+                        previousSessionId,
+                        servletRequest.getSession().getId()
+                ),
+                () -> assertSame(
+                        authMember,
+                        servletRequest.getSession()
+                                .getAttribute(AuthConstant.SESSION_KEY)
+                )
+        );
+    }
+
+    @Test
+    void 세션_확인_컨트롤러는_성공_응답을_반환한다() {
+        // given
+        AuthController controller = new AuthController(mock(AuthService.class));
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result = controller.session();
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+    }
+
+    @Test
+    void 이메일_인증에_성공하면_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        EmailVerificationRequest request =
+                new EmailVerificationRequest("raw-email-verification-token");
+
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).confirmEmail(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+        verify(authService).verifyEmail(request);
+    }
+
+    @Test
+    void 비밀번호를_변경하면_200을_응답한다() {
+        AuthService authService = mock(AuthService.class);
+        PasswordChangeRequest request = new PasswordChangeRequest(
+                "raw-reset-token",
+                "new-password!",
+                "new-password!"
+        );
+
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).resetPassword(request);
+
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+        verify(authService).resetPassword(request);
+    }
+
+    @Test
+    void 로그아웃하면_세션을_무효화한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        var session = servletRequest.getSession();
+        session.setAttribute(AuthConstant.SESSION_KEY, AuthMemberFixture.of(1L));
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> session.getAttribute(AuthConstant.SESSION_KEY)
+                )
+        );
+    }
+
+    @Test
+    void 동시_로그아웃으로_세션이_이미_무효화되어도_성공한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = mock(MockHttpServletRequest.class);
+        var session = mock(jakarta.servlet.http.HttpSession.class);
+        when(servletRequest.getSession(false)).thenReturn(session);
+        doThrow(new IllegalStateException()).when(session).invalidate();
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService).logout(servletRequest);
+
+        // then
+        assertEquals(HttpStatus.OK, result.getStatusCode());
+    }
+}

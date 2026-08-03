@@ -2,7 +2,7 @@
 module.exports = {
   parserPreset: {
     parserOpts: {
-      headerPattern: /^(feat|fix|refactor|chore|docs): (.+) \(#(\d+)\)$/,
+      headerPattern: /^(feat|fix|refactor|chore|docs|test): (.+) \(#(\d+)\)$/,
       headerCorrespondence: ['type', 'subject', 'issue'],
     },
   },
