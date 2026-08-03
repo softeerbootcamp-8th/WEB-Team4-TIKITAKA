@@ -25,7 +25,7 @@ public class AuctionBidController {
 
     private final BidService bidService;
 
-    @PostMapping("/{auctionId}/bids")
+    @PostMapping("/up/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidResponse>> bid(
             @RequestAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY) AuthMember authMember,
             @PathVariable Long auctionId,
