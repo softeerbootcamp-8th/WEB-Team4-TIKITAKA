@@ -1,8 +1,10 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -109,6 +111,11 @@ class BidServiceIntegrationTest {
                     .containsExactly(ErrorCode.BID_PRICE_TOO_LOW);
             assertThat(findBidPrices(fixture.auctionId()))
                     .containsExactly(FIRST_BID_PRICE);
+            assertThat(findAuctionSnapshot(fixture.auctionId()))
+                    .isEqualTo(new AuctionSnapshot(
+                            FIRST_BID_PRICE,
+                            AuctionStatus.BID_ONGOING
+                    ));
         } finally {
             executor.shutdownNow();
         }
@@ -145,6 +152,8 @@ class BidServiceIntegrationTest {
             assertThat(storedPrices).hasSizeBetween(1, 2);
             assertThat(storedPrices.getLast()).isEqualTo(SECOND_BID_PRICE);
             assertThat(storedPrices).allMatch(price -> price % 1_000L == 0);
+            assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                    .isEqualTo(SECOND_BID_PRICE);
         } finally {
             executor.shutdownNow();
         }
@@ -181,6 +190,10 @@ class BidServiceIntegrationTest {
                     .containsExactly(FIRST_BID_PRICE);
             assertThat(findBidPrices(secondFixture.auctionId()))
                     .containsExactly(FIRST_BID_PRICE);
+            assertThat(findAuctionSnapshot(firstFixture.auctionId()).currentPrice())
+                    .isEqualTo(FIRST_BID_PRICE);
+            assertThat(findAuctionSnapshot(secondFixture.auctionId()).currentPrice())
+                    .isEqualTo(FIRST_BID_PRICE);
         } finally {
             executor.shutdownNow();
         }
@@ -205,10 +218,91 @@ class BidServiceIntegrationTest {
         assertThat(findBidPrices(fixture.auctionId()))
                 .containsExactly(FIRST_BID_PRICE, SECOND_BID_PRICE)
                 .allMatch(price -> price % 1_000L == 0);
+        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                .isEqualTo(SECOND_BID_PRICE);
     }
 
     @Test
-    void 경매_락을_3초_안에_획득하지_못하면_409이고_입찰을_남기지_않는다()
+    void 종료된_경매는_현재가를_갱신하거나_입찰을_남기지_않는다() {
+        Fixture fixture = createFixture(1);
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET ended_at = SYSDATE(6) - INTERVAL 1 SECOND
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("auctionId", fixture.auctionId())
+                    .executeUpdate();
+            return null;
+        });
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                FIRST_BID_PRICE
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.AUCTION_ALREADY_ENDED)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                .isEqualTo(START_PRICE);
+    }
+
+    @Test
+    void 기존_현재가가_null이면_입찰_이력의_최고가를_기준으로_갱신한다() {
+        Fixture fixture = createFixture(1);
+        long legacyHighestPrice = 105_000L;
+        executeInTransaction(entityManager -> {
+            UpAuction auction = entityManager.find(UpAuction.class, fixture.auctionId());
+            Member bidder = entityManager.getReference(
+                    Member.class,
+                    fixture.bidderIds().getFirst()
+            );
+            entityManager.persist(Bid.builder()
+                    .auction(auction)
+                    .bidder(bidder)
+                    .price(legacyHighestPrice)
+                    .status(BidStatus.UP)
+                    .build());
+            entityManager.flush();
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET current_price = NULL,
+                                status = 'BID_ONGOING'
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("auctionId", fixture.auctionId())
+                    .executeUpdate();
+            return null;
+        });
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                legacyHighestPrice
+        ));
+        BidResult accepted = bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                legacyHighestPrice + 1_000L
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(accepted.price()).isEqualTo(legacyHighestPrice + 1_000L);
+        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                .isEqualTo(legacyHighestPrice + 1_000L);
+    }
+
+    @Test
+    void 조건부_갱신이_경매_락을_3초_안에_획득하지_못하면_409이고_입찰을_남기지_않는다()
             throws Exception {
         Fixture fixture = createFixture(1);
         CountDownLatch lockAcquired = new CountDownLatch(1);
@@ -239,6 +333,8 @@ class BidServiceIntegrationTest {
             );
             assertThat(elapsedMillis).isBetween(2_500L, 6_000L);
             assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+            assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                    .isEqualTo(START_PRICE);
         } finally {
             releaseLock.countDown();
             lockHolder.get(10, TimeUnit.SECONDS);
@@ -354,6 +450,22 @@ class BidServiceIntegrationTest {
                 .getResultList());
     }
 
+    private AuctionSnapshot findAuctionSnapshot(Long auctionId) {
+        return executeInTransaction(entityManager -> {
+            Object[] row = entityManager.createQuery("""
+                            select auction.currentPrice, auction.status
+                            from Auction auction
+                            where auction.id = :auctionId
+                            """, Object[].class)
+                    .setParameter("auctionId", auctionId)
+                    .getSingleResult();
+            return new AuctionSnapshot(
+                    ((Number) row[0]).longValue(),
+                    (AuctionStatus) row[1]
+            );
+        });
+    }
+
     private void executeDelete(EntityManager entityManager, String sql, Long id) {
         entityManager.createNativeQuery(sql)
                 .setParameter("id", id)
@@ -387,6 +499,12 @@ class BidServiceIntegrationTest {
             Long sellerId,
             List<Long> bidderIds,
             Long auctionId
+    ) {
+    }
+
+    private record AuctionSnapshot(
+            long currentPrice,
+            AuctionStatus status
     ) {
     }
 

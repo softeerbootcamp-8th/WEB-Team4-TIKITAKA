@@ -111,7 +111,7 @@ class BidRepositoryIntegrationTest {
         UpAuction auction = UpAuction.builder()
                 .seller(seller)
                 .title("최고가 조회 통합 테스트")
-                .description("최고가 Repository 쿼리 검증")
+                .description("레거시 현재가 폴백 쿼리 검증")
                 .status(AuctionStatus.OPEN)
                 .category(AuctionCategory.HOUSEHOLD)
                 .startPrice(100_000L)
