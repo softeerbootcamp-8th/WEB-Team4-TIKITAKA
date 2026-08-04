@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.presentation.dto.request;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -40,18 +41,19 @@ public record AuctionCreateRequest(
         @NotNull(message = "경매 진행 시간은 필수입니다.")
         Integer durationMinutes,
 
-        @Positive(message = "시작가는 0보다 커야 합니다.")
+        // 1,000원 단위 여부는 서비스에서 검증하고, 여기서는 최소 금액(1,000원)만 확인한다.
+        @Min(value = 1_000, message = "시작가는 1,000원 이상이어야 합니다.")
         long startPrice,
 
         // 상향 경매에서만 사용하는 선택 필드.
-        @Positive(message = "즉시구매가는 0보다 커야 합니다.")
+        @Min(value = 1_000, message = "즉시구매가는 1,000원 이상이어야 합니다.")
         Long buyNowPrice,
 
         // 아래 세 필드는 하향 경매 전용이며, 서비스에서 필수 여부를 검증한다.
-        @Positive(message = "최저가는 0보다 커야 합니다.")
+        @Min(value = 1_000, message = "최저가는 1,000원 이상이어야 합니다.")
         Long minimumPrice,
 
-        @Positive(message = "인하 금액은 0보다 커야 합니다.")
+        @Min(value = 1_000, message = "인하 금액은 1,000원 이상이어야 합니다.")
         Long dropPrice,
 
         @Positive(message = "인하 주기는 0보다 커야 합니다.")
