@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -372,6 +373,29 @@ class AuctionCreateServiceTest {
         // then
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_IMAGE_REFERENCE);
         verify(imageRepository, never()).saveAll(anyList());
+        verify(pendingAuctionImageStore, never()).deleteByObjectKeyIn(anyList());
+    }
+
+    @Test
+    void 이미_다른_경매에_사용된_이미지는_중복으로_등록할_수_없다() {
+        // given
+        // 중복 등록 요청(더블클릭·재시도)이 거의 동시에 도착해 두 요청 모두 pending 이미지 조회는
+        // 통과했지만, 먼저 커밋된 요청 때문에 Image.objectKey unique 제약을 이 요청이 위반하는 상황.
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        stubOwnedImages();
+        when(imageRepository.saveAll(anyList()))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
+        AuctionCreateRequest request = upRequest(500_000L);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, request)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_IMAGE_REFERENCE);
         verify(pendingAuctionImageStore, never()).deleteByObjectKeyIn(anyList());
     }
 

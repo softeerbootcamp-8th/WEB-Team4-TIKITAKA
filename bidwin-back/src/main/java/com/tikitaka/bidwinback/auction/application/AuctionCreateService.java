@@ -19,6 +19,7 @@ import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.domain.entity.PendingAuctionImage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -177,7 +178,13 @@ public class AuctionCreateService {
                         .objectKey(objectKey)
                         .build())
                 .toList();
-        imageRepository.saveAll(images);
+        try {
+            // Image.objectKey의 unique 제약이 마지막 방어선이다. 등록 요청이 중복 도착해
+            // 두 경매가 같은 objectKey를 동시에 가져가려 하면, 늦게 커밋되는 쪽이 여기서 걸린다.
+            imageRepository.saveAll(images);
+        } catch (DataIntegrityViolationException exception) {
+            throw new AuctionException(INVALID_IMAGE_REFERENCE, "이미 다른 경매에 사용된 이미지입니다.");
+        }
 
         pendingAuctionImageStore.deleteByObjectKeyIn(objectKeys);
     }
