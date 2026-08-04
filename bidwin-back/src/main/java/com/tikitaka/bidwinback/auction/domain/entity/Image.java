@@ -29,7 +29,9 @@ public class Image {
     @JoinColumn(name = "auction_id", nullable = false)
     private Auction auction;
 
-    @Column(name = "object_key", nullable = false, length = 1024)
+    // 같은 objectKey가 서로 다른 두 경매에 동시에 붙는 걸 DB 차원에서 막는다
+    // (경매 등록 요청이 중복 도착해도 하나만 성공하도록 하는 마지막 방어선).
+    @Column(name = "object_key", nullable = false, length = 1024, unique = true)
     private String objectKey;
 
     @Builder

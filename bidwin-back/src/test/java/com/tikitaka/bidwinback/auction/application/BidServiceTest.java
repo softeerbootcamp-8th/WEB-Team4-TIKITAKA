@@ -33,6 +33,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -273,6 +274,27 @@ class BidServiceTest {
         when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
                 .thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(failedAuction));
+
+    @Test
+    void 입찰가는_1000원_단위여야_한다() {
+        // given
+        stubLoadedEntities();
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, 232_500L)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
+        verify(bidRepository, never()).save(any());
+    }
+
+    private void stubLoadedEntities() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+
     }
 
     private void stubPersistedBid() {

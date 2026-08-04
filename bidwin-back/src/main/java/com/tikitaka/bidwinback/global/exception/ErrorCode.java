@@ -154,6 +154,11 @@ public enum ErrorCode {
             "AUCTION_400_7",
             "직거래를 선택한 경우 거래 희망 위치를 입력해야 합니다."
     ),
+    INVALID_PRICE_UNIT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_8",
+            "가격은 1,000원 단위로 입력해야 합니다."
+    ),
     AUCTION_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "AUCTION_403_1",
@@ -185,6 +190,11 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST,
             "UPLOAD_400_1",
             "지원하지 않는 이미지 형식입니다."
+    ),
+    INVALID_IMAGE_REFERENCE(
+            HttpStatus.BAD_REQUEST,
+            "UPLOAD_400_2",
+            "존재하지 않거나 본인이 업로드하지 않은 이미지입니다."
     ),
 
     // Bid

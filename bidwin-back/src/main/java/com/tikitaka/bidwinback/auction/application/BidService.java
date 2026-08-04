@@ -26,6 +26,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 
 @Service
@@ -34,10 +35,17 @@ public class BidService {
 
     private static final long BID_UNIT = 1_000L;
 
+
+
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
 
+
+    /**
+     * 입찰 한 건을 Bid 테이블에 기록한다.
+     * 경매 상태·현재가 비교·보증금·자기 경매 입찰 같은 정합성 검증은 후속 작업에서 붙인다.
+     */
     @Transactional
     public BidResult place(Long memberId, Long auctionId, long price) {
         validateBidUnit(price);
@@ -47,9 +55,14 @@ public class BidService {
             throwBidRejection(auctionId, price);
         }
 
+
         // 인증 필터가 검증한 회원은 추가 조회 없이 프록시 참조로 FK만 연결한다.
         Auction auction = auctionRepository.getReferenceById(auctionId);
         Member bidder = memberRepository.getReferenceById(memberId);
+        if (price % BID_PRICE_UNIT != 0 || price <= 0) {
+            throw new BidException(INVALID_BID_UNIT);
+        }
+
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(bidder)
