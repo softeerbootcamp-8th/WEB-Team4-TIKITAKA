@@ -47,7 +47,7 @@ public class BidService {
             throw new BidException(NOT_UP_AUCTION);
         }
 
-        if (price % BID_PRICE_UNIT != 0) {
+        if (price % BID_PRICE_UNIT != 0 || price <= 0) {
             throw new BidException(INVALID_BID_UNIT);
         }
 
