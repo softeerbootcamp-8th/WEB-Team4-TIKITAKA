@@ -1,9 +1,9 @@
 package com.tikitaka.bidwinback.auction.domain.enums;
 
 public enum TradeStatus {
-    WAITING_PAYMENT,
-    PAID,
+    WAITING_CONFIRM,
+    CONFIRMED,
     COMPLETED,
-    CANCELED,
-    FAILED
+    BUYER_FAILED,
+    SELLER_FAILED
 }

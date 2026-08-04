@@ -25,6 +25,16 @@ spring:
     hibernate:
       ddl-auto: update
 
+server:
+  servlet:
+    session:
+      tracking-modes: cookie
+      cookie:
+        secure: ${SESSION_COOKIE_SECURE:true}
+        http-only: true
+        same-site: lax
+        path: /
+
 app:
   password-reset:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
@@ -32,7 +42,13 @@ app:
     url: ${EMAIL_VERIFICATION_URL:http://localhost:5173/email-verification}
 
   storage:
+    cloudfront:
+      domain: ${AWS_CLOUDFRONT_DOMAIN:http://localhost:8080}
     s3:
       bucket: ${AWS_S3_BUCKET}
       region: ${AWS_REGION:ap-northeast-2}
       presign-duration: ${AWS_S3_PRESIGN_DURATION:5m}
+      pending-auction-image:
+        retention: ${PENDING_AUCTION_IMAGE_RETENTION:24h}
+        cleanup-interval: ${PENDING_AUCTION_IMAGE_CLEANUP_INTERVAL:1h}
+        cleanup-batch-size: ${PENDING_AUCTION_IMAGE_CLEANUP_BATCH_SIZE:1000}

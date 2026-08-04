@@ -22,6 +22,8 @@ import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -30,6 +32,7 @@ public class AuthService {
     private final PasswordHasher passwordHasher;
     private final PasswordResetTokenService passwordResetTokenService;
     private final EmailVerificationTokenService emailVerificationTokenService;
+    private final Clock clock;
     private final TokenMailSender tokenMailSender;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
@@ -86,7 +89,7 @@ public class AuthService {
             throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        return AuthMember.from(member);
+        return AuthMember.from(member, clock.instant());
     }
 
     public void requestPasswordReset(PasswordResetRequest request) {

@@ -11,6 +11,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.NoSuchElementException;
 
@@ -37,6 +38,24 @@ public class GlobalExceptionHandler {
                 .getFieldErrors()
                 .stream()
                 .map(FieldError::getDefaultMessage)
+                .findFirst()
+                .orElse(ErrorCode.INVALID_INPUT_VALUE.getMessage());
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(ErrorCode.INVALID_INPUT_VALUE, message));
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodValidationException(
+            HandlerMethodValidationException exception
+    ) {
+        String message = exception.getParameterValidationResults()
+                .stream()
+                .flatMap(result -> result.getResolvableErrors().stream())
+                .map(error -> error.getDefaultMessage())
+                .filter(errorMessage ->
+                        errorMessage != null && !errorMessage.isBlank()
+                )
                 .findFirst()
                 .orElse(ErrorCode.INVALID_INPUT_VALUE.getMessage());
 

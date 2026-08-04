@@ -37,6 +37,11 @@ public enum ErrorCode {
             "MEMBER_401_2",
             "로그인 세션이 없거나 만료되었습니다."
     ),
+    AUTHENTICATION_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "MEMBER_503_1",
+            "인증 처리를 일시적으로 완료할 수 없습니다. 잠시 후 다시 시도해주세요."
+    ),
     INVALID_PASSWORD_FORMAT(
             HttpStatus.BAD_REQUEST,
             "MEMBER_400_1",
@@ -96,6 +101,11 @@ public enum ErrorCode {
             HttpStatus.FORBIDDEN,
             "MEMBER_403_1",
             "해당 리소스에 접근할 권한이 없습니다."
+    ),
+    MEMBER_NOT_ACTIVE(
+            HttpStatus.FORBIDDEN,
+            "MEMBER_403_2",
+            "활성 상태의 회원만 구매할 수 있습니다."
     ),
 
     // Auction
@@ -198,6 +208,11 @@ public enum ErrorCode {
             "BID_400_1",
             "즉시구매가가 설정되지 않은 경매입니다."
     ),
+    NOT_UP_AUCTION(
+            HttpStatus.BAD_REQUEST,
+            "BID_400_2",
+            "상향 경매만 입찰할 수 있습니다."
+    ),
     BUY_NOW_PRICE_CHANGED(
             HttpStatus.CONFLICT,
             "BID_409_1",
@@ -207,6 +222,16 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "BID_409_2",
             "다른 사용자가 먼저 구매를 확정했습니다."
+    ),
+    SELF_PURCHASE_NOT_ALLOWED(
+            HttpStatus.FORBIDDEN,
+            "BID_403_2",
+            "본인이 등록한 경매는 구매할 수 없습니다."
+    ),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "BID_409_3",
+            "멱등 키를 다른 구매 요청에 재사용할 수 없습니다."
     ),
 
     // Trade / settlement
