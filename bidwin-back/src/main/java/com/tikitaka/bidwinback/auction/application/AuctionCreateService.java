@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.IMAGE_MIN_COUNT_VIOLATION;
@@ -68,7 +69,7 @@ public class AuctionCreateService {
         Auction auction = buildAuction(seller, category, endedAt, request);
         auctionRepository.save(auction);
 
-        attachImages(auction, memberId, objectKeys);
+        attachImages(auction, memberId, request.draftId(), objectKeys);
 
         return AuctionCreateResponse.from(auction);
     }
@@ -158,9 +159,9 @@ public class AuctionCreateService {
         return objectKeys;
     }
 
-    private void attachImages(Auction auction, Long memberId, List<String> objectKeys) {
+    private void attachImages(Auction auction, Long memberId, UUID draftId, List<String> objectKeys) {
         List<PendingAuctionImage> pendingImages =
-                pendingAuctionImageStore.findByMemberIdAndObjectKeyIn(memberId, objectKeys);
+                pendingAuctionImageStore.findByMemberIdAndDraftIdAndObjectKeyIn(memberId, draftId, objectKeys);
 
         Set<String> ownedObjectKeys = pendingImages.stream()
                 .map(PendingAuctionImage::getObjectKey)

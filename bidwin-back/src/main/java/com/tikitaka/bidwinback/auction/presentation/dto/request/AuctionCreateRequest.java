@@ -8,8 +8,13 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
+import java.util.UUID;
 
 public record AuctionCreateRequest(
+        // 이 draftId 세션에서 업로드된 이미지만 첨부하도록, images 소유권 확인 시 함께 검증한다.
+        @NotNull(message = "draftId는 필수입니다.")
+        UUID draftId,
+
         @NotBlank(message = "제목은 필수입니다.")
         @Size(max = 30, message = "제목은 30자 이하로 입력해주세요.")
         String title,

@@ -58,6 +58,7 @@ class AuctionCreateServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long AUCTION_ID = 100L;
     private static final LocalDateTime DB_NOW = LocalDateTime.of(2026, 8, 3, 10, 0, 0);
+    private static final UUID DRAFT_ID = UUID.randomUUID();
     private static final List<String> OBJECT_KEYS = List.of("auction-images/a.jpg", "auction-images/b.jpg");
 
     @Mock
@@ -358,8 +359,31 @@ class AuctionCreateServiceTest {
         // given
         stubSellerAndClock();
         stubSaveAssignsId();
-        when(pendingAuctionImageStore.findByMemberIdAndObjectKeyIn(MEMBER_ID, OBJECT_KEYS))
-                .thenReturn(List.of(PendingAuctionImage.issue(MEMBER_ID, UUID.randomUUID(), OBJECT_KEYS.get(0))));
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndObjectKeyIn(MEMBER_ID, DRAFT_ID, OBJECT_KEYS))
+                .thenReturn(List.of(PendingAuctionImage.issue(MEMBER_ID, DRAFT_ID, OBJECT_KEYS.get(0))));
+        AuctionCreateRequest request = upRequest(500_000L);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, request)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_IMAGE_REFERENCE);
+        verify(imageRepository, never()).saveAll(anyList());
+        verify(pendingAuctionImageStore, never()).deleteByObjectKeyIn(anyList());
+    }
+
+    @Test
+    void 다른_draft에_속한_이미지는_사용할_수_없다() {
+        // given
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        // 이 objectKey들은 실제로 존재하지만, 다른(예: 이전에 포기한) draftId 소속이라 이번 요청의
+        // draftId로 조회하면 아무것도 안 나온다 — findByMemberIdAndDraftIdAndObjectKeyIn이 빈 목록을 반환.
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndObjectKeyIn(MEMBER_ID, DRAFT_ID, OBJECT_KEYS))
+                .thenReturn(List.of());
         AuctionCreateRequest request = upRequest(500_000L);
 
         // when
@@ -389,9 +413,9 @@ class AuctionCreateServiceTest {
 
     private void stubOwnedImages() {
         List<PendingAuctionImage> pendingImages = OBJECT_KEYS.stream()
-                .map(objectKey -> PendingAuctionImage.issue(MEMBER_ID, UUID.randomUUID(), objectKey))
+                .map(objectKey -> PendingAuctionImage.issue(MEMBER_ID, DRAFT_ID, objectKey))
                 .toList();
-        when(pendingAuctionImageStore.findByMemberIdAndObjectKeyIn(eq(MEMBER_ID), anyList()))
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndObjectKeyIn(eq(MEMBER_ID), eq(DRAFT_ID), anyList()))
                 .thenReturn(pendingImages);
     }
 
@@ -409,6 +433,7 @@ class AuctionCreateServiceTest {
 
     private AuctionCreateRequest upRequest(Long buyNowPrice) {
         return new AuctionCreateRequest(
+                DRAFT_ID,
                 "아이패드 팝니다",
                 "미개봉 새 제품입니다.",
                 "HOUSEHOLD",
@@ -431,6 +456,7 @@ class AuctionCreateServiceTest {
             Long priceDropInterval
     ) {
         return new AuctionCreateRequest(
+                DRAFT_ID,
                 "냉장고 급처합니다",
                 "이사 정리로 급처합니다.",
                 "HOUSEHOLD",
@@ -449,7 +475,7 @@ class AuctionCreateServiceTest {
 
     private AuctionCreateRequest withCategory(AuctionCreateRequest request, String category) {
         return new AuctionCreateRequest(
-                request.title(), request.description(), category, request.contact(),
+                request.draftId(), request.title(), request.description(), category, request.contact(),
                 request.auctionType(), request.tradeType(), request.durationMinutes(), request.startPrice(),
                 request.buyNowPrice(), request.minimumPrice(), request.dropPrice(), request.priceDropInterval(),
                 request.images()
@@ -458,7 +484,7 @@ class AuctionCreateServiceTest {
 
     private AuctionCreateRequest withDuration(AuctionCreateRequest request, int durationMinutes) {
         return new AuctionCreateRequest(
-                request.title(), request.description(), request.category(), request.contact(),
+                request.draftId(), request.title(), request.description(), request.category(), request.contact(),
                 request.auctionType(), request.tradeType(), durationMinutes, request.startPrice(),
                 request.buyNowPrice(), request.minimumPrice(), request.dropPrice(), request.priceDropInterval(),
                 request.images()
@@ -467,7 +493,7 @@ class AuctionCreateServiceTest {
 
     private AuctionCreateRequest withStartPrice(AuctionCreateRequest request, long startPrice) {
         return new AuctionCreateRequest(
-                request.title(), request.description(), request.category(), request.contact(),
+                request.draftId(), request.title(), request.description(), request.category(), request.contact(),
                 request.auctionType(), request.tradeType(), request.durationMinutes(), startPrice,
                 request.buyNowPrice(), request.minimumPrice(), request.dropPrice(), request.priceDropInterval(),
                 request.images()
@@ -476,7 +502,7 @@ class AuctionCreateServiceTest {
 
     private AuctionCreateRequest withImages(AuctionCreateRequest request, List<String> images) {
         return new AuctionCreateRequest(
-                request.title(), request.description(), request.category(), request.contact(),
+                request.draftId(), request.title(), request.description(), request.category(), request.contact(),
                 request.auctionType(), request.tradeType(), request.durationMinutes(), request.startPrice(),
                 request.buyNowPrice(), request.minimumPrice(), request.dropPrice(), request.priceDropInterval(),
                 images
