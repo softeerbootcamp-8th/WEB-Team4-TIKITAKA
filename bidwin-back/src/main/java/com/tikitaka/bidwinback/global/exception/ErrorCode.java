@@ -174,6 +174,11 @@ public enum ErrorCode {
             "AUCTION_409_4",
             "등록된 경매는 수정하거나 삭제할 수 없습니다."
     ),
+    INVALID_SORT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_8",
+            "지원하지 않는 정렬 기준입니다."
+    ),
 
     // Upload
     UNSUPPORTED_IMAGE_TYPE(
