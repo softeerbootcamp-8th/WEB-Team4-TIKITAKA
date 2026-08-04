@@ -100,6 +100,50 @@ class BidRepositoryIntegrationTest {
         });
     }
 
+    @Test
+    void 입찰이_없으면_null이고_입찰이_있으면_최고가를_조회한다() {
+        String suffix = UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 8);
+        Member seller = persistMember("max-seller-" + suffix, "판매" + suffix);
+        Member bidder = persistMember("max-bidder-" + suffix, "입찰" + suffix);
+        UpAuction auction = UpAuction.builder()
+                .seller(seller)
+                .title("최고가 조회 통합 테스트")
+                .description("레거시 현재가 폴백 쿼리 검증")
+                .status(AuctionStatus.OPEN)
+                .category(AuctionCategory.HOUSEHOLD)
+                .startPrice(100_000L)
+                .endedAt(LocalDateTime.now().plusDays(1))
+                .tradeType(TradeType.DELIVERY)
+                .contact("01012345678")
+                .buyNowPrice(300_000L)
+                .build();
+        entityManager.persist(auction);
+        entityManager.flush();
+
+        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId())).isNull();
+
+        entityManager.persist(Bid.builder()
+                .auction(auction)
+                .bidder(bidder)
+                .price(101_000L)
+                .status(BidStatus.UP)
+                .build());
+        entityManager.persist(Bid.builder()
+                .auction(auction)
+                .bidder(bidder)
+                .price(103_000L)
+                .status(BidStatus.UP)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId()))
+                .isEqualTo(103_000L);
+    }
+
     private Member persistMember(String identifier, String nickname) {
         Member member = Member.builder()
                 .email(identifier + "@example.com")

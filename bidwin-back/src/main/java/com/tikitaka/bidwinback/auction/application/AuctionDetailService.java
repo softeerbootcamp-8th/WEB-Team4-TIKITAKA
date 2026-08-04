@@ -11,7 +11,6 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.dto.BidSummary;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSellerResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
@@ -63,6 +62,7 @@ public class AuctionDetailService {
             Optional<Long> finalPrice = upAuction.getStatus() == AuctionStatus.COMPLETED
                     ? auctionTradeRepository.findFinalPriceByAuctionId(auctionId)
                     : Optional.empty();
+
             return toUpAuctionResponse(upAuction, imageUrls, seller, finalPrice);
         }
 
@@ -71,6 +71,7 @@ public class AuctionDetailService {
             Optional<Long> finalPrice = downAuction.getStatus() == AuctionStatus.COMPLETED
                     ? auctionTradeRepository.findFinalPriceByAuctionId(auctionId)
                     : Optional.empty();
+
             return toDownAuctionResponse(downAuction, imageUrls, seller, finalPrice);
         }
 
@@ -83,12 +84,8 @@ public class AuctionDetailService {
             AuctionSellerResponse seller,
             Optional<Long> finalPrice
     ) {
-        BidSummary bidSummary = bidRepository.summarizeByAuctionId(auction.getId());
-        long currentPrice = finalPrice.orElseGet(() ->
-                bidSummary.highestPrice() == null
-                        ? auction.getStartPrice()
-                        : bidSummary.highestPrice()
-        );
+        long currentPrice = finalPrice.orElseGet(() -> currentPriceOf(auction));
+        long bidCount = bidRepository.countByAuctionId(auction.getId());
 
         return new UpAuctionDetailResponse(
                 auction.getId(),
@@ -105,8 +102,18 @@ public class AuctionDetailService {
                 seller,
                 auction.getBuyNowPrice(),
                 currentPrice,
-                bidSummary.bidCount()
+                bidCount
         );
+    }
+
+    private long currentPriceOf(UpAuction auction) {
+        if (auction.hasCurrentPrice()) {
+            return auction.getCurrentPrice();
+        }
+
+        // 스키마 변경 전에 생성된 경매만 Bid 최고가로 현재가를 보정한다.
+        Long highestPrice = bidRepository.findHighestPriceByAuctionId(auction.getId());
+        return highestPrice == null ? auction.getStartPrice() : highestPrice;
     }
 
     private DownAuctionDetailResponse toDownAuctionResponse(

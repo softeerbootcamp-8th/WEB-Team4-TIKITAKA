@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.BidResult;
 import com.tikitaka.bidwinback.auction.application.BidService;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.auth.application.SessionAuthService;
@@ -28,6 +29,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -129,6 +133,52 @@ class AuctionBidControllerTest {
                         .value("입찰가는 0보다 커야 합니다."));
 
         verifyNoInteractions(bidService);
+    }
+
+    @Test
+    void 입찰가가_천원_단위가_아니면_400을_응답한다() throws Exception {
+        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L))
+                .thenThrow(new BidException(INVALID_BID_UNIT));
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 232500
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("AUCTION_400_3"));
+    }
+
+    @Test
+    void 입찰가가_현재가보다_천원_이상_높지_않으면_422를_응답한다() throws Exception {
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+                .thenThrow(new BidException(BID_PRICE_TOO_LOW));
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REQUEST))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("BID_422_1"));
+    }
+
+    @Test
+    void 동시_입찰_락_획득에_실패하면_409를_응답한다() throws Exception {
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+                .thenThrow(new BidException(CONCURRENT_BID_CONFLICT));
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_REQUEST))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("BID_409_4"));
     }
 
     @Test

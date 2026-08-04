@@ -243,6 +243,11 @@ public enum ErrorCode {
             "BID_409_3",
             "멱등 키를 다른 구매 요청에 재사용할 수 없습니다."
     ),
+    CONCURRENT_BID_CONFLICT(
+            HttpStatus.CONFLICT,
+            "BID_409_4",
+            "동시 입찰 처리에 실패했습니다. 최신 가격을 확인한 뒤 다시 시도해주세요."
+    ),
 
     // Trade / settlement
     TRADE_NOT_FOUND(

@@ -9,48 +9,48 @@ import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
-import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
+import static com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus.BID_ONGOING;
+import static com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus.OPEN;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_ENDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONGOING;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 
 @Service
 @RequiredArgsConstructor
 public class BidService {
 
-    private static final long BID_PRICE_UNIT = 1_000L;
+    private static final long BID_UNIT = 1_000L;
 
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
 
-    /**
-     * 입찰 한 건을 Bid 테이블에 기록한다.
-     * 경매 상태·현재가 비교·보증금·자기 경매 입찰 같은 정합성 검증은 후속 작업에서 붙인다.
-     */
     @Transactional
     public BidResult place(Long memberId, Long auctionId, long price) {
-        // 존재하지 않는 회원·경매로 FK 제약 위반이 나면 500이 되므로 여기서만 미리 확인한다.
-        Member bidder = memberRepository.findById(memberId)
-                .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
-        Auction auction = auctionRepository.findById(auctionId)
-                .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+        validateBidUnit(price);
 
-        // 하향 경매는 즉시구매로만 거래되므로 입찰은 상향 경매에만 허용한다.
-        if (!(auction instanceof UpAuction)) {
-            throw new BidException(NOT_UP_AUCTION);
+        if (updateCurrentPrice(memberId, auctionId, price) != 1) {
+            // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다.
+            throwBidRejection(memberId, auctionId, price);
         }
 
-        if (price % BID_PRICE_UNIT != 0 || price <= 0) {
-            throw new BidException(INVALID_BID_UNIT);
-        }
-
+        // 인증 필터가 검증한 회원은 추가 조회 없이 프록시 참조로 FK만 연결한다.
+        Auction auction = auctionRepository.getReferenceById(auctionId);
+        Member bidder = memberRepository.getReferenceById(memberId);
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(bidder)
@@ -59,5 +59,60 @@ public class BidService {
                 .build());
 
         return BidResult.from(bid);
+    }
+
+    private void validateBidUnit(long price) {
+        if (price <= 0 || price % BID_UNIT != 0) {
+            throw new BidException(INVALID_BID_UNIT);
+        }
+    }
+
+    private int updateCurrentPrice(Long memberId, Long auctionId, long price) {
+        try {
+            return auctionRepository.updateCurrentPriceForBid(
+                    auctionId,
+                    memberId,
+                    price,
+                    BID_UNIT
+            );
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_BID_CONFLICT);
+        }
+    }
+
+    private void throwBidRejection(Long memberId, Long auctionId, long price) {
+        Auction auction = auctionRepository.findById(auctionId)
+                .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+
+        // 하향 경매는 즉시구매로만 거래되므로 입찰은 상향 경매에만 허용한다.
+        if (!(auction instanceof UpAuction)) {
+            throw new BidException(NOT_UP_AUCTION);
+        }
+        if (auction.getStatus() != OPEN && auction.getStatus() != BID_ONGOING) {
+            throw new AuctionException(AUCTION_NOT_ONGOING);
+        }
+
+        LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
+        if (!auction.getEndedAt().isAfter(databaseTime)) {
+            throw new AuctionException(AUCTION_ALREADY_ENDED);
+        }
+        if (auction.getSeller().getId().equals(memberId)) {
+            throw new BidException(SELF_BID_NOT_ALLOWED);
+        }
+        if (price - BID_UNIT < currentPriceOf(auction)) {
+            throw new BidException(BID_PRICE_TOO_LOW);
+        }
+
+        throw new BidException(CONCURRENT_BID_CONFLICT);
+    }
+
+    private long currentPriceOf(Auction auction) {
+        if (auction.hasCurrentPrice()) {
+            return auction.getCurrentPrice();
+        }
+
+        // 스키마 변경 전에 생성된 경매만 Bid 최고가로 현재가를 보정한다.
+        Long highestPrice = bidRepository.findHighestPriceByAuctionId(auction.getId());
+        return highestPrice == null ? auction.getStartPrice() : highestPrice;
     }
 }
