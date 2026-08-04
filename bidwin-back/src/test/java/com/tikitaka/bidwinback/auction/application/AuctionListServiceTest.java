@@ -1,0 +1,256 @@
+package com.tikitaka.bidwinback.auction.application;
+
+import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
+import com.tikitaka.bidwinback.auction.domain.entity.Image;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
+import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
+import com.tikitaka.bidwinback.member.domain.entity.Member;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class AuctionListServiceTest {
+
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    private static final LocalDateTime AS_OF = LocalDateTime.of(2026, 8, 1, 12, 0);
+
+    @Mock
+    private AuctionRepository auctionRepository;
+
+    @Mock
+    private BidRepository bidRepository;
+
+    @Mock
+    private ImageRepository imageRepository;
+
+    @Mock
+    private ImageUrlResolver imageUrlResolver;
+
+    private AuctionListService auctionListService;
+
+    @BeforeEach
+    void setUp() {
+        auctionListService = new AuctionListService(
+                auctionRepository,
+                bidRepository,
+                imageRepository,
+                imageUrlResolver
+        );
+        lenient().when(imageRepository.findByAuctionIdInOrderByIdAsc(anyList())).thenReturn(List.of());
+    }
+
+    @Test
+    void auctionType으로_필터링하면_해당_타입만_남는다() {
+        UpAuction upAuction = upAuction(1L, 200_000L);
+        // 필터에 걸려 제외될 대상이라 getter가 하나도 안 불릴 수 있다 — instanceof 판별에만 필요하다.
+        DownAuction downAuction = mock(DownAuction.class);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(upAuction, downAuction));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(query(AuctionType.UP, AuctionSort.LATEST, null, 1, 16));
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).auctionId()).isEqualTo(1L);
+        assertThat(response.totalCount()).isEqualTo(1);
+    }
+
+    @Test
+    void 상향_경매는_최고_입찰가가_없으면_시작가를_현재가로_쓴다() {
+        UpAuction auction = upAuction(1L, 200_000L);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(query(null, AuctionSort.LATEST, null, 1, 16));
+
+        AuctionSummaryResponse summary = response.items().get(0);
+        assertThat(summary.currentPrice()).isEqualTo(200_000L);
+        assertThat(summary.bidCount()).isZero();
+    }
+
+    @Test
+    void 상향_경매는_asOf_이전_최고_입찰가를_현재가로_쓴다() {
+        UpAuction auction = upAuction(1L, 200_000L);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(bidRepository.summarizeByAuctionIds(List.of(1L), AS_OF))
+                .thenReturn(List.of(new AuctionBidSummary(1L, 260_000L, 4L)));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 1, 16, AS_OF)
+        );
+
+        AuctionSummaryResponse summary = response.items().get(0);
+        assertThat(summary.currentPrice()).isEqualTo(260_000L);
+        assertThat(summary.bidCount()).isEqualTo(4L);
+    }
+
+    @Test
+    void 하향_경매는_경과한_인하_횟수만큼_시작가에서_내려간_가격을_현재가로_쓴다() {
+        // 12:00 시작, 인하 주기 10분, 인하 금액 10,000원 → asOf(12:35)까지 3번 인하(30분/10분=3)
+        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
+        LocalDateTime asOf = LocalDateTime.of(2026, 8, 1, 12, 35);
+        DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 1, 16, asOf)
+        );
+
+        assertThat(response.items().get(0).currentPrice()).isEqualTo(170_000L);
+    }
+
+    @Test
+    void 하향_경매_현재가는_최저가_밑으로_내려가지_않는다() {
+        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
+        LocalDateTime asOf = LocalDateTime.of(2026, 8, 2, 12, 0); // 아주 오랜 시간이 지남
+        DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 1, 16, asOf)
+        );
+
+        assertThat(response.items().get(0).currentPrice()).isEqualTo(150_000L);
+    }
+
+    @Test
+    void 추천순은_입찰수_내림차순이다() {
+        UpAuction popular = upAuction(1L, 200_000L);
+        UpAuction quiet = upAuction(2L, 200_000L);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(quiet, popular));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of(
+                new AuctionBidSummary(1L, 300_000L, 10L),
+                new AuctionBidSummary(2L, 210_000L, 1L)
+        ));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.RECOMMENDED, null, 1, 16)
+        );
+
+        assertThat(response.items()).extracting(AuctionSummaryResponse::auctionId)
+                .containsExactly(1L, 2L);
+    }
+
+    @Test
+    void 낮은_가격순으로_정렬한다() {
+        UpAuction cheap = upAuction(1L, 100_000L);
+        UpAuction expensive = upAuction(2L, 500_000L);
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of(expensive, cheap));
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.PRICE_LOW, null, 1, 16)
+        );
+
+        assertThat(response.items()).extracting(AuctionSummaryResponse::auctionId)
+                .containsExactly(1L, 2L);
+    }
+
+    @Test
+    void 페이지_크기만큼_잘라서_돌려주고_전체_개수와_페이지수를_함께_준다() {
+        List<Auction> auctions = List.of(
+                upAuction(1L, 100_000L),
+                upAuction(2L, 100_000L),
+                upAuction(3L, 100_000L)
+        );
+        when(auctionRepository.findAllForList(null)).thenReturn(auctions);
+        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 1, 2)
+        );
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.totalCount()).isEqualTo(3);
+        assertThat(response.totalPages()).isEqualTo(2);
+        assertThat(response.page()).isEqualTo(1);
+    }
+
+    @Test
+    void asOf가_없으면_DB_시각을_새로_찍어_응답에_그대로_담는다() {
+        when(auctionRepository.findAllForList(null)).thenReturn(List.of());
+        when(auctionRepository.currentDatabaseTime()).thenReturn(AS_OF);
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 1, 16, null)
+        );
+
+        assertThat(response.serverTime()).isEqualTo(AS_OF.atZone(SEOUL).toInstant().toEpochMilli());
+    }
+
+    private AuctionListQuery query(AuctionType type, AuctionSort sort, String keyword, int page, int size) {
+        return query(type, sort, keyword, page, size, AS_OF);
+    }
+
+    private AuctionListQuery query(
+            AuctionType type,
+            AuctionSort sort,
+            String keyword,
+            int page,
+            int size,
+            LocalDateTime asOf
+    ) {
+        return new AuctionListQuery(type, sort, keyword, page, size, asOf);
+    }
+
+    private UpAuction upAuction(long id, long startPrice) {
+        UpAuction auction = mock(UpAuction.class);
+        stubCommon(auction, id, startPrice);
+        when(auction.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        return auction;
+    }
+
+    private DownAuction downAuction(
+            long id,
+            long startPrice,
+            long minimumPrice,
+            long dropPrice,
+            long priceDropInterval,
+            LocalDateTime createdAt
+    ) {
+        DownAuction auction = mock(DownAuction.class);
+        stubCommon(auction, id, startPrice);
+        when(auction.getCreatedAt()).thenReturn(createdAt);
+        when(auction.getMinimumPrice()).thenReturn(minimumPrice);
+        when(auction.getDropPrice()).thenReturn(dropPrice);
+        when(auction.getPriceDropInterval()).thenReturn(priceDropInterval);
+        return auction;
+    }
+
+    private void stubCommon(Auction auction, long id, long startPrice) {
+        Member seller = mock(Member.class);
+        when(seller.getNickname()).thenReturn("판매자" + id);
+
+        when(auction.getId()).thenReturn(id);
+        when(auction.getTitle()).thenReturn("상품" + id);
+        when(auction.getCategory()).thenReturn(AuctionCategory.HOUSEHOLD);
+        when(auction.getStartPrice()).thenReturn(startPrice);
+        when(auction.getEndedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 18, 0));
+        when(auction.getSeller()).thenReturn(seller);
+    }
+}
