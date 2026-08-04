@@ -33,8 +33,8 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -69,6 +69,9 @@ class BidServiceTest {
 
     @Mock
     private Member bidder;
+
+    @Mock
+    private Member seller;
 
     @Mock
     private UpAuction auction;
@@ -129,6 +132,7 @@ class BidServiceTest {
         when(auction.hasCurrentPrice()).thenReturn(true);
         when(auction.getCurrentPrice()).thenReturn(PRICE);
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        stubSeller(2L);
 
         BidException exception = assertThrows(
                 BidException.class,
@@ -141,7 +145,12 @@ class BidServiceTest {
 
     @Test
     void 존재하지_않는_경매에는_입찰할_수_없다() {
-        when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        ))
                 .thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.empty());
 
@@ -198,6 +207,49 @@ class BidServiceTest {
     }
 
     @Test
+    void 판매자는_자신의_경매에_입찰할_수_없다() {
+        stubFailedUpdate(auction);
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusDays(1));
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        stubSeller(MEMBER_ID);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(SELF_BID_NOT_ALLOWED);
+        verifyNoInteractions(memberRepository, bidRepository);
+    }
+
+    @Test
+    void 현재가가_long_상한에_가까워도_오버플로_없이_낮은_입찰로_거절한다() {
+        long maxUnitPrice = Long.MAX_VALUE - Long.MAX_VALUE % BID_UNIT;
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                maxUnitPrice,
+                BID_UNIT
+        )).thenReturn(0);
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusDays(1));
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        when(auction.hasCurrentPrice()).thenReturn(true);
+        when(auction.getCurrentPrice()).thenReturn(maxUnitPrice);
+        stubSeller(2L);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
+        verifyNoInteractions(memberRepository, bidRepository);
+    }
+
+    @Test
     void 조건부_갱신은_실패했지만_재조회한_조건이_유효하면_동시_입찰_충돌이다() {
         stubFailedUpdate(auction);
         when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
@@ -205,6 +257,7 @@ class BidServiceTest {
         when(auction.hasCurrentPrice()).thenReturn(true);
         when(auction.getCurrentPrice()).thenReturn(CURRENT_PRICE);
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        stubSeller(2L);
 
         BidException exception = assertThrows(
                 BidException.class,
@@ -217,7 +270,12 @@ class BidServiceTest {
 
     @Test
     void 조건부_갱신의_락_획득에_실패하면_동시_입찰_충돌로_변환한다() {
-        when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        ))
                 .thenThrow(new PessimisticLockingFailureException("lock timeout"));
 
         BidException exception = assertThrows(
@@ -231,7 +289,12 @@ class BidServiceTest {
 
     @Test
     void 조건부_갱신_쿼리의_타임아웃은_동시_입찰_충돌로_변환한다() {
-        when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        ))
                 .thenThrow(new QueryTimeoutException("update query timeout"));
 
         BidException exception = assertThrows(
@@ -254,6 +317,7 @@ class BidServiceTest {
         InOrder order = inOrder(auctionRepository, memberRepository, bidRepository);
         order.verify(auctionRepository).updateCurrentPriceForBid(
                 AUCTION_ID,
+                MEMBER_ID,
                 PRICE,
                 BID_UNIT
         );
@@ -264,37 +328,31 @@ class BidServiceTest {
     }
 
     private void stubSuccessfulUpdate() {
-        when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        ))
                 .thenReturn(1);
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
     }
 
     private void stubFailedUpdate(Auction failedAuction) {
-        when(auctionRepository.updateCurrentPriceForBid(AUCTION_ID, PRICE, BID_UNIT))
+        when(auctionRepository.updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        ))
                 .thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(failedAuction));
-
-    @Test
-    void 입찰가는_1000원_단위여야_한다() {
-        // given
-        stubLoadedEntities();
-
-        // when
-        BidException exception = assertThrows(
-                BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, 232_500L)
-        );
-
-        // then
-        assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
-        verify(bidRepository, never()).save(any());
     }
 
-    private void stubLoadedEntities() {
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(bidder));
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
-
+    private void stubSeller(long sellerId) {
+        when(auction.getSeller()).thenReturn(seller);
+        when(seller.getId()).thenReturn(sellerId);
     }
 
     private void stubPersistedBid() {

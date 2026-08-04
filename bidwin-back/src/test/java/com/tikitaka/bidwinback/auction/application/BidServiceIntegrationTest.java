@@ -42,6 +42,7 @@ class BidServiceIntegrationTest {
     private static final long START_PRICE = 100_000L;
     private static final long FIRST_BID_PRICE = 101_000L;
     private static final long SECOND_BID_PRICE = 102_000L;
+    private static final long MAX_UNIT_PRICE = Long.MAX_VALUE - Long.MAX_VALUE % 1_000L;
 
     @Autowired
     private BidService bidService;
@@ -223,6 +224,26 @@ class BidServiceIntegrationTest {
     }
 
     @Test
+    void 판매자는_자신의_경매에_입찰할_수_없다() {
+        Fixture fixture = createFixture(1);
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                fixture.sellerId(),
+                fixture.auctionId(),
+                FIRST_BID_PRICE
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SELF_BID_NOT_ALLOWED)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(START_PRICE, AuctionStatus.OPEN));
+    }
+
+    @Test
     void 종료된_경매는_현재가를_갱신하거나_입찰을_남기지_않는다() {
         Fixture fixture = createFixture(1);
         executeInTransaction(entityManager -> {
@@ -299,6 +320,41 @@ class BidServiceIntegrationTest {
         assertThat(accepted.price()).isEqualTo(legacyHighestPrice + 1_000L);
         assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
                 .isEqualTo(legacyHighestPrice + 1_000L);
+    }
+
+    @Test
+    void 현재가가_bigint_상한에_가까워도_오버플로_없이_입찰을_거절한다() {
+        Fixture fixture = createFixture(1);
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET current_price = :currentPrice,
+                                status = 'BID_ONGOING'
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("currentPrice", MAX_UNIT_PRICE)
+                    .setParameter("auctionId", fixture.auctionId())
+                    .executeUpdate();
+            return null;
+        });
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                MAX_UNIT_PRICE
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(
+                        MAX_UNIT_PRICE,
+                        AuctionStatus.BID_ONGOING
+                ));
     }
 
     @Test

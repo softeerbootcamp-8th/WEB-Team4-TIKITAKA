@@ -28,7 +28,8 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND status IN ('OPEN', 'BID_ONGOING')
               AND completed_at IS NULL
               AND ended_at > SYSDATE(6)
-              AND :price >= COALESCE(
+              AND seller_id <> :bidderId
+              AND COALESCE(
                     current_price,
                     (
                         SELECT MAX(bid.price)
@@ -36,10 +37,11 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
                         WHERE bid.auction_id = auction.id
                     ),
                     start_price
-              ) + :bidUnit
+              ) <= :price - :bidUnit
             """, nativeQuery = true)
     int updateCurrentPriceForBid(
             @Param("auctionId") Long auctionId,
+            @Param("bidderId") Long bidderId,
             @Param("price") long price,
             @Param("bidUnit") long bidUnit
     );
