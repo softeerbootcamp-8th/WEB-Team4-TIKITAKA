@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 
@@ -23,13 +24,15 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 @RequiredArgsConstructor
 public class BidService {
 
+    private static final long BID_PRICE_UNIT = 1_000L;
+
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
 
     /**
      * 입찰 한 건을 Bid 테이블에 기록한다.
-     * 경매 상태·호가 단위·보증금·자기 경매 입찰 같은 정합성 검증은 후속 작업에서 붙인다.
+     * 경매 상태·현재가 비교·보증금·자기 경매 입찰 같은 정합성 검증은 후속 작업에서 붙인다.
      */
     @Transactional
     public BidResult place(Long memberId, Long auctionId, long price) {
@@ -42,6 +45,10 @@ public class BidService {
         // 하향 경매는 즉시구매로만 거래되므로 입찰은 상향 경매에만 허용한다.
         if (!(auction instanceof UpAuction)) {
             throw new BidException(NOT_UP_AUCTION);
+        }
+
+        if (price % BID_PRICE_UNIT != 0 || price <= 0) {
+            throw new BidException(INVALID_BID_UNIT);
         }
 
         Bid bid = bidRepository.save(Bid.builder()
