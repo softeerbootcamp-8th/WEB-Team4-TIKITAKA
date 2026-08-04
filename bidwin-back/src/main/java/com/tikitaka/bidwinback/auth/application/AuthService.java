@@ -66,8 +66,12 @@ public class AuthService {
         memberService.findByEmail(request.email())
                 .filter(member -> member.getStatus() == MemberStatus.PENDING)
                 .ifPresent(member -> {
-                    String rawToken = emailVerificationTokenService.issue(member);
-                    tokenMailSender.send(MailPurpose.EMAIL_VERIFICATION, member.getEmail(), rawToken);
+                    emailVerificationTokenService.issue(member)
+                            .ifPresent(rawToken -> tokenMailSender.send(
+                                    MailPurpose.EMAIL_VERIFICATION,
+                                    member.getEmail(),
+                                    rawToken
+                            ));
                 });
     }
 
@@ -97,8 +101,12 @@ public class AuthService {
         memberService.findByEmail(request.email())
                 .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
                 .ifPresent(member -> {
-                    String rawToken = passwordResetTokenService.issue(member);
-                    tokenMailSender.send(MailPurpose.PASSWORD_RESET, member.getEmail(), rawToken);
+                    passwordResetTokenService.issue(member)
+                            .ifPresent(rawToken -> tokenMailSender.send(
+                                    MailPurpose.PASSWORD_RESET,
+                                    member.getEmail(),
+                                    rawToken
+                            ));
                 });
     }
 
