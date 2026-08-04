@@ -198,16 +198,31 @@ class AuthServiceTest {
     }
 
     @Test
-    void 존재하지_않는_회원에게_인증_메일_발송을_요청하면_예외가_발생한다() {
+    void 존재하지_않는_회원의_인증_메일_요청은_토큰과_메일을_생성하지_않는다() {
         when(memberRepository.findByEmail("unknown@example.com"))
                 .thenReturn(Optional.empty());
 
-        assertThatExceptionOfType(AuthException.class)
-                .isThrownBy(() -> authService.sendVerificationEmail(
-                        new EmailVerificationSendRequest("unknown@example.com")))
-                .extracting(AuthException::getErrorCode)
-                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-        verifyNoInteractions(tokenMailSender);
+        authService.sendVerificationEmail(new EmailVerificationSendRequest("unknown@example.com"));
+
+        verifyNoInteractions(emailVerificationTokenService, tokenMailSender);
+    }
+
+    @Test
+    void PENDING이_아닌_회원의_인증_메일_요청은_토큰과_메일을_생성하지_않는다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .status(MemberStatus.ACTIVE)
+                .build();
+        when(memberRepository.findByEmail(member.getEmail()))
+                .thenReturn(Optional.of(member));
+
+        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+
+        verifyNoInteractions(emailVerificationTokenService, tokenMailSender);
     }
 
     private SignUpRequest createSignUpRequest() {
