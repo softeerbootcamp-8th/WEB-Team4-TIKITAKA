@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
@@ -20,6 +21,7 @@ import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +49,7 @@ public class BuyNowTransactionService {
     private final AuctionTradeRepository auctionTradeRepository;
     private final BidRepository bidRepository;
     private final InstantPurchaseRequestRepository requestRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public BuyNowResult buy(BuyNowCommand command) {
@@ -125,6 +128,7 @@ public class BuyNowTransactionService {
                         .build()
         );
         request.complete(trade, command.finalPrice());
+        eventPublisher.publishEvent(new AuctionStateChanged(command.auctionId()));
 
         return BuyNowResult.from(trade);
     }

@@ -401,6 +401,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             assertThat(findAuctionStatus(entityManager, auctionId))
                     .isEqualTo(AuctionStatus.COMPLETED.name());
+            assertThat(findAuctionRevision(entityManager, auctionId)).isEqualTo(1L);
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
@@ -467,6 +468,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             assertThat(findAuctionStatus(entityManager, auctionId))
                     .isEqualTo(expectedStatus.name());
+            assertThat(findAuctionRevision(entityManager, auctionId)).isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isZero();
@@ -644,6 +646,17 @@ class BuyNowServiceIntegrationTest {
                         """)
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
+    }
+
+    private long findAuctionRevision(EntityManager entityManager, Long auctionId) {
+        Number revision = (Number) entityManager.createNativeQuery("""
+                        SELECT revision
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return revision.longValue();
     }
 
     private long countRows(EntityManager entityManager, String sql, Long id) {

@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -68,6 +70,9 @@ class BidServiceTest {
     private BidRepository bidRepository;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private Member bidder;
 
     @Mock
@@ -95,6 +100,7 @@ class BidServiceTest {
 
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
         Bid saved = bidCaptor.getValue();
         assertAll(
                 () -> assertThat(saved.getAuction()).isSameAs(auction),
@@ -141,6 +147,7 @@ class BidServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
         verifyNoInteractions(memberRepository, bidRepository);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -161,6 +168,8 @@ class BidServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
         verifyNoInteractions(memberRepository, bidRepository);
+        verify(bidRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -174,6 +183,8 @@ class BidServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
         verifyNoInteractions(memberRepository, bidRepository);
+        verify(bidRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
