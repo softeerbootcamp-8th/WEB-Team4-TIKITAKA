@@ -33,7 +33,7 @@ public class AuthService {
     private final PasswordResetTokenService passwordResetTokenService;
     private final EmailVerificationTokenService emailVerificationTokenService;
     private final Clock clock;
-    private final TokenMailSender tokenMailSender;
+    private final TokenMailDispatcher tokenMailDispatcher;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
         memberService.validateEmailAvailable(request.email());
@@ -67,7 +67,7 @@ public class AuthService {
                 .filter(member -> member.getStatus() == MemberStatus.PENDING)
                 .ifPresent(member -> {
                     emailVerificationTokenService.issue(member)
-                            .ifPresent(rawToken -> tokenMailSender.send(
+                            .ifPresent(rawToken -> tokenMailDispatcher.send(
                                     MailPurpose.EMAIL_VERIFICATION,
                                     member.getEmail(),
                                     rawToken
@@ -102,7 +102,7 @@ public class AuthService {
                 .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
                 .ifPresent(member -> {
                     passwordResetTokenService.issue(member)
-                            .ifPresent(rawToken -> tokenMailSender.send(
+                            .ifPresent(rawToken -> tokenMailDispatcher.send(
                                     MailPurpose.PASSWORD_RESET,
                                     member.getEmail(),
                                     rawToken
