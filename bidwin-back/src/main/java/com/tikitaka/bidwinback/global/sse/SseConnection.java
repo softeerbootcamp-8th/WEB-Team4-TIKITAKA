@@ -20,7 +20,7 @@ final class SseConnection {
     private final SseEmitter emitter;
     private final long reconnectTimeMs;
     private final Consumer<SseConnection> onClosed;
-    private final BlockingQueue<SseMessage<ㄴ?>> pendingMessages;
+    private final BlockingQueue<SseMessage<?>> pendingMessages;
     private final Map<MessageKey, Long> latestVersions = new HashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Thread writerThread;
