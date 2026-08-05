@@ -8,9 +8,14 @@
 
 ## Code Review Rules
 
+### Review scope
+
+- Do not leave review comments on test files (e.g. `*Test.java`).
+- Do not leave review comments on generated files.
+- Do not leave review comments on dependency lockfiles unless they introduce unexpected packages, dependency sources, or integrity changes.
+
 ### Review language
 
-- Write all code review summaries and inline review comments in Korean.
-- Explain the cause, impact, and recommended fix in Korean.
-- Keep code identifiers, code snippets, logs, and error messages unchanged.
-- Do not write review explanations in English.
+- Write all code review summaries, findings, inline comments, and explanations in Korean.
+- Explain each finding's cause, impact, and recommended fix in Korean.
+- Do not translate code identifiers, code snippets, logs, or error messages.
