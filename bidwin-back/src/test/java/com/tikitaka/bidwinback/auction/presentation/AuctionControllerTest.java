@@ -56,6 +56,7 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.auctionId").value(1L))
                 .andExpect(jsonPath("$.data.auctionType").value("UP"))
+                .andExpect(jsonPath("$.data.revision").value(7L))
                 .andExpect(jsonPath("$.data.currentPrice").value(240_000L))
                 .andExpect(jsonPath("$.data.buyNowPrice").value(300_000L))
                 .andExpect(jsonPath("$.data.bidCount").value(3L))
@@ -77,6 +78,7 @@ class AuctionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.auctionType").value("DOWN"))
+                .andExpect(jsonPath("$.data.revision").value(3L))
                 .andExpect(jsonPath("$.data.minimumPrice").value(150_000L))
                 .andExpect(jsonPath("$.data.dropPrice").value(10_000L))
                 .andExpect(jsonPath("$.data.priceDropIntervalMs").value(600_000L))
@@ -105,6 +107,7 @@ class AuctionControllerTest {
                 "미개봉 상품",
                 AuctionCategory.HOUSEHOLD,
                 AuctionStatus.BID_ONGOING,
+                7L,
                 List.of("https://cdn.example.com/product.jpg"),
                 200_000L,
                 1_754_022_000_000L,
@@ -131,6 +134,7 @@ class AuctionControllerTest {
                 "이사 정리",
                 AuctionCategory.HOUSEHOLD,
                 AuctionStatus.BID_ONGOING,
+                3L,
                 List.of(),
                 200_000L,
                 1_754_018_400_000L,
