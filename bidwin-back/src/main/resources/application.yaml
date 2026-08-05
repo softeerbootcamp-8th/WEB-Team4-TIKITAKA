@@ -41,6 +41,12 @@ app:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
       window: ${MAIL_RATE_LIMIT_WINDOW:15m}
       max-count: ${MAIL_RATE_LIMIT_MAX_COUNT:5}
+  sse:
+    connection-timeout-ms: ${SSE_CONNECTION_TIMEOUT_MS:300000}
+    heartbeat-interval-ms: ${SSE_HEARTBEAT_INTERVAL_MS:15000}
+    reconnect-time-ms: ${SSE_RECONNECT_TIME_MS:3000}
+    max-channels-per-connection: ${SSE_MAX_CHANNELS_PER_CONNECTION:50}
+    max-pending-messages-per-connection: ${SSE_MAX_PENDING_MESSAGES_PER_CONNECTION:100}
 
   password-reset:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
