@@ -11,6 +11,14 @@ import java.util.Optional;
 public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long> {
 
     @Query("""
+            select trade
+            from AuctionTrade trade
+            join fetch trade.buyer
+            where trade.auction.id = :auctionId
+            """)
+    Optional<AuctionTrade> findByAuctionId(@Param("auctionId") long auctionId);
+
+    @Query("""
             select trade.finalPrice
             from AuctionTrade trade
             where trade.auction.id = :auctionId

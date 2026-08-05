@@ -1,12 +1,14 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -76,6 +78,16 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("price") long price,
             @Param("bidUnit") long bidUnit
     );
+
+    // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select auction
+            from Auction auction
+            join fetch auction.seller
+            where auction.id = :auctionId
+            """)
+    Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);
 
     @Query("""
             select auction
