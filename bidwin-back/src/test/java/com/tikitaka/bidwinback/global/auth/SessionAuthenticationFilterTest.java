@@ -486,6 +486,68 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
+    void 경매_상세_실시간_구독은_세션_없이_요청할_수_있다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/api/v1/auctions/1/events"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
+    void 경매_목록_실시간_구독은_세션_없이_요청할_수_있다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/api/v1/auctions/events"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
+    void 실시간_구독을_열어도_같은_경매의_다른_조회는_인증이_필요하다() {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/api/v1/auctions/1/bids"
+        );
+
+        // when & then
+        assertUnauthenticated(request);
+    }
+
+    @Test
+    void 실시간_구독_경로는_경매_식별자_한_구간만_허용한다() {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/api/v1/auctions/1/nested/events"
+        );
+
+        // when & then
+        assertUnauthenticated(request);
+    }
+
+    @Test
     void 인증번호_확인_경로는_회원_식별자_한_구간만_허용한다() {
         // given
         MockHttpServletRequest request = new MockHttpServletRequest(
