@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -41,6 +42,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class BidServiceIntegrationTest {
 
     private static final long START_PRICE = 100_000L;
+    private static final long DEPOSIT_AMOUNT = 30_000L;
+    private static final long INITIAL_POINT = 2_000_000L;
     private static final long FIRST_BID_PRICE = 101_000L;
     private static final long SECOND_BID_PRICE = 102_000L;
     private static final long MAX_UNIT_PRICE = Long.MAX_VALUE - Long.MAX_VALUE % 1_000L;
@@ -70,6 +73,8 @@ class BidServiceIntegrationTest {
                         "DELETE FROM sealed_bid WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM bid WHERE auction_id = :id", auctionId);
+                executeDelete(entityManager,
+                        "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
@@ -105,7 +110,13 @@ class BidServiceIntegrationTest {
                         START_PRICE,
                         AuctionStatus.BID_ONGOING
                 ));
-        assertThat(countDeposits(fixture.auctionId())).isZero();
+        assertThat(findDepositSnapshots(fixture.auctionId()))
+                .containsExactly(new DepositSnapshot(DEPOSIT_AMOUNT, DepositStatus.HELD));
+        assertThat(findMemberPointSnapshot(fixture.bidderIds().getFirst()))
+                .isEqualTo(new MemberPointSnapshot(
+                        INITIAL_POINT - DEPOSIT_AMOUNT,
+                        DEPOSIT_AMOUNT
+                ));
     }
 
     @Test
@@ -175,6 +186,50 @@ class BidServiceIntegrationTest {
         );
         assertThat(findBidPrices(fixture.auctionId())).isEmpty();
         assertThat(findSealedBidPrices(fixture.auctionId())).isEmpty();
+    }
+
+    @Test
+    void 같은_회원이_여러_번_입찰해도_시작가의_30퍼센트를_한_번만_예치한다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+
+        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.OPEN);
+        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.OPEN);
+
+        assertThat(findDepositSnapshots(fixture.auctionId()))
+                .containsExactly(new DepositSnapshot(DEPOSIT_AMOUNT, DepositStatus.HELD));
+        assertThat(findMemberPointSnapshot(bidderId))
+                .isEqualTo(new MemberPointSnapshot(
+                        INITIAL_POINT - DEPOSIT_AMOUNT,
+                        DEPOSIT_AMOUNT
+                ));
+    }
+
+    @Test
+    void 첫_입찰_보증금이_부족하면_경매_갱신과_입찰을_모두_롤백한다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+        long insufficientPoint = DEPOSIT_AMOUNT - 1L;
+        updateMemberPoints(bidderId, insufficientPoint, 0L);
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                bidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.OPEN
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.INSUFFICIENT_DEPOSIT)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findDepositSnapshots(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(START_PRICE, AuctionStatus.OPEN));
+        assertThat(findMemberPointSnapshot(bidderId))
+                .isEqualTo(new MemberPointSnapshot(insufficientPoint, 0L));
     }
 
     @Test
@@ -641,16 +696,52 @@ class BidServiceIntegrationTest {
                 .getResultList());
     }
 
-    private long countDeposits(Long auctionId) {
+    private List<DepositSnapshot> findDepositSnapshots(Long auctionId) {
+        return executeInTransaction(entityManager -> entityManager.createQuery("""
+                        select deposit.reservedAmount, deposit.status
+                        from AuctionDeposit deposit
+                        where deposit.auction.id = :auctionId
+                        order by deposit.id
+                        """, Object[].class)
+                .setParameter("auctionId", auctionId)
+                .getResultList()
+                .stream()
+                .map(row -> new DepositSnapshot(
+                        ((Number) row[0]).longValue(),
+                        (DepositStatus) row[1]
+                ))
+                .toList());
+    }
+
+    private MemberPointSnapshot findMemberPointSnapshot(Long memberId) {
         return executeInTransaction(entityManager -> {
-            Number count = (Number) entityManager.createNativeQuery("""
-                            SELECT COUNT(*)
-                            FROM auction_deposit
-                            WHERE auction_id = :auctionId
-                            """)
-                    .setParameter("auctionId", auctionId)
+            Object[] row = entityManager.createQuery("""
+                            select member.totalPoint, member.lockedPoint
+                            from Member member
+                            where member.id = :memberId
+                            """, Object[].class)
+                    .setParameter("memberId", memberId)
                     .getSingleResult();
-            return count.longValue();
+            return new MemberPointSnapshot(
+                    ((Number) row[0]).longValue(),
+                    ((Number) row[1]).longValue()
+            );
+        });
+    }
+
+    private void updateMemberPoints(Long memberId, long totalPoint, long lockedPoint) {
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE member
+                            SET total_point = :totalPoint,
+                                locked_point = :lockedPoint
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("totalPoint", totalPoint)
+                    .setParameter("lockedPoint", lockedPoint)
+                    .setParameter("memberId", memberId)
+                    .executeUpdate();
+            return null;
         });
     }
 
@@ -709,6 +800,18 @@ class BidServiceIntegrationTest {
     private record AuctionSnapshot(
             long currentPrice,
             AuctionStatus status
+    ) {
+    }
+
+    private record DepositSnapshot(
+            long reservedAmount,
+            DepositStatus status
+    ) {
+    }
+
+    private record MemberPointSnapshot(
+            long totalPoint,
+            long lockedPoint
     ) {
     }
 

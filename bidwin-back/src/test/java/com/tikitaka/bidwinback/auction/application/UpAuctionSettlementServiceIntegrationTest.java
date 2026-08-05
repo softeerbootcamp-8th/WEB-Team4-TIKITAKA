@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UpAuctionSettlementServiceIntegrationTest {
 
     private static final long START_PRICE = 100_000L;
+    private static final long DEPOSIT_AMOUNT = 30_000L;
 
     @Autowired
     private BidService bidService;
@@ -59,6 +60,7 @@ class UpAuctionSettlementServiceIntegrationTest {
                 delete(entityManager, "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM sealed_bid WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM bid WHERE auction_id = :id", auctionId);
+                delete(entityManager, "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM auction WHERE id = :id", auctionId);
             }
@@ -70,7 +72,7 @@ class UpAuctionSettlementServiceIntegrationTest {
     }
 
     @Test
-    void 일반입찰과_밀봉입찰을_비교해_낙찰하고_포인트는_변경하지_않는다() {
+    void 일반입찰과_밀봉입찰을_비교해_낙찰하고_보증금은_유지한다() {
         Fixture fixture = createFixture(2);
         Long openBidderId = fixture.bidderIds().get(0);
         Long sealedBidderId = fixture.bidderIds().get(1);
@@ -92,9 +94,11 @@ class UpAuctionSettlementServiceIntegrationTest {
         assertThat(findAuctionSnapshot(fixture.auctionId()))
                 .isEqualTo(new AuctionSnapshot(AuctionStatus.COMPLETED, 105_000L));
         assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L);
-        assertThat(findDepositCount(fixture.auctionId())).isZero();
-        assertThat(findPoints(openBidderId)).isEqualTo(new Points(2_000_000L, 0L));
-        assertThat(findPoints(sealedBidderId)).isEqualTo(new Points(2_000_000L, 0L));
+        assertThat(findDepositCount(fixture.auctionId())).isEqualTo(2L);
+        assertThat(findPoints(openBidderId))
+                .isEqualTo(new Points(2_000_000L - DEPOSIT_AMOUNT, DEPOSIT_AMOUNT));
+        assertThat(findPoints(sealedBidderId))
+                .isEqualTo(new Points(2_000_000L - DEPOSIT_AMOUNT, DEPOSIT_AMOUNT));
     }
 
     @Test

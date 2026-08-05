@@ -1,15 +1,18 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
+import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
@@ -24,9 +27,9 @@ import org.mockito.InjectMocks;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -38,6 +41,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PHASE_CHANG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
@@ -45,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,6 +65,8 @@ class BidServiceTest {
     private static final long BID_UNIT = 1_000L;
     private static final long CURRENT_PRICE = 231_000L;
     private static final long PRICE = 232_000L;
+    private static final long START_PRICE = 100_000L;
+    private static final long DEPOSIT_AMOUNT = 30_000L;
     private static final LocalDateTime DATABASE_TIME =
             LocalDateTime.of(2026, 7, 30, 12, 34, 55);
     private static final LocalDateTime BID_AT = DATABASE_TIME.plusSeconds(1);
@@ -69,6 +76,9 @@ class BidServiceTest {
 
     @Mock
     private AuctionRepository auctionRepository;
+
+    @Mock
+    private AuctionDepositRepository auctionDepositRepository;
 
     @Mock
     private BidRepository bidRepository;
@@ -100,6 +110,7 @@ class BidServiceTest {
     @Test
     void 조건부_현재가_갱신에_성공하면_UP_입찰을_저장한다() {
         stubSuccessfulUpdate();
+        stubExistingDeposit();
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
@@ -123,6 +134,59 @@ class BidServiceTest {
     }
 
     @Test
+    void 첫_입찰이면_시작가의_30퍼센트를_보증금으로_예치한다() {
+        stubSuccessfulUpdate();
+        stubPersistedBid();
+        when(auction.getStartPrice()).thenReturn(START_PRICE);
+        when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, DEPOSIT_AMOUNT))
+                .thenReturn(1);
+        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
+
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
+
+        ArgumentCaptor<AuctionDeposit> depositCaptor =
+                ArgumentCaptor.forClass(AuctionDeposit.class);
+        verify(auctionDepositRepository).save(depositCaptor.capture());
+        AuctionDeposit deposit = depositCaptor.getValue();
+        assertAll(
+                () -> assertThat(deposit.getMember()).isSameAs(bidder),
+                () -> assertThat(deposit.getAuction()).isSameAs(auction),
+                () -> assertThat(deposit.getReservedAmount()).isEqualTo(DEPOSIT_AMOUNT),
+                () -> assertThat(deposit.getStatus()).isEqualTo(DepositStatus.HELD)
+        );
+    }
+
+    @Test
+    void 이미_보증금이_있으면_추가로_포인트를_잠그지_않는다() {
+        stubSuccessfulUpdate();
+        stubExistingDeposit();
+        stubPersistedBid();
+        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
+
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
+
+        verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
+        verify(auctionDepositRepository, never()).save(any(AuctionDeposit.class));
+    }
+
+    @Test
+    void 첫_입찰_보증금이_부족하면_입찰을_저장하지_않는다() {
+        stubSuccessfulUpdate();
+        when(auction.getStartPrice()).thenReturn(START_PRICE);
+        when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, DEPOSIT_AMOUNT))
+                .thenReturn(0);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(INSUFFICIENT_DEPOSIT);
+        verify(auctionDepositRepository, never()).save(any(AuctionDeposit.class));
+        verifyNoInteractions(bidRepository, sealedBidRepository);
+    }
+
+    @Test
     void 밀봉_구간이면_현재가를_갱신하지_않고_가격을_숨긴_밀봉입찰을_저장한다() {
         when(auctionRepository.tryUpdateAuctionForSealedBid(
                 AUCTION_ID,
@@ -132,6 +196,7 @@ class BidServiceTest {
         )).thenReturn(1);
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        stubExistingDeposit();
         when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
                 .thenReturn(persistedSealedBid);
         when(persistedSealedBid.getId()).thenReturn(BID_ID);
@@ -168,6 +233,7 @@ class BidServiceTest {
         )).thenReturn(1);
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        stubExistingDeposit();
         when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate sealed bid"));
 
@@ -429,12 +495,18 @@ class BidServiceTest {
     @Test
     void 현재가를_갱신한_뒤_엔티티_참조로_입찰을_저장한다() {
         stubSuccessfulUpdate();
+        stubExistingDeposit();
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
         bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
-        InOrder order = inOrder(auctionRepository, memberRepository, bidRepository);
+        InOrder order = inOrder(
+                auctionRepository,
+                memberRepository,
+                auctionDepositRepository,
+                bidRepository
+        );
         order.verify(auctionRepository).updateCurrentPriceForBid(
                 AUCTION_ID,
                 MEMBER_ID,
@@ -443,6 +515,8 @@ class BidServiceTest {
         );
         order.verify(auctionRepository).getReferenceById(AUCTION_ID);
         order.verify(memberRepository).getReferenceById(MEMBER_ID);
+        order.verify(auctionDepositRepository)
+                .existsByMemberIdAndAuctionId(MEMBER_ID, AUCTION_ID);
         order.verify(bidRepository).save(any(Bid.class));
         verify(auctionRepository, never()).findById(AUCTION_ID);
     }
@@ -468,6 +542,13 @@ class BidServiceTest {
         ))
                 .thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(failedAuction));
+    }
+
+    private void stubExistingDeposit() {
+        when(auctionDepositRepository.existsByMemberIdAndAuctionId(
+                MEMBER_ID,
+                AUCTION_ID
+        )).thenReturn(true);
     }
 
     private void stubSeller(long sellerId) {

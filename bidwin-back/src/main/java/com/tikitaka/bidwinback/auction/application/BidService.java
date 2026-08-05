@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
@@ -8,6 +9,7 @@ import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
@@ -31,6 +33,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PHASE_CHANG
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
@@ -40,9 +43,12 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALRE
 public class BidService {
 
     private static final long BID_UNIT = 1_000L;
+    private static final long DEPOSIT_RATE_NUMERATOR = 3L;
+    private static final long DEPOSIT_RATE_DENOMINATOR = 10L;
 
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
+    private final AuctionDepositRepository auctionDepositRepository;
     private final BidRepository bidRepository;
     private final SealedBidRepository sealedBidRepository;
 
@@ -66,16 +72,47 @@ public class BidService {
             return rejectBid(memberId, auctionId, price, bidType);
         }
 
+        Auction auction = auctionRepository.getReferenceById(auctionId);
+        Member bidder = memberRepository.getReferenceById(memberId);
+        reserveDepositForFirstBid(memberId, auctionId, auction, bidder);
+
         return switch (bidType) {
-            case OPEN -> saveOpenBid(memberId, auctionId, price);
-            case SEALED -> saveSealedBid(memberId, auctionId, price);
+            case OPEN -> saveOpenBid(auction, bidder, price);
+            case SEALED -> saveSealedBid(auction, bidder, price);
         };
     }
 
-    private BidResult saveOpenBid(Long memberId, Long auctionId, long price) {
-        // 인증 필터가 검증한 회원은 추가 조회 없이 프록시 참조로 FK만 연결한다.
-        Auction auction = auctionRepository.getReferenceById(auctionId);
-        Member bidder = memberRepository.getReferenceById(memberId);
+    private void reserveDepositForFirstBid(
+            Long memberId,
+            Long auctionId,
+            Auction auction,
+            Member bidder
+    ) {
+        if (auctionDepositRepository.existsByMemberIdAndAuctionId(memberId, auctionId)) {
+            return;
+        }
+
+        // 시작가는 천원 단위이므로 나눗셈 후 곱해도 30%가 정확하며 곱셈 오버플로도 피한다.
+        long depositAmount = Math.multiplyExact(
+                auction.getStartPrice() / DEPOSIT_RATE_DENOMINATOR,
+                DEPOSIT_RATE_NUMERATOR
+        );
+        int lockedPoints = memberRepository.movePointToLockedIfEnough(
+                memberId,
+                depositAmount
+        );
+        if (lockedPoints != 1) {
+            throw new BidException(INSUFFICIENT_DEPOSIT);
+        }
+
+        auctionDepositRepository.save(AuctionDeposit.builder()
+                .member(bidder)
+                .auction(auction)
+                .reservedAmount(depositAmount)
+                .build());
+    }
+
+    private BidResult saveOpenBid(Auction auction, Member bidder, long price) {
         Bid bid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(bidder)
@@ -86,10 +123,7 @@ public class BidService {
         return BidResult.from(bid);
     }
 
-    private BidResult saveSealedBid(Long memberId, Long auctionId, long price) {
-        Auction auction = auctionRepository.getReferenceById(auctionId);
-        Member bidder = memberRepository.getReferenceById(memberId);
-
+    private BidResult saveSealedBid(Auction auction, Member bidder, long price) {
         try {
             SealedBid sealedBid = sealedBidRepository.saveAndFlush(
                     SealedBid.builder()
