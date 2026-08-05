@@ -116,6 +116,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void 세션_확인_컨트롤러는_성공_응답을_반환한다() {
+        // given
+        AuthController controller = new AuthController(mock(AuthService.class));
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result = controller.session();
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> assertTrue(result.getBody().success())
+        );
+    }
+
+    @Test
     void 이메일_인증에_성공하면_200을_응답한다() {
         AuthService authService = mock(AuthService.class);
         EmailVerificationRequest request =

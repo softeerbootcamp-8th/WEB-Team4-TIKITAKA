@@ -102,6 +102,11 @@ public enum ErrorCode {
             "MEMBER_403_1",
             "해당 리소스에 접근할 권한이 없습니다."
     ),
+    MEMBER_NOT_ACTIVE(
+            HttpStatus.FORBIDDEN,
+            "MEMBER_403_2",
+            "활성 상태의 회원만 구매할 수 있습니다."
+    ),
 
     // Auction
     AUCTION_NOT_FOUND(
@@ -149,6 +154,11 @@ public enum ErrorCode {
             "AUCTION_400_7",
             "직거래를 선택한 경우 거래 희망 위치를 입력해야 합니다."
     ),
+    INVALID_PRICE_UNIT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_8",
+            "가격은 1,000원 단위로 입력해야 합니다."
+    ),
     AUCTION_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "AUCTION_403_1",
@@ -176,7 +186,7 @@ public enum ErrorCode {
     ),
     INVALID_SORT(
             HttpStatus.BAD_REQUEST,
-            "AUCTION_400_8",
+            "AUCTION_400_9",
             "지원하지 않는 정렬 기준입니다."
     ),
 
@@ -185,6 +195,11 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST,
             "UPLOAD_400_1",
             "지원하지 않는 이미지 형식입니다."
+    ),
+    INVALID_IMAGE_REFERENCE(
+            HttpStatus.BAD_REQUEST,
+            "UPLOAD_400_2",
+            "존재하지 않거나 본인이 업로드하지 않은 이미지입니다."
     ),
 
     // Bid
@@ -208,6 +223,11 @@ public enum ErrorCode {
             "BID_400_1",
             "즉시구매가가 설정되지 않은 경매입니다."
     ),
+    NOT_UP_AUCTION(
+            HttpStatus.BAD_REQUEST,
+            "BID_400_2",
+            "상향 경매만 입찰할 수 있습니다."
+    ),
     BUY_NOW_PRICE_CHANGED(
             HttpStatus.CONFLICT,
             "BID_409_1",
@@ -217,6 +237,21 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "BID_409_2",
             "다른 사용자가 먼저 구매를 확정했습니다."
+    ),
+    SELF_PURCHASE_NOT_ALLOWED(
+            HttpStatus.FORBIDDEN,
+            "BID_403_2",
+            "본인이 등록한 경매는 구매할 수 없습니다."
+    ),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "BID_409_3",
+            "멱등 키를 다른 구매 요청에 재사용할 수 없습니다."
+    ),
+    CONCURRENT_BID_CONFLICT(
+            HttpStatus.CONFLICT,
+            "BID_409_4",
+            "동시 입찰 처리에 실패했습니다. 최신 가격을 확인한 뒤 다시 시도해주세요."
     ),
 
     // Trade / settlement

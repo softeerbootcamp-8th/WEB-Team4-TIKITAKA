@@ -28,6 +28,7 @@ public class DownAuction extends Auction {
     private long dropPrice;
 
     @Column(name = "price_drop_interval", nullable = false)
+    // 하락 주기의 저장 단위는 분이다.
     private long priceDropInterval;
 
     @Builder

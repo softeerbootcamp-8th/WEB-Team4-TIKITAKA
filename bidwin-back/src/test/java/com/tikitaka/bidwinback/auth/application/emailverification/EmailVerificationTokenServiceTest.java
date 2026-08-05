@@ -5,8 +5,11 @@ import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.EmailVerificationToken;
 import com.tikitaka.bidwinback.auth.domain.repository.EmailVerificationTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.MailRateLimitProperties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
+import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,18 +19,21 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +41,9 @@ class EmailVerificationTokenServiceTest {
 
     @Mock
     private EmailVerificationTokenRepository emailVerificationTokenRepository;
+
+    @Mock
+    private MemberRepository memberRepository;
 
     @Mock
     private TokenGenerator tokenGenerator;
@@ -51,8 +60,14 @@ class EmailVerificationTokenServiceTest {
     void setUp() {
         emailVerificationTokenService = new EmailVerificationTokenService(
                 emailVerificationTokenRepository,
+                memberRepository,
                 tokenGenerator,
-                tokenHasher
+                tokenHasher,
+                new MailRateLimitProperties(
+                        Duration.ofMinutes(1),
+                        Duration.ofMinutes(15),
+                        5
+                )
         );
     }
 
@@ -61,10 +76,12 @@ class EmailVerificationTokenServiceTest {
         String rawToken = "raw-email-verification-token";
         String tokenHash = "hashed-email-verification-token";
         when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.PENDING);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
         when(tokenGenerator.generate()).thenReturn(rawToken);
         when(tokenHasher.hash(rawToken)).thenReturn(tokenHash);
 
-        String issuedToken = emailVerificationTokenService.issue(member);
+        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
 
         ArgumentCaptor<LocalDateTime> issuedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<EmailVerificationToken> tokenCaptor =
@@ -75,13 +92,45 @@ class EmailVerificationTokenServiceTest {
         inOrder.verify(emailVerificationTokenRepository).save(tokenCaptor.capture());
 
         EmailVerificationToken savedToken = tokenCaptor.getValue();
-        assertThat(issuedToken).isEqualTo(rawToken);
+        assertThat(issuedToken).contains(rawToken);
         assertThat(savedToken.getMember()).isSameAs(member);
         assertThat(savedToken.getTokenHash()).isEqualTo(tokenHash);
         assertThat(savedToken.getExpiresAt())
                 .isEqualTo(issuedAtCaptor.getValue().plusMinutes(15));
         assertThat(savedToken.getUsedAt()).isNull();
         assertThat(savedToken.getRevokedAt()).isNull();
+    }
+
+    @Test
+    void 쿨다운_중에는_이메일_인증_토큰을_발급하지_않는다() {
+        when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.PENDING);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+        when(emailVerificationTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(1L);
+
+        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
+
+        assertThat(issuedToken).isEmpty();
+        verifyNoInteractions(tokenGenerator, tokenHasher);
+        verify(emailVerificationTokenRepository, never())
+                .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void 윈도우_내_최대_횟수에_도달하면_이메일_인증_토큰을_발급하지_않는다() {
+        when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.PENDING);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+        when(emailVerificationTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(0L, 5L);
+
+        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
+
+        assertThat(issuedToken).isEmpty();
+        verifyNoInteractions(tokenGenerator, tokenHasher);
+        verify(emailVerificationTokenRepository, never())
+                .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
     }
 
     @Test

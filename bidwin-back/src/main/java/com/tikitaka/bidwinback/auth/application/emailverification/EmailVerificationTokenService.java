@@ -5,8 +5,11 @@ import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.EmailVerificationToken;
 import com.tikitaka.bidwinback.auth.domain.repository.EmailVerificationTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.MailRateLimitProperties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
+import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -14,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -22,25 +26,56 @@ public class EmailVerificationTokenService {
     private static final Duration TOKEN_VALIDITY = Duration.ofMinutes(15);
 
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final MemberRepository memberRepository;
     private final TokenGenerator tokenGenerator;
     private final TokenHasher tokenHasher;
+    private final MailRateLimitProperties mailRateLimitProperties;
 
     @Transactional
-    public String issue(Member member) {
+    public Optional<String> issue(Member member) {
+        Long memberId = member.getId();
+        Optional<Member> lockedMember = memberRepository.findByIdForUpdate(memberId);
+        if (lockedMember.isEmpty()
+                || lockedMember.get().getStatus() != MemberStatus.PENDING) {
+            return Optional.empty();
+        }
+
+        LocalDateTime issuedAt = LocalDateTime.now();
+        if (isRateLimited(memberId, issuedAt)) {
+            return Optional.empty();
+        }
+
         String rawToken = tokenGenerator.generate();
         String tokenHash = tokenHasher.hash(rawToken);
-        LocalDateTime issuedAt = LocalDateTime.now();
 
-        emailVerificationTokenRepository.revokeAllActiveByMemberId(member.getId(), issuedAt);
+        emailVerificationTokenRepository.revokeAllActiveByMemberId(memberId, issuedAt);
         emailVerificationTokenRepository.save(
                 EmailVerificationToken.issue(
-                        member,
+                        lockedMember.get(),
                         tokenHash,
                         issuedAt.plus(TOKEN_VALIDITY)
                 )
         );
 
-        return rawToken;
+        return Optional.of(rawToken);
+    }
+
+    private boolean isRateLimited(Long memberId, LocalDateTime issuedAt) {
+        Duration cooldown = mailRateLimitProperties.cooldown();
+        // 쿨다운 시간 내 발급 이력이 있으면 재발급을 제한한다.
+        if (!cooldown.isZero()
+                && emailVerificationTokenRepository.countIssuedSince(
+                        memberId,
+                        issuedAt.minus(cooldown)
+                ) > 0) {
+            return true;
+        }
+
+        // 제한 시간 내 최대 발급 횟수에 도달했는지 확인한다.
+        return emailVerificationTokenRepository.countIssuedSince(
+                memberId,
+                issuedAt.minus(mailRateLimitProperties.window())
+        ) >= mailRateLimitProperties.maxCount();
     }
 
     @Transactional

@@ -1,5 +1,6 @@
 import { Gavel, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
 
 const NAV_LINKS = [
   { label: '진행중 경매', to: '/auctions' },
@@ -7,6 +8,8 @@ const NAV_LINKS = [
 ]
 
 function TopNav() {
+  const { isAuthenticated } = useAuth()
+
   return (
     <header className="sticky top-0 z-40 h-16 border-b border-hairline bg-canvas">
       <div className="mx-auto flex h-full max-w-[1200px] items-center gap-xl px-lg">
@@ -34,10 +37,10 @@ function TopNav() {
             <Search size={18} />
           </button>
           <Link
-            to="/login"
+            to={isAuthenticated === true ? '/mypage' : '/login'}
             className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
           >
-            로그인
+            {isAuthenticated === true ? '마이페이지' : '로그인'}
           </Link>
         </div>
       </div>

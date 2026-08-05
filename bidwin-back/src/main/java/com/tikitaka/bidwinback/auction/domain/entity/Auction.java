@@ -8,6 +8,8 @@ import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
 
 import java.time.LocalDateTime;
 
@@ -46,8 +48,24 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "start_price", nullable = false)
     private long startPrice;
 
+    // 스키마 변경 전에 생성된 경매는 null일 수 있어 조회 시 Bid 최고가로 보정한다.
+    @Column(name = "current_price")
+    private Long currentPrice;
+
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
+
+    @CreationTimestamp(source = SourceType.DB)
+    @Column(
+            name = "started_at",
+            nullable = false,
+            updatable = false,
+            columnDefinition = "datetime(6) default current_timestamp(6)"
+    )
+    private LocalDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_type", nullable = false)
@@ -73,8 +91,17 @@ public abstract class Auction extends BaseTimeEntity {
         this.status = status == null ? AuctionStatus.OPEN : status;
         this.category = category;
         this.startPrice = startPrice;
+        this.currentPrice = startPrice;
         this.endedAt = endedAt;
         this.tradeType = tradeType;
         this.contact = contact;
+    }
+
+    public long getCurrentPrice() {
+        return currentPrice == null ? startPrice : currentPrice;
+    }
+
+    public boolean hasCurrentPrice() {
+        return currentPrice != null;
     }
 }

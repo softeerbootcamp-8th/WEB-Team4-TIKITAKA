@@ -13,7 +13,6 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.dto.BidSummary;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -84,8 +83,9 @@ class AuctionDetailServiceTest {
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of(image));
         when(imageUrlResolver.resolve("auction-images/product.jpg"))
                 .thenReturn("https://cdn.example.com/auction-images/product.jpg");
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(240_000L, 3L));
+        when(auction.hasCurrentPrice()).thenReturn(true);
+        when(auction.getCurrentPrice()).thenReturn(240_000L);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(3L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -115,8 +115,8 @@ class AuctionDetailServiceTest {
         );
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(null, 0L));
+        when(bidRepository.findHighestPriceByAuctionId(1L)).thenReturn(null);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -139,8 +139,7 @@ class AuctionDetailServiceTest {
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
         when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
                 .thenReturn(Optional.of(300_000L));
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(280_000L, 5L));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(5L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);

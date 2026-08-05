@@ -52,7 +52,8 @@ public class AuthExceptionFilter extends OncePerRequestFilter {
         }
 
         HttpStatus status = errorCode.getStatus();
-        response.reset();
+        // CORS처럼 앞선 필터가 추가한 응답 헤더는 유지하고 미완성 본문만 비운다.
+        response.resetBuffer();
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());

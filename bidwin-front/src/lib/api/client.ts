@@ -86,5 +86,9 @@ function postJson<TData, TBody>(path: string, body: TBody): Promise<ApiResult<TD
   })
 }
 
-export { postJson }
+function getJson<TData>(path: string): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, { method: 'GET' })
+}
+
+export { getJson, postJson }
 export type { ApiFailure, ApiResult, ApiSuccess }

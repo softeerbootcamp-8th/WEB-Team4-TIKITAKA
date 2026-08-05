@@ -25,6 +25,12 @@ export const AUCTION_TYPE_OPTIONS = [
   { value: 'UP', label: '경쟁 입찰 (가격 상승)' },
 ] as const
 
+/* 백엔드 TradeType enum과 1:1 대응. 직거래를 선택해도 위치 입력은 받지 않고, 낙찰 후 당사자끼리 협의한다. */
+export const TRADE_TYPE_OPTIONS = [
+  { value: 'DELIVERY', label: '택배' },
+  { value: 'DIRECT', label: '직거래' },
+] as const
+
 export const AUCTION_DURATION_OPTIONS = [
   { value: '30', label: '30분' },
   { value: '60', label: '1시간' },
@@ -46,6 +52,7 @@ export const TEXT = {
   contactPlaceholder: '거래 시 연락받을 번호를 입력하세요',
   durationLabel: '경매 진행 시간',
   auctionTypeLabel: '경매 방식',
+  tradeTypeLabel: '거래 방식',
 
   imagesLabel: '상품 이미지',
   imagesHelper: `최대 ${MAX_IMAGE_COUNT}장, 장당 10MB 이하 (JPEG/PNG/WEBP)`,
@@ -74,8 +81,11 @@ export const ERROR_MESSAGE = {
   titleTooLong: `제목은 ${TITLE_MAX_LENGTH}자 이하로 입력해주세요.`,
   contactTooLong: `연락처는 ${CONTACT_MAX_LENGTH}자 이하로 입력해주세요.`,
   invalidStartPrice: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  invalidStartPriceUnit: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 단위로 입력해주세요.`,
   invalidBuyNowPrice: `즉시 구매가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  buyNowPriceMustExceedStartPrice: '즉시 구매가는 시작가보다 높아야 해요.',
   invalidMinimumPrice: `최저가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  minimumPriceMustBeLowerThanStartPrice: '최저가는 시작가보다 낮아야 해요.',
   invalidDropPrice: '인하 금액은 0보다 큰 숫자로 입력해주세요.',
   invalidPriceDropInterval: '인하 주기는 0보다 큰 숫자(분)로 입력해주세요.',
   noImages: '상품 이미지를 1장 이상 올려주세요.',

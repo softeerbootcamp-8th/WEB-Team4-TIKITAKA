@@ -62,11 +62,17 @@ public class AuthService {
     }
 
     public void sendVerificationEmail(EmailVerificationSendRequest request) {
-        Member member = memberService.findByEmail(request.email())
-                .orElseThrow(() -> new AuthException(ErrorCode.MEMBER_NOT_FOUND));
-
-        String rawToken = emailVerificationTokenService.issue(member);
-        tokenMailSender.send(MailPurpose.EMAIL_VERIFICATION, member.getEmail(), rawToken);
+        // 회원 존재 여부가 응답으로 노출되지 않도록 미가입·PENDING이 아닌 회원은 동일하게 처리한다.
+        memberService.findByEmail(request.email())
+                .filter(member -> member.getStatus() == MemberStatus.PENDING)
+                .ifPresent(member -> {
+                    emailVerificationTokenService.issue(member)
+                            .ifPresent(rawToken -> tokenMailSender.send(
+                                    MailPurpose.EMAIL_VERIFICATION,
+                                    member.getEmail(),
+                                    rawToken
+                            ));
+                });
     }
 
     public void verifyEmail(EmailVerificationRequest request) {
@@ -95,8 +101,12 @@ public class AuthService {
         memberService.findByEmail(request.email())
                 .filter(member -> member.getStatus() == MemberStatus.ACTIVE)
                 .ifPresent(member -> {
-                    String rawToken = passwordResetTokenService.issue(member);
-                    tokenMailSender.send(MailPurpose.PASSWORD_RESET, member.getEmail(), rawToken);
+                    passwordResetTokenService.issue(member)
+                            .ifPresent(rawToken -> tokenMailSender.send(
+                                    MailPurpose.PASSWORD_RESET,
+                                    member.getEmail(),
+                                    rawToken
+                            ));
                 });
     }
 

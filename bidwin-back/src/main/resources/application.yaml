@@ -36,6 +36,12 @@ server:
         path: /
 
 app:
+  mail:
+    rate-limit:
+      cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
+      window: ${MAIL_RATE_LIMIT_WINDOW:15m}
+      max-count: ${MAIL_RATE_LIMIT_MAX_COUNT:5}
+
   password-reset:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
   email-verification:
