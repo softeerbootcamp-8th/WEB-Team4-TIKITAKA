@@ -67,6 +67,13 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /**
+     * 화면에 노출되는 경매 상태가 바뀔 때 같은 트랜잭션에서 증가한다.
+     * 클라이언트는 이 값으로 중복·역순 SSE를 버린다.
+     */
+    @Column(nullable = false)
+    private long revision;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_type", nullable = false)
     private TradeType tradeType;
