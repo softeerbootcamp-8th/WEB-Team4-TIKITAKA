@@ -27,7 +27,8 @@ public class SseHeartbeatScheduler {
         }
 
         try {
-            long serverTime = stateService.getDatabaseTimeMillis();
+            //TODO long serverTime = stateService.getDatabaseTimeMillis();
+            long serverTime = 1;
             sseHub.broadcast(new SseMessage<>(
                     HEARTBEAT_CHANNEL,
                     "heartbeat",
