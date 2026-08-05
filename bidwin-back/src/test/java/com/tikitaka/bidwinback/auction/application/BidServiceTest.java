@@ -3,13 +3,16 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
+import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -30,11 +34,13 @@ import java.util.Optional;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_ENDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONGOING;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PHASE_CHANGED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -68,6 +74,9 @@ class BidServiceTest {
     private BidRepository bidRepository;
 
     @Mock
+    private SealedBidRepository sealedBidRepository;
+
+    @Mock
     private Member bidder;
 
     @Mock
@@ -82,6 +91,9 @@ class BidServiceTest {
     @Mock
     private Bid persistedBid;
 
+    @Mock
+    private SealedBid persistedSealedBid;
+
     @InjectMocks
     private BidService bidService;
 
@@ -91,7 +103,7 @@ class BidServiceTest {
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
+        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
@@ -110,6 +122,114 @@ class BidServiceTest {
         );
     }
 
+    @Test
+    void 밀봉_구간이면_현재가를_갱신하지_않고_가격을_숨긴_밀봉입찰을_저장한다() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        )).thenReturn(1);
+        when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
+        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
+                .thenReturn(persistedSealedBid);
+        when(persistedSealedBid.getId()).thenReturn(BID_ID);
+        when(persistedSealedBid.getAuction()).thenReturn(auction);
+        when(auction.getId()).thenReturn(AUCTION_ID);
+        when(persistedSealedBid.getBidder()).thenReturn(bidder);
+        when(bidder.getId()).thenReturn(MEMBER_ID);
+        when(persistedSealedBid.getSubmittedAt()).thenReturn(BID_AT);
+
+        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED);
+
+        assertAll(
+                () -> assertThat(result.bidId()).isEqualTo(BID_ID),
+                () -> assertThat(result.price()).isNull(),
+                () -> assertThat(result.status()).isEqualTo(BidStatus.SEALED),
+                () -> assertThat(result.bidAt()).isEqualTo(BID_AT)
+        );
+        verify(auctionRepository, never()).updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        );
+        verifyNoInteractions(bidRepository);
+    }
+
+    @Test
+    void 같은_회원의_밀봉입찰이_이미_있으면_거절한다() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        )).thenReturn(1);
+        when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
+        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate sealed bid"));
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(SEALED_BID_ALREADY_SUBMITTED);
+        verifyNoInteractions(bidRepository);
+    }
+
+    @Test
+    void 일반입찰_요청_중_밀봉_구간으로_바뀌면_자동_전환하지_않고_거절한다() {
+        stubFailedUpdate(auction);
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusMinutes(2));
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PHASE_CHANGED);
+        verify(auctionRepository, never()).tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        );
+        verifyNoInteractions(memberRepository, bidRepository, sealedBidRepository);
+    }
+
+    @Test
+    void 밀봉입찰을_요청했지만_아직_일반_구간이면_거절한다() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        )).thenReturn(0);
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusDays(1));
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PHASE_CHANGED);
+        verify(auctionRepository, never()).updateCurrentPriceForBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        );
+        verifyNoInteractions(memberRepository, bidRepository, sealedBidRepository);
+    }
+
     @ParameterizedTest
     @ValueSource(longs = {0L, -1_000L, 232_500L})
     void 양수가_아니거나_천원_단위가_아닌_가격은_Repository_호출_없이_거절한다(
@@ -117,7 +237,7 @@ class BidServiceTest {
     ) {
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, invalidPrice)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, invalidPrice, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
@@ -136,7 +256,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
@@ -156,7 +276,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
@@ -169,7 +289,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
@@ -183,7 +303,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_ONGOING);
@@ -199,7 +319,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_ALREADY_ENDED);
@@ -216,7 +336,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(SELF_BID_NOT_ALLOWED);
@@ -242,7 +362,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
@@ -261,7 +381,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -280,7 +400,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -299,7 +419,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -312,7 +432,7 @@ class BidServiceTest {
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        bidService.place(MEMBER_ID, AUCTION_ID, PRICE);
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         InOrder order = inOrder(auctionRepository, memberRepository, bidRepository);
         order.verify(auctionRepository).updateCurrentPriceForBid(

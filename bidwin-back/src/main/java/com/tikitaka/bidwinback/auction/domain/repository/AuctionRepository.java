@@ -27,7 +27,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND auction_type = 'UP'
               AND status IN ('OPEN', 'BID_ONGOING')
               AND completed_at IS NULL
-              AND ended_at > SYSDATE(6)
+              AND ended_at > DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
               AND seller_id <> :bidderId
               AND COALESCE(
                     current_price,
@@ -40,6 +40,37 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               ) <= :price - :bidUnit
             """, nativeQuery = true)
     int updateCurrentPriceForBid(
+            @Param("auctionId") Long auctionId,
+            @Param("bidderId") Long bidderId,
+            @Param("price") long price,
+            @Param("bidUnit") long bidUnit
+    );
+
+    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 경매 상태만 변경한다.
+    @Modifying
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
+    @Query(value = """
+            UPDATE auction
+            SET status = 'BID_ONGOING',
+                last_modified_at = SYSDATE(6)
+            WHERE id = :auctionId
+              AND auction_type = 'UP'
+              AND status IN ('OPEN', 'BID_ONGOING')
+              AND completed_at IS NULL
+              AND ended_at > SYSDATE(6)
+              AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
+              AND seller_id <> :bidderId
+              AND COALESCE(
+                    current_price,
+                    (
+                        SELECT MAX(bid.price)
+                        FROM bid
+                        WHERE bid.auction_id = auction.id
+                    ),
+                    start_price
+              ) <= :price - :bidUnit
+            """, nativeQuery = true)
+    int tryUpdateAuctionForSealedBid(
             @Param("auctionId") Long auctionId,
             @Param("bidderId") Long bidderId,
             @Param("price") long price,
