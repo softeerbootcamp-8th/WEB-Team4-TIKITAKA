@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.presentation;
 import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.BidResult;
 import com.tikitaka.bidwinback.auction.application.BidService;
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
@@ -29,6 +30,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PHASE_CHANGED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
@@ -49,9 +51,16 @@ class AuctionBidControllerTest {
     private static final long PRICE = 232_000L;
     private static final String ENDPOINT =
             "/api/v1/auctions/up/" + AUCTION_ID + "/bids";
-    private static final String VALID_REQUEST = """
+    private static final String VALID_OPEN_REQUEST = """
             {
-              "price": 232000
+              "price": 232000,
+              "bidType": "OPEN"
+            }
+            """;
+    private static final String VALID_SEALED_REQUEST = """
+            {
+              "price": 232000,
+              "bidType": "SEALED"
             }
             """;
 
@@ -97,13 +106,14 @@ class AuctionBidControllerTest {
                 BidStatus.UP,
                 bidAt
         );
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE)).thenReturn(result);
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
+                .thenReturn(result);
 
         // when & then
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST))
+                        .content(VALID_OPEN_REQUEST))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.bidId").value(BID_ID))
@@ -113,7 +123,31 @@ class AuctionBidControllerTest {
                 .andExpect(jsonPath("$.data.status").value("UP"))
                 .andExpect(jsonPath("$.data.bidAt").value(bidAt.toString()));
 
-        verify(bidService).place(MEMBER_ID, AUCTION_ID, PRICE);
+        verify(bidService).place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
+    }
+
+    @Test
+    void 밀봉입찰_응답에는_제출_가격이_포함되지_않는다() throws Exception {
+        LocalDateTime bidAt = LocalDateTime.of(2026, 7, 30, 12, 34, 56);
+        BidResult result = new BidResult(
+                BID_ID,
+                AUCTION_ID,
+                MEMBER_ID,
+                null,
+                BidStatus.SEALED,
+                bidAt
+        );
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED))
+                .thenReturn(result);
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_SEALED_REQUEST))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("SEALED"))
+                .andExpect(jsonPath("$.data.bidAt").value(bidAt.toString()))
+                .andExpect(jsonPath("$.data.price").doesNotExist());
     }
 
     @Test
@@ -123,7 +157,8 @@ class AuctionBidControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "price": 0
+                                  "price": 0,
+                                  "bidType": "OPEN"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -137,7 +172,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_천원_단위가_아니면_400을_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L, BidType.OPEN))
                 .thenThrow(new BidException(INVALID_BID_UNIT));
 
         mockMvc.perform(post(ENDPOINT)
@@ -145,7 +180,8 @@ class AuctionBidControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "price": 232500
+                                  "price": 232500,
+                                  "bidType": "OPEN"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -155,13 +191,13 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_현재가보다_천원_이상_높지_않으면_422를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenThrow(new BidException(BID_PRICE_TOO_LOW));
 
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST))
+                        .content(VALID_OPEN_REQUEST))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("BID_422_1"));
@@ -169,23 +205,55 @@ class AuctionBidControllerTest {
 
     @Test
     void 동시_입찰_락_획득에_실패하면_409를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenThrow(new BidException(CONCURRENT_BID_CONFLICT));
 
         mockMvc.perform(post(ENDPOINT)
                         .session(authenticatedSession())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST))
+                        .content(VALID_OPEN_REQUEST))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("BID_409_4"));
     }
 
     @Test
+    void 요청한_입찰_단계와_현재_단계가_다르면_409를_응답한다() throws Exception {
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
+                .thenThrow(new BidException(BID_PHASE_CHANGED));
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_OPEN_REQUEST))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("BID_409_6"));
+    }
+
+    @Test
+    void 입찰_단계가_없으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 232000
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("입찰 유형을 입력해주세요."));
+
+        verifyNoInteractions(bidService);
+    }
+
+    @Test
     void 로그인_세션이_없으면_401을_응답한다() throws Exception {
         mockMvc.perform(post(ENDPOINT)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_REQUEST))
+                        .content(VALID_OPEN_REQUEST))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("MEMBER_401_2"));

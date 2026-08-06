@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.presentation;
 
 import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
+import com.tikitaka.bidwinback.auction.application.AuctionListService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -37,12 +38,15 @@ class AuctionControllerTest {
     @Mock
     private AuctionCreateService auctionCreateService;
 
+    @Mock
+    private AuctionListService auctionListService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuctionController(auctionDetailService, auctionCreateService))
+                .standaloneSetup(new AuctionController(auctionDetailService, auctionCreateService, auctionListService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

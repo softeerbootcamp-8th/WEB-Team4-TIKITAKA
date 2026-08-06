@@ -1,10 +1,13 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.request;
 
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 public record BidRequest(
-        // 호가 단위·현재가 비교 같은 정합성 검증은 후속 작업에서 붙인다.
         @Positive(message = "입찰가는 0보다 커야 합니다.")
-        long price
+        long price,
+        @NotNull(message = "입찰 유형을 입력해주세요.")
+        BidType bidType
 ) {
 }
