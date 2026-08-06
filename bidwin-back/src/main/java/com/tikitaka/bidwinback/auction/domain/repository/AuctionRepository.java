@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
@@ -141,4 +142,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     // 하락 경매의 계산 기준이 애플리케이션 서버마다 달라지지 않도록 DB 시각을 사용한다.
     @Query(value = "select current_timestamp(6)", nativeQuery = true)
     LocalDateTime currentDatabaseTime();
+
+    // 마이페이지 판매 물품: 내가 올린 경매를 최신순으로. 유형(UP/DOWN)은 서비스에서 구체 타입으로 매핑한다.
+    List<Auction> findTop3BySellerIdOrderByIdDesc(long sellerId);
 }
