@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
+import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -28,6 +29,9 @@ class BidRepositoryIntegrationTest {
 
     @Autowired
     private BidRepository bidRepository;
+
+    @Autowired
+    private SealedBidRepository sealedBidRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -142,6 +146,66 @@ class BidRepositoryIntegrationTest {
 
         assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId()))
                 .isEqualTo(103_000L);
+    }
+
+    @Test
+    void 밀봉입찰의_전체_건수와_최신_10건을_조회한다() {
+        String suffix = UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 8);
+        Member seller = persistMember("sealed-seller-" + suffix, "판매" + suffix);
+        UpAuction auction = UpAuction.builder()
+                .seller(seller)
+                .title("밀봉 입찰 내역 통합 테스트")
+                .description("밀봉 입찰 Repository 쿼리 검증")
+                .status(AuctionStatus.BID_ONGOING)
+                .category(AuctionCategory.HOUSEHOLD)
+                .startPrice(100_000L)
+                .endedAt(LocalDateTime.now().plusMinutes(4))
+                .tradeType(TradeType.DELIVERY)
+                .contact("01012345678")
+                .buyNowPrice(300_000L)
+                .build();
+        entityManager.persist(auction);
+
+        List<SealedBid> sealedBids = new ArrayList<>();
+        for (int index = 0; index < 12; index++) {
+            Member bidder = persistMember(
+                    "sealed-bidder-" + index + "-" + suffix,
+                    "입찰" + index
+            );
+            SealedBid sealedBid = SealedBid.builder()
+                    .auction(auction)
+                    .bidder(bidder)
+                    .price(101_000L + index * 1_000L)
+                    .build();
+            entityManager.persist(sealedBid);
+            sealedBids.add(sealedBid);
+        }
+        entityManager.flush();
+
+        LocalDateTime submittedAt = LocalDateTime.of(2026, 8, 3, 12, 0);
+        entityManager.createNativeQuery("""
+                        update sealed_bid
+                        set submitted_at = :submittedAt
+                        where auction_id = :auctionId
+                        """)
+                .setParameter("submittedAt", submittedAt)
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        List<Long> expectedIds = new ArrayList<>();
+        for (int index = sealedBids.size() - 1; index >= 2; index--) {
+            expectedIds.add(sealedBids.get(index).getId());
+        }
+
+        assertThat(sealedBidRepository.countByAuctionId(auction.getId())).isEqualTo(12L);
+        assertThat(sealedBidRepository.findHistoryByAuctionId(auction.getId()))
+                .hasSize(10)
+                .extracting(BidHistoryRow::id)
+                .containsExactlyElementsOf(expectedIds);
     }
 
     private Member persistMember(String identifier, String nickname) {
