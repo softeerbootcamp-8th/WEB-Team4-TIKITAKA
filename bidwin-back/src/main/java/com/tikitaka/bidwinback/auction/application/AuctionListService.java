@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +43,7 @@ public class AuctionListService {
     private final BidRepository bidRepository;
     private final ImageRepository imageRepository;
     private final ImageUrlResolver imageUrlResolver;
+    private final BuyNowPriceCalculator buyNowPriceCalculator;
 
     @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
@@ -138,22 +138,12 @@ public class AuctionListService {
             return highestPrice != null ? highestPrice : upAuction.getStartPrice();
         }
         if (auction instanceof DownAuction downAuction) {
-            return calculateDownAuctionPrice(downAuction, asOf);
+            // 구매 확정가와 같은 공식·같은 기준 시각(startedAt)을 쓰도록 BuyNowPriceCalculator를 그대로
+            // 재사용한다. 직접 계산했을 땐 createdAt(앱 서버 시각)을 썼는데, 구매 확정 로직은
+            // startedAt(DB 시각)을 쓰고 있어 하락 주기 경계에서 목록가와 구매가가 어긋날 수 있었다.
+            return buyNowPriceCalculator.calculate(downAuction, asOf);
         }
         throw new IllegalStateException("지원하지 않는 경매 유형입니다: " + auction.getClass());
-    }
-
-    // BuyNowPriceCalculator의 하향 경매 계산과 동일한 공식이다(구매 확정용과 목록 정렬용, 용도만 다르다).
-    private long calculateDownAuctionPrice(DownAuction auction, LocalDateTime asOf) {
-        long elapsedMinutes = Math.max(0, ChronoUnit.MINUTES.between(auction.getCreatedAt(), asOf));
-        long elapsedDrops = elapsedMinutes / auction.getPriceDropInterval();
-        long priceRange = auction.getStartPrice() - auction.getMinimumPrice();
-        long dropsBeforeFloor = priceRange / auction.getDropPrice();
-
-        if (elapsedDrops > dropsBeforeFloor) {
-            return auction.getMinimumPrice();
-        }
-        return auction.getStartPrice() - elapsedDrops * auction.getDropPrice();
     }
 
     private Comparator<AuctionSummaryResponse> comparatorFor(AuctionSort sort) {

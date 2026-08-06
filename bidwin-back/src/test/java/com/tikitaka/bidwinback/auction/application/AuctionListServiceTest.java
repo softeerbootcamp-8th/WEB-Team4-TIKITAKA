@@ -50,6 +50,9 @@ class AuctionListServiceTest {
     @Mock
     private ImageUrlResolver imageUrlResolver;
 
+    @Mock
+    private BuyNowPriceCalculator buyNowPriceCalculator;
+
     private AuctionListService auctionListService;
 
     @BeforeEach
@@ -58,7 +61,8 @@ class AuctionListServiceTest {
                 auctionRepository,
                 bidRepository,
                 imageRepository,
-                imageUrlResolver
+                imageUrlResolver,
+                buyNowPriceCalculator
         );
         lenient().when(imageRepository.findFirstImageByAuctionIds(anyList())).thenReturn(List.of());
     }
@@ -108,34 +112,23 @@ class AuctionListServiceTest {
     }
 
     @Test
-    void 하향_경매는_경과한_인하_횟수만큼_시작가에서_내려간_가격을_현재가로_쓴다() {
-        // 12:00 시작, 인하 주기 10분, 인하 금액 10,000원 → asOf(12:35)까지 3번 인하(30분/10분=3)
-        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
+    void 하향_경매_현재가는_BuyNowPriceCalculator가_계산한_값을_그대로_쓴다() {
+        // 하락 주기 공식 자체(경과 횟수 계산, 최저가 하한)는 BuyNowPriceCalculatorTest가 검증한다.
+        // 여기서는 목록 조회가 그 계산기에 startedAt 기준 asOf를 그대로 넘기고,
+        // 반환값을 currentPrice로 그대로 쓰는지만 확인한다.
+        DownAuction auction = mock(DownAuction.class);
+        stubCommon(auction, 1L, 200_000L);
+        when(auction.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 1, 12, 35);
-        DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
         when(auctionRepository.findAllForList(null, asOf)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
+        when(buyNowPriceCalculator.calculate(auction, asOf)).thenReturn(170_000L);
 
         AuctionListResponse response = auctionListService.getList(
                 query(null, AuctionSort.LATEST, null, 1, 16, asOf)
         );
 
         assertThat(response.items().get(0).currentPrice()).isEqualTo(170_000L);
-    }
-
-    @Test
-    void 하향_경매_현재가는_최저가_밑으로_내려가지_않는다() {
-        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
-        LocalDateTime asOf = LocalDateTime.of(2026, 8, 2, 12, 0); // 아주 오랜 시간이 지남
-        DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
-        when(auctionRepository.findAllForList(null, asOf)).thenReturn(List.of(auction));
-        when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
-
-        AuctionListResponse response = auctionListService.getList(
-                query(null, AuctionSort.LATEST, null, 1, 16, asOf)
-        );
-
-        assertThat(response.items().get(0).currentPrice()).isEqualTo(150_000L);
     }
 
     @Test
@@ -222,23 +215,6 @@ class AuctionListServiceTest {
         UpAuction auction = mock(UpAuction.class);
         stubCommon(auction, id, startPrice);
         when(auction.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
-        return auction;
-    }
-
-    private DownAuction downAuction(
-            long id,
-            long startPrice,
-            long minimumPrice,
-            long dropPrice,
-            long priceDropInterval,
-            LocalDateTime createdAt
-    ) {
-        DownAuction auction = mock(DownAuction.class);
-        stubCommon(auction, id, startPrice);
-        when(auction.getCreatedAt()).thenReturn(createdAt);
-        when(auction.getMinimumPrice()).thenReturn(minimumPrice);
-        when(auction.getDropPrice()).thenReturn(dropPrice);
-        when(auction.getPriceDropInterval()).thenReturn(priceDropInterval);
         return auction;
     }
 
