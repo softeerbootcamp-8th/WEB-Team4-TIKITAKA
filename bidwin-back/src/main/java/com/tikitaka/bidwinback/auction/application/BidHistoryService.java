@@ -1,10 +1,10 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
@@ -15,39 +15,70 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
 public class BidHistoryService {
 
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int BID_HISTORY_LIMIT = 10;
+    private static final Comparator<BidHistoryRow> RECENT_BID_FIRST = Comparator
+            .comparing(BidHistoryRow::biddedAt)
+            .reversed()
+            .thenComparing(BidHistoryRow::id, Comparator.reverseOrder());
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
+    private final SealedBidRepository sealedBidRepository;
 
     @Transactional(readOnly = true)
     public BidHistoryResponse getBidHistory(long auctionId, long memberId) {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(ErrorCode.AUCTION_NOT_FOUND));
-        boolean revealSealed = auction.isSealedBidRevealed();
 
-        long bidCount = bidRepository.countVisibleByAuctionId(
-                auctionId,
-                BidStatus.SEALED,
-                revealSealed
-        );
-        List<BidHistoryItemResponse> bidLog = bidRepository.findVisibleHistoryByAuctionId(
-                        auctionId,
-                        BidStatus.SEALED,
-                        revealSealed
-                )
+        long bidCount = bidRepository.countByAuctionId(auctionId);
+        List<BidHistoryRow> bidHistory = bidRepository.findHistoryByAuctionId(auctionId);
+        if (auction.isSealedBidRevealed()) {
+            bidCount += sealedBidRepository.countByAuctionId(auctionId);
+            bidHistory = mergeWithSealedBids(auctionId, bidHistory);
+        }
+
+        List<BidHistoryItemResponse> bidLog = bidHistory
                 .stream()
                 .map(bid -> toResponse(bid, memberId))
                 .toList();
 
         return new BidHistoryResponse(bidCount, bidLog);
+    }
+
+    private List<BidHistoryRow> mergeWithSealedBids(
+            long auctionId,
+            List<BidHistoryRow> openBids
+    ) {
+        Stream<BidHistoryRow> sealedBids = sealedBidRepository
+                .findHistoryByAuctionId(auctionId)
+                .stream()
+                .map(this::namespaceSealedBidId);
+
+        return Stream.concat(openBids.stream(), sealedBids)
+                .sorted(RECENT_BID_FIRST)
+                .limit(BID_HISTORY_LIMIT)
+                .toList();
+    }
+
+    // Bid와 SealedBid는 별도 PK 시퀀스를 사용하므로 응답 ID 충돌을 음수 영역으로 분리한다.
+    private BidHistoryRow namespaceSealedBidId(BidHistoryRow bid) {
+        return new BidHistoryRow(
+                -bid.id(),
+                bid.bidderId(),
+                bid.bidderNickname(),
+                bid.amount(),
+                bid.biddedAt()
+        );
     }
 
     private BidHistoryItemResponse toResponse(BidHistoryRow bid, long memberId) {

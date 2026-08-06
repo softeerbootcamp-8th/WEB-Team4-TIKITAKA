@@ -4,7 +4,9 @@ import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -40,6 +42,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class BidServiceIntegrationTest {
 
     private static final long START_PRICE = 100_000L;
+    private static final long DEPOSIT_AMOUNT = 30_000L;
+    private static final long INITIAL_POINT = 2_000_000L;
     private static final long FIRST_BID_PRICE = 101_000L;
     private static final long SECOND_BID_PRICE = 102_000L;
     private static final long MAX_UNIT_PRICE = Long.MAX_VALUE - Long.MAX_VALUE % 1_000L;
@@ -66,7 +70,11 @@ class BidServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             for (Long auctionId : auctionIds) {
                 executeDelete(entityManager,
+                        "DELETE FROM sealed_bid WHERE auction_id = :id", auctionId);
+                executeDelete(entityManager,
                         "DELETE FROM bid WHERE auction_id = :id", auctionId);
+                executeDelete(entityManager,
+                        "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
                         "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 executeDelete(entityManager,
@@ -78,6 +86,275 @@ class BidServiceIntegrationTest {
             }
             return null;
         });
+    }
+
+    @Test
+    void 일반입찰이_없으면_밀봉입찰은_시작가보다_천원_이상_높아야_한다() {
+        Fixture fixture = createFixture(1);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                START_PRICE,
+                BidType.SEALED
+        ));
+        BidResult result = bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(result.status()).isEqualTo(BidStatus.SEALED);
+        assertThat(result.price()).isNull();
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(FIRST_BID_PRICE);
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(
+                        START_PRICE,
+                        AuctionStatus.BID_ONGOING
+                ));
+        assertThat(findDepositSnapshots(fixture.auctionId()))
+                .containsExactly(new DepositSnapshot(DEPOSIT_AMOUNT, DepositStatus.HELD));
+        assertThat(findMemberPointSnapshot(fixture.bidderIds().getFirst()))
+                .isEqualTo(new MemberPointSnapshot(
+                        INITIAL_POINT - DEPOSIT_AMOUNT,
+                        DEPOSIT_AMOUNT
+                ));
+    }
+
+    @Test
+    void 일반입찰이_있으면_밀봉입찰은_일반_최고가보다_천원_이상_높아야_한다() {
+        Fixture fixture = createFixture(2);
+        Long openBidderId = fixture.bidderIds().get(0);
+        Long sealedBidderId = fixture.bidderIds().get(1);
+        bidService.place(
+                openBidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.UP
+        );
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                sealedBidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        ));
+        bidService.place(
+                sealedBidderId,
+                fixture.auctionId(),
+                SECOND_BID_PRICE,
+                BidType.SEALED
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(findBidPrices(fixture.auctionId()))
+                .containsExactly(FIRST_BID_PRICE);
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(SECOND_BID_PRICE);
+        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                .isEqualTo(FIRST_BID_PRICE);
+    }
+
+    @Test
+    void 기존_밀봉_최고가보다_낮은_밀봉입찰은_거절한다() {
+        Fixture fixture = createFixture(3);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+        bidService.place(
+                fixture.bidderIds().get(0),
+                fixture.auctionId(),
+                SECOND_BID_PRICE,
+                BidType.SEALED
+        );
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().get(1),
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        ));
+        bidService.place(
+                fixture.bidderIds().get(2),
+                fixture.auctionId(),
+                SECOND_BID_PRICE + 1_000L,
+                BidType.SEALED
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(SECOND_BID_PRICE, SECOND_BID_PRICE + 1_000L);
+        assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(2);
+    }
+
+    @Test
+    void 동일한_가격의_동시_밀봉입찰은_한_건만_성공한다() throws Exception {
+        Fixture fixture = createFixture(2);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Attempt> first = executor.submit(attemptAfterBarrier(
+                    barrier,
+                    fixture.bidderIds().get(0),
+                    fixture.auctionId(),
+                    FIRST_BID_PRICE,
+                    BidType.SEALED
+            ));
+            Future<Attempt> second = executor.submit(attemptAfterBarrier(
+                    barrier,
+                    fixture.bidderIds().get(1),
+                    fixture.auctionId(),
+                    FIRST_BID_PRICE,
+                    BidType.SEALED
+            ));
+
+            List<Attempt> attempts = List.of(
+                    first.get(10, TimeUnit.SECONDS),
+                    second.get(10, TimeUnit.SECONDS)
+            );
+
+            assertThat(attempts).filteredOn(Attempt::succeeded).hasSize(1);
+            assertThat(attempts)
+                    .filteredOn(attempt -> !attempt.succeeded())
+                    .extracting(Attempt::errorCode)
+                    .containsExactly(ErrorCode.BID_PRICE_TOO_LOW);
+            assertThat(findSealedBidPrices(fixture.auctionId()))
+                    .containsExactly(FIRST_BID_PRICE);
+            assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void 한_회원은_한_경매에_밀봉입찰을_한_번만_제출할_수_있다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+        bidService.place(
+                bidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        );
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                bidderId,
+                fixture.auctionId(),
+                SECOND_BID_PRICE,
+                BidType.SEALED
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SEALED_BID_ALREADY_SUBMITTED)
+        );
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(FIRST_BID_PRICE);
+    }
+
+    @Test
+    void 일반_구간에_밀봉입찰을_요청하면_단계_변경_오류이고_입찰을_저장하지_않는다() {
+        Fixture fixture = createFixture(1);
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PHASE_CHANGED)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findSealedBidPrices(fixture.auctionId())).isEmpty();
+    }
+
+    @Test
+    void 밀봉_구간에_일반입찰을_요청하면_자동_전환하지_않고_거절한다() {
+        Fixture fixture = createFixture(1);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.UP
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PHASE_CHANGED)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findSealedBidPrices(fixture.auctionId())).isEmpty();
+    }
+
+    @Test
+    void 같은_회원이_여러_번_입찰해도_시작가의_30퍼센트를_한_번만_예치한다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+
+        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.UP);
+        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.UP);
+
+        assertThat(findDepositSnapshots(fixture.auctionId()))
+                .containsExactly(new DepositSnapshot(DEPOSIT_AMOUNT, DepositStatus.HELD));
+        assertThat(findMemberPointSnapshot(bidderId))
+                .isEqualTo(new MemberPointSnapshot(
+                        INITIAL_POINT - DEPOSIT_AMOUNT,
+                        DEPOSIT_AMOUNT
+                ));
+    }
+
+    @Test
+    void 첫_입찰_보증금이_부족하면_경매_갱신과_입찰을_모두_롤백한다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+        long insufficientPoint = DEPOSIT_AMOUNT - 1L;
+        updateMemberPoints(bidderId, insufficientPoint, 0L);
+
+        Throwable thrown = catchThrowable(() -> bidService.place(
+                bidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.UP
+        ));
+
+        assertThat(thrown).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.INSUFFICIENT_DEPOSIT)
+        );
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findDepositSnapshots(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(START_PRICE, AuctionStatus.OPEN));
+        assertThat(findMemberPointSnapshot(bidderId))
+                .isEqualTo(new MemberPointSnapshot(insufficientPoint, 0L));
     }
 
     @Test
@@ -205,14 +482,14 @@ class BidServiceIntegrationTest {
         Fixture fixture = createFixture(1);
         Long bidderId = fixture.bidderIds().getFirst();
 
-        bidService.place(bidderId, fixture.auctionId(), BidStatus.UP, FIRST_BID_PRICE);
-        bidService.place(bidderId, fixture.auctionId(), BidStatus.UP, SECOND_BID_PRICE);
+        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.UP);
+        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.UP);
         Throwable thrown = catchThrowable(
                 () -> bidService.place(
                         bidderId,
                         fixture.auctionId(),
-                        BidStatus.UP,
-                        102_500L
+                        102_500L,
+                        BidType.UP
                 )
         );
 
@@ -235,8 +512,8 @@ class BidServiceIntegrationTest {
         Throwable thrown = catchThrowable(() -> bidService.place(
                 fixture.sellerId(),
                 fixture.auctionId(),
-                BidStatus.UP,
-                FIRST_BID_PRICE
+                FIRST_BID_PRICE,
+                BidType.UP
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -266,8 +543,8 @@ class BidServiceIntegrationTest {
         Throwable thrown = catchThrowable(() -> bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
-                BidStatus.UP,
-                FIRST_BID_PRICE
+                FIRST_BID_PRICE,
+                BidType.UP
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -278,69 +555,6 @@ class BidServiceIntegrationTest {
         assertThat(findBidPrices(fixture.auctionId())).isEmpty();
         assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
                 .isEqualTo(START_PRICE);
-    }
-
-    @Test
-    void 일반_입찰_구간에서_SEALED_입찰을_거절한다() {
-        Fixture fixture = createFixture(1);
-
-        Throwable thrown = catchThrowable(() -> bidService.place(
-                fixture.bidderIds().getFirst(),
-                fixture.auctionId(),
-                BidStatus.SEALED,
-                FIRST_BID_PRICE
-        ));
-
-        assertThat(thrown).isInstanceOfSatisfying(
-                BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.BID_PHASE_MISMATCH)
-        );
-        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
-        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
-                .isEqualTo(START_PRICE);
-    }
-
-    @Test
-    void 밀봉_입찰_구간에서_UP_입찰을_거절한다() {
-        Fixture fixture = createFixture(1);
-        moveAuctionIntoSealedBidWindow(fixture.auctionId());
-
-        Throwable thrown = catchThrowable(() -> bidService.place(
-                fixture.bidderIds().getFirst(),
-                fixture.auctionId(),
-                BidStatus.UP,
-                FIRST_BID_PRICE
-        ));
-
-        assertThat(thrown).isInstanceOfSatisfying(
-                BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.BID_PHASE_MISMATCH)
-        );
-        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
-    }
-
-    @Test
-    void 밀봉_입찰은_현재가를_노출하지_않고_SEALED로_저장한다() {
-        Fixture fixture = createFixture(1);
-        moveAuctionIntoSealedBidWindow(fixture.auctionId());
-
-        BidResult result = bidService.place(
-                fixture.bidderIds().getFirst(),
-                fixture.auctionId(),
-                BidStatus.SEALED,
-                FIRST_BID_PRICE
-        );
-
-        assertThat(result.status()).isEqualTo(BidStatus.SEALED);
-        assertThat(findBidStatuses(fixture.auctionId()))
-                .containsExactly(BidStatus.SEALED);
-        assertThat(findAuctionSnapshot(fixture.auctionId()))
-                .isEqualTo(new AuctionSnapshot(
-                        START_PRICE,
-                        AuctionStatus.BID_ONGOING
-                ));
     }
 
     @Test
@@ -374,14 +588,14 @@ class BidServiceIntegrationTest {
         Throwable rejected = catchThrowable(() -> bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
-                BidStatus.UP,
-                legacyHighestPrice
+                legacyHighestPrice,
+                BidType.UP
         ));
         BidResult accepted = bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
-                BidStatus.UP,
-                legacyHighestPrice + 1_000L
+                legacyHighestPrice + 1_000L,
+                BidType.UP
         );
 
         assertThat(rejected).isInstanceOfSatisfying(
@@ -413,8 +627,8 @@ class BidServiceIntegrationTest {
         Throwable thrown = catchThrowable(() -> bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
-                BidStatus.UP,
-                MAX_UNIT_PRICE
+                MAX_UNIT_PRICE,
+                BidType.UP
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -449,8 +663,8 @@ class BidServiceIntegrationTest {
             Throwable thrown = catchThrowable(() -> bidService.place(
                     fixture.bidderIds().getFirst(),
                     fixture.auctionId(),
-                    BidStatus.UP,
-                    FIRST_BID_PRICE
+                    FIRST_BID_PRICE,
+                    BidType.UP
             ));
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(
                     System.nanoTime() - startedAt
@@ -478,12 +692,22 @@ class BidServiceIntegrationTest {
             Long auctionId,
             long price
     ) {
+        return attemptAfterBarrier(barrier, memberId, auctionId, price, BidType.UP);
+    }
+
+    private Callable<Attempt> attemptAfterBarrier(
+            CyclicBarrier barrier,
+            Long memberId,
+            Long auctionId,
+            long price,
+            BidType bidType
+    ) {
         return () -> {
             barrier.await(5, TimeUnit.SECONDS);
             try {
                 return Attempt.success(
                         price,
-                        bidService.place(memberId, auctionId, BidStatus.UP, price)
+                        bidService.place(memberId, auctionId, price, bidType)
                 );
             } catch (BusinessException exception) {
                 return Attempt.failure(price, exception.getErrorCode());
@@ -557,19 +781,6 @@ class BidServiceIntegrationTest {
         return fixture;
     }
 
-    private void moveAuctionIntoSealedBidWindow(Long auctionId) {
-        executeInTransaction(entityManager -> {
-            entityManager.createNativeQuery("""
-                            UPDATE auction
-                            SET ended_at = CURRENT_TIMESTAMP(6) + INTERVAL 4 MINUTE
-                            WHERE id = :auctionId
-                            """)
-                    .setParameter("auctionId", auctionId)
-                    .executeUpdate();
-            return null;
-        });
-    }
-
     private Member persistMember(EntityManager entityManager) {
         int sequence = memberSequence.incrementAndGet();
         String identifier = runId.substring(0, 6) + sequence;
@@ -585,6 +796,19 @@ class BidServiceIntegrationTest {
         return member;
     }
 
+    private void moveAuctionIntoSealedWindow(Long auctionId) {
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET ended_at = SYSDATE(6) + INTERVAL 2 MINUTE
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .executeUpdate();
+            return null;
+        });
+    }
+
     private List<Long> findBidPrices(Long auctionId) {
         return executeInTransaction(entityManager -> entityManager.createQuery("""
                         select bid.price
@@ -596,15 +820,64 @@ class BidServiceIntegrationTest {
                 .getResultList());
     }
 
-    private List<BidStatus> findBidStatuses(Long auctionId) {
+    private List<Long> findSealedBidPrices(Long auctionId) {
         return executeInTransaction(entityManager -> entityManager.createQuery("""
-                        select bid.status
-                        from Bid bid
-                        where bid.auction.id = :auctionId
-                        order by bid.id
-                        """, BidStatus.class)
+                        select sealedBid.price
+                        from SealedBid sealedBid
+                        where sealedBid.auction.id = :auctionId
+                        order by sealedBid.price
+                        """, Long.class)
                 .setParameter("auctionId", auctionId)
                 .getResultList());
+    }
+
+    private List<DepositSnapshot> findDepositSnapshots(Long auctionId) {
+        return executeInTransaction(entityManager -> entityManager.createQuery("""
+                        select deposit.reservedAmount, deposit.status
+                        from AuctionDeposit deposit
+                        where deposit.auction.id = :auctionId
+                        order by deposit.id
+                        """, Object[].class)
+                .setParameter("auctionId", auctionId)
+                .getResultList()
+                .stream()
+                .map(row -> new DepositSnapshot(
+                        ((Number) row[0]).longValue(),
+                        (DepositStatus) row[1]
+                ))
+                .toList());
+    }
+
+    private MemberPointSnapshot findMemberPointSnapshot(Long memberId) {
+        return executeInTransaction(entityManager -> {
+            Object[] row = entityManager.createQuery("""
+                            select member.totalPoint, member.lockedPoint
+                            from Member member
+                            where member.id = :memberId
+                            """, Object[].class)
+                    .setParameter("memberId", memberId)
+                    .getSingleResult();
+            return new MemberPointSnapshot(
+                    ((Number) row[0]).longValue(),
+                    ((Number) row[1]).longValue()
+            );
+        });
+    }
+
+    private void updateMemberPoints(Long memberId, long totalPoint, long lockedPoint) {
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE member
+                            SET total_point = :totalPoint,
+                                locked_point = :lockedPoint
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("totalPoint", totalPoint)
+                    .setParameter("lockedPoint", lockedPoint)
+                    .setParameter("memberId", memberId)
+                    .executeUpdate();
+            return null;
+        });
     }
 
     private AuctionSnapshot findAuctionSnapshot(Long auctionId) {
@@ -662,6 +935,18 @@ class BidServiceIntegrationTest {
     private record AuctionSnapshot(
             long currentPrice,
             AuctionStatus status
+    ) {
+    }
+
+    private record DepositSnapshot(
+            long reservedAmount,
+            DepositStatus status
+    ) {
+    }
+
+    private record MemberPointSnapshot(
+            long totalPoint,
+            long lockedPoint
     ) {
     }
 

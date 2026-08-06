@@ -1,12 +1,14 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -14,7 +16,7 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // 조건부 UPDATE로 일반 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
+    // 단일 조건부 UPDATE로 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
     // current_price가 없는 기존 경매만 Bid 최고가, 입찰도 없으면 시작가를 기준으로 한다.
     // 락 대기 중 흐른 시간까지 반영하도록 statement 시작 시각이 아닌 SYSDATE(6)를 사용한다.
     @Modifying
@@ -36,19 +38,18 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
                         SELECT MAX(bid.price)
                         FROM bid
                         WHERE bid.auction_id = auction.id
-                          AND bid.status = 'UP'
                     ),
                     start_price
               ) <= :price - :bidUnit
             """, nativeQuery = true)
-    int updateCurrentPriceForUpBid(
+    int updateCurrentPriceForBid(
             @Param("auctionId") Long auctionId,
             @Param("bidderId") Long bidderId,
             @Param("price") long price,
             @Param("bidUnit") long bidUnit
     );
 
-    // 밀봉 입찰은 공개 현재가를 변경하지 않고 입찰 성립 여부만 원자적으로 검증한다.
+    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 시작가·일반·밀봉 최고가보다 높은 입찰만 허용한다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
@@ -62,23 +63,42 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND ended_at > SYSDATE(6)
               AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
               AND seller_id <> :bidderId
-              AND COALESCE(
-                    current_price,
-                    (
-                        SELECT MAX(bid.price)
-                        FROM bid
-                        WHERE bid.auction_id = auction.id
-                          AND bid.status = 'UP'
+              AND GREATEST(
+                    COALESCE(
+                          current_price,
+                          (
+                              SELECT MAX(bid.price)
+                              FROM bid
+                              WHERE bid.auction_id = auction.id
+                          ),
+                          start_price
                     ),
-                    start_price
+                    COALESCE(
+                          (
+                              SELECT MAX(sealed_bid.price)
+                              FROM sealed_bid
+                              WHERE sealed_bid.auction_id = auction.id
+                          ),
+                          start_price
+                    )
               ) <= :price - :bidUnit
             """, nativeQuery = true)
-    int updateForSealedBid(
+    int tryUpdateAuctionForSealedBid(
             @Param("auctionId") Long auctionId,
             @Param("bidderId") Long bidderId,
             @Param("price") long price,
             @Param("bidUnit") long bidUnit
     );
+
+    // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select auction
+            from Auction auction
+            join fetch auction.seller
+            where auction.id = :auctionId
+            """)
+    Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);
 
     @Query("""
             select auction

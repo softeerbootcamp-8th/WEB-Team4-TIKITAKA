@@ -5,13 +5,13 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSellerResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
@@ -42,6 +42,7 @@ public class AuctionDetailService {
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
+    private final SealedBidRepository sealedBidRepository;
     private final ImageRepository imageRepository;
     private final AuctionTradeRepository auctionTradeRepository;
     private final ImageUrlResolver imageUrlResolver;
@@ -86,11 +87,10 @@ public class AuctionDetailService {
             Optional<Long> finalPrice
     ) {
         long currentPrice = finalPrice.orElseGet(() -> currentPriceOf(auction));
-        long bidCount = bidRepository.countVisibleByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                auction.isSealedBidRevealed()
-        );
+        long bidCount = bidRepository.countByAuctionId(auction.getId());
+        if (auction.isSealedBidRevealed()) {
+            bidCount += sealedBidRepository.countByAuctionId(auction.getId());
+        }
 
         return new UpAuctionDetailResponse(
                 auction.getId(),
@@ -117,10 +117,7 @@ public class AuctionDetailService {
         }
 
         // 스키마 변경 전에 생성된 경매만 Bid 최고가로 현재가를 보정한다.
-        Long highestPrice = bidRepository.findHighestPriceByAuctionIdAndStatus(
-                auction.getId(),
-                BidStatus.UP
-        );
+        Long highestPrice = bidRepository.findHighestPriceByAuctionId(auction.getId());
         return highestPrice == null ? auction.getStartPrice() : highestPrice;
     }
 
