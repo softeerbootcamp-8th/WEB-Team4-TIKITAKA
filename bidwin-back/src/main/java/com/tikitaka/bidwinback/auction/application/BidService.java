@@ -25,7 +25,9 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONGOING;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PRICE_TOO_LOW;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.BID_PHASE_MISMATCH;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_CONFLICT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_TYPE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
@@ -35,18 +37,25 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_AL
 public class BidService {
 
     private static final long BID_UNIT = 1_000L;
+    private static final long SEALED_BID_WINDOW_MINUTES = 5L;
 
     private final MemberRepository memberRepository;
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
 
     @Transactional
-    public BidResult place(Long memberId, Long auctionId, long price) {
+    public BidResult place(
+            Long memberId,
+            Long auctionId,
+            BidStatus bidStatus,
+            long price
+    ) {
+        validateBidStatus(bidStatus);
         validateBidUnit(price);
 
-        if (updateCurrentPrice(memberId, auctionId, price) != 1) {
+        if (applyBid(memberId, auctionId, bidStatus, price) != 1) {
             // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다.
-            throwBidRejection(memberId, auctionId, price);
+            throwBidRejection(memberId, auctionId, bidStatus, price);
         }
 
         // 인증 필터가 검증한 회원은 추가 조회 없이 프록시 참조로 FK만 연결한다.
@@ -56,10 +65,16 @@ public class BidService {
                 .auction(auction)
                 .bidder(bidder)
                 .price(price)
-                .status(BidStatus.UP)
+                .status(bidStatus)
                 .build());
 
         return BidResult.from(bid);
+    }
+
+    private void validateBidStatus(BidStatus bidStatus) {
+        if (bidStatus != BidStatus.UP && bidStatus != BidStatus.SEALED) {
+            throw new BidException(INVALID_BID_TYPE);
+        }
     }
 
     private void validateBidUnit(long price) {
@@ -68,9 +83,23 @@ public class BidService {
         }
     }
 
-    private int updateCurrentPrice(Long memberId, Long auctionId, long price) {
+    private int applyBid(
+            Long memberId,
+            Long auctionId,
+            BidStatus bidStatus,
+            long price
+    ) {
         try {
-            return auctionRepository.updateCurrentPriceForBid(
+            if (bidStatus == BidStatus.UP) {
+                return auctionRepository.updateCurrentPriceForUpBid(
+                        auctionId,
+                        memberId,
+                        price,
+                        BID_UNIT
+                );
+            }
+
+            return auctionRepository.updateForSealedBid(
                     auctionId,
                     memberId,
                     price,
@@ -81,7 +110,12 @@ public class BidService {
         }
     }
 
-    private void throwBidRejection(Long memberId, Long auctionId, long price) {
+    private void throwBidRejection(
+            Long memberId,
+            Long auctionId,
+            BidStatus bidStatus,
+            long price
+    ) {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
 
@@ -97,6 +131,9 @@ public class BidService {
         if (!auction.getEndedAt().isAfter(databaseTime)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
         }
+        if (!isAllowedBidStatus(bidStatus, auction.getEndedAt(), databaseTime)) {
+            throw new BidException(BID_PHASE_MISMATCH);
+        }
         if (auction.getSeller().getId().equals(memberId)) {
             throw new BidException(SELF_BID_NOT_ALLOWED);
         }
@@ -105,6 +142,21 @@ public class BidService {
         }
 
         throw new BidException(CONCURRENT_BID_CONFLICT);
+    }
+
+    private boolean isAllowedBidStatus(
+            BidStatus bidStatus,
+            LocalDateTime endedAt,
+            LocalDateTime databaseTime
+    ) {
+        LocalDateTime sealedBidStartedAt = endedAt.minusMinutes(
+                SEALED_BID_WINDOW_MINUTES
+        );
+        if (databaseTime.isBefore(sealedBidStartedAt)) {
+            return bidStatus == BidStatus.UP;
+        }
+
+        return bidStatus == BidStatus.SEALED;
     }
 
     private long currentPriceOf(Auction auction) {

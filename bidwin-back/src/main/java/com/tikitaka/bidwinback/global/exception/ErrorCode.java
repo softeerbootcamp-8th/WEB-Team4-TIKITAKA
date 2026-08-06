@@ -223,6 +223,11 @@ public enum ErrorCode {
             "BID_400_2",
             "상향 경매만 입찰할 수 있습니다."
     ),
+    INVALID_BID_TYPE(
+            HttpStatus.BAD_REQUEST,
+            "BID_400_3",
+            "지원하지 않는 입찰 유형입니다."
+    ),
     BUY_NOW_PRICE_CHANGED(
             HttpStatus.CONFLICT,
             "BID_409_1",
@@ -247,6 +252,11 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "BID_409_4",
             "동시 입찰 처리에 실패했습니다. 최신 가격을 확인한 뒤 다시 시도해주세요."
+    ),
+    BID_PHASE_MISMATCH(
+            HttpStatus.CONFLICT,
+            "BID_409_5",
+            "현재 입찰 구간에서 허용되지 않는 입찰 유형입니다."
     ),
 
     // Trade / settlement

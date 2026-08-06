@@ -51,6 +51,7 @@ class AuctionBidControllerTest {
             "/api/v1/auctions/up/" + AUCTION_ID + "/bids";
     private static final String VALID_REQUEST = """
             {
+              "status": "UP",
               "price": 232000
             }
             """;
@@ -97,7 +98,8 @@ class AuctionBidControllerTest {
                 BidStatus.UP,
                 bidAt
         );
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE)).thenReturn(result);
+        when(bidService.place(MEMBER_ID, AUCTION_ID, BidStatus.UP, PRICE))
+                .thenReturn(result);
 
         // when & then
         mockMvc.perform(post(ENDPOINT)
@@ -113,7 +115,54 @@ class AuctionBidControllerTest {
                 .andExpect(jsonPath("$.data.status").value("UP"))
                 .andExpect(jsonPath("$.data.bidAt").value(bidAt.toString()));
 
-        verify(bidService).place(MEMBER_ID, AUCTION_ID, PRICE);
+        verify(bidService).place(MEMBER_ID, AUCTION_ID, BidStatus.UP, PRICE);
+    }
+
+    @Test
+    void SEALED_유형을_받아_밀봉_입찰을_생성한다() throws Exception {
+        LocalDateTime bidAt = LocalDateTime.of(2026, 7, 30, 12, 34, 56);
+        BidResult result = new BidResult(
+                BID_ID,
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BidStatus.SEALED,
+                bidAt
+        );
+        when(bidService.place(MEMBER_ID, AUCTION_ID, BidStatus.SEALED, PRICE))
+                .thenReturn(result);
+
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "SEALED",
+                                  "price": 232000
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("SEALED"));
+
+        verify(bidService).place(MEMBER_ID, AUCTION_ID, BidStatus.SEALED, PRICE);
+    }
+
+    @Test
+    void 입찰_유형을_누락하면_400을_응답한다() throws Exception {
+        mockMvc.perform(post(ENDPOINT)
+                        .session(authenticatedSession())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 232000
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("입찰 유형은 필수입니다."));
+
+        verifyNoInteractions(bidService);
     }
 
     @Test
@@ -123,6 +172,7 @@ class AuctionBidControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "status": "UP",
                                   "price": 0
                                 }
                                 """))
@@ -137,7 +187,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_천원_단위가_아니면_400을_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, BidStatus.UP, 232_500L))
                 .thenThrow(new BidException(INVALID_BID_UNIT));
 
         mockMvc.perform(post(ENDPOINT)
@@ -145,6 +195,7 @@ class AuctionBidControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "status": "UP",
                                   "price": 232500
                                 }
                                 """))
@@ -155,7 +206,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_현재가보다_천원_이상_높지_않으면_422를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, BidStatus.UP, PRICE))
                 .thenThrow(new BidException(BID_PRICE_TOO_LOW));
 
         mockMvc.perform(post(ENDPOINT)
@@ -169,7 +220,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 동시_입찰_락_획득에_실패하면_409를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, BidStatus.UP, PRICE))
                 .thenThrow(new BidException(CONCURRENT_BID_CONFLICT));
 
         mockMvc.perform(post(ENDPOINT)

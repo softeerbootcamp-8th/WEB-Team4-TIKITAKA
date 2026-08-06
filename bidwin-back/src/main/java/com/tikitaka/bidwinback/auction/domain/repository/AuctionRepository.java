@@ -14,8 +14,9 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // 단일 조건부 UPDATE로 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
+    // 조건부 UPDATE로 일반 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
     // current_price가 없는 기존 경매만 Bid 최고가, 입찰도 없으면 시작가를 기준으로 한다.
+    // 락 대기 중 흐른 시간까지 반영하도록 statement 시작 시각이 아닌 SYSDATE(6)를 사용한다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
@@ -27,7 +28,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND auction_type = 'UP'
               AND status IN ('OPEN', 'BID_ONGOING')
               AND completed_at IS NULL
-              AND ended_at > SYSDATE(6)
+              AND ended_at > DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
               AND seller_id <> :bidderId
               AND COALESCE(
                     current_price,
@@ -35,11 +36,44 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
                         SELECT MAX(bid.price)
                         FROM bid
                         WHERE bid.auction_id = auction.id
+                          AND bid.status = 'UP'
                     ),
                     start_price
               ) <= :price - :bidUnit
             """, nativeQuery = true)
-    int updateCurrentPriceForBid(
+    int updateCurrentPriceForUpBid(
+            @Param("auctionId") Long auctionId,
+            @Param("bidderId") Long bidderId,
+            @Param("price") long price,
+            @Param("bidUnit") long bidUnit
+    );
+
+    // 밀봉 입찰은 공개 현재가를 변경하지 않고 입찰 성립 여부만 원자적으로 검증한다.
+    @Modifying
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
+    @Query(value = """
+            UPDATE auction
+            SET status = 'BID_ONGOING',
+                last_modified_at = SYSDATE(6)
+            WHERE id = :auctionId
+              AND auction_type = 'UP'
+              AND status IN ('OPEN', 'BID_ONGOING')
+              AND completed_at IS NULL
+              AND ended_at > SYSDATE(6)
+              AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
+              AND seller_id <> :bidderId
+              AND COALESCE(
+                    current_price,
+                    (
+                        SELECT MAX(bid.price)
+                        FROM bid
+                        WHERE bid.auction_id = auction.id
+                          AND bid.status = 'UP'
+                    ),
+                    start_price
+              ) <= :price - :bidUnit
+            """, nativeQuery = true)
+    int updateForSealedBid(
             @Param("auctionId") Long auctionId,
             @Param("bidderId") Long bidderId,
             @Param("price") long price,
