@@ -51,7 +51,7 @@ public class AuctionListService {
     public AuctionListResponse getList(AuctionListQuery query) {
         LocalDateTime asOf = query.asOf() != null ? query.asOf() : auctionRepository.currentDatabaseTime();
 
-        List<Auction> auctions = auctionRepository.findAllForList(query.keyword())
+        List<Auction> auctions = auctionRepository.findAllForList(query.keyword(), asOf)
                 .stream()
                 .filter(auction -> matchesType(auction, query.auctionType()))
                 .toList();

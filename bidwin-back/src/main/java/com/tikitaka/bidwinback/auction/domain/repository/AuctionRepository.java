@@ -87,13 +87,22 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     Optional<Auction> findDetailById(@Param("auctionId") long auctionId);
 
     // 목록 조회용. 정렬·타입 필터·현재가 계산은 서비스에서 처리하고(1차 뼈대라 원시적으로),
-    // 여기서는 키워드로만 좁힌 전체 목록을 가져온다.
+    // 여기서는 키워드로 좁히고 "asOf 시점에 활성 상태인" 경매만 가져온다.
+    // completedAt is null / endedAt > asOf는 completeForBuyNow가 쓰는 "아직 활성 경매" 판단과 같은 기준이다.
+    // createdAt <= asOf까지 걸어야, asOf 스냅샷을 공유하는 다음 페이지 요청 사이에 새로
+    // 등록된 경매가 끼어들어 목록 구성이 흔들리는 걸 막을 수 있다.
     @EntityGraph(attributePaths = "seller")
     @Query("""
             select auction from Auction auction
             where (:keyword is null or lower(auction.title) like lower(concat('%', :keyword, '%')))
+              and auction.createdAt <= :asOf
+              and auction.completedAt is null
+              and auction.endedAt > :asOf
             """)
-    List<Auction> findAllForList(@Param("keyword") String keyword);
+    List<Auction> findAllForList(
+            @Param("keyword") String keyword,
+            @Param("asOf") LocalDateTime asOf
+    );
 
     // 하락 경매의 계산 기준이 애플리케이션 서버마다 달라지지 않도록 DB 시각을 사용한다.
     @Query(value = "select current_timestamp(6)", nativeQuery = true)

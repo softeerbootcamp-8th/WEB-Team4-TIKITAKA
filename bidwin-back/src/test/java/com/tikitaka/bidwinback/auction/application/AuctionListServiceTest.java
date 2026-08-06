@@ -68,7 +68,7 @@ class AuctionListServiceTest {
         UpAuction upAuction = upAuction(1L, 200_000L);
         // 필터에 걸려 제외될 대상이라 getter가 하나도 안 불릴 수 있다 — instanceof 판별에만 필요하다.
         DownAuction downAuction = mock(DownAuction.class);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(upAuction, downAuction));
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of(upAuction, downAuction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(query(AuctionType.UP, AuctionSort.LATEST, null, 1, 16));
@@ -81,7 +81,7 @@ class AuctionListServiceTest {
     @Test
     void 상향_경매는_최고_입찰가가_없으면_시작가를_현재가로_쓴다() {
         UpAuction auction = upAuction(1L, 200_000L);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(query(null, AuctionSort.LATEST, null, 1, 16));
@@ -94,7 +94,7 @@ class AuctionListServiceTest {
     @Test
     void 상향_경매는_asOf_이전_최고_입찰가를_현재가로_쓴다() {
         UpAuction auction = upAuction(1L, 200_000L);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(List.of(1L), AS_OF))
                 .thenReturn(List.of(new AuctionBidSummary(1L, 260_000L, 4L)));
 
@@ -113,7 +113,7 @@ class AuctionListServiceTest {
         LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 1, 12, 35);
         DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(auctionRepository.findAllForList(null, asOf)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(
@@ -128,7 +128,7 @@ class AuctionListServiceTest {
         LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 2, 12, 0); // 아주 오랜 시간이 지남
         DownAuction auction = downAuction(1L, 200_000L, 150_000L, 10_000L, 10L, startedAt);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(auction));
+        when(auctionRepository.findAllForList(null, asOf)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(
@@ -142,7 +142,7 @@ class AuctionListServiceTest {
     void 추천순은_입찰수_내림차순이다() {
         UpAuction popular = upAuction(1L, 200_000L);
         UpAuction quiet = upAuction(2L, 200_000L);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(quiet, popular));
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of(quiet, popular));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of(
                 new AuctionBidSummary(1L, 300_000L, 10L),
                 new AuctionBidSummary(2L, 210_000L, 1L)
@@ -160,7 +160,7 @@ class AuctionListServiceTest {
     void 낮은_가격순으로_정렬한다() {
         UpAuction cheap = upAuction(1L, 100_000L);
         UpAuction expensive = upAuction(2L, 500_000L);
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of(expensive, cheap));
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of(expensive, cheap));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(
@@ -178,7 +178,7 @@ class AuctionListServiceTest {
                 upAuction(2L, 100_000L),
                 upAuction(3L, 100_000L)
         );
-        when(auctionRepository.findAllForList(null)).thenReturn(auctions);
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(auctions);
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
 
         AuctionListResponse response = auctionListService.getList(
@@ -193,7 +193,7 @@ class AuctionListServiceTest {
 
     @Test
     void asOf가_없으면_DB_시각을_새로_찍어_응답에_그대로_담는다() {
-        when(auctionRepository.findAllForList(null)).thenReturn(List.of());
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of());
         when(auctionRepository.currentDatabaseTime()).thenReturn(AS_OF);
 
         AuctionListResponse response = auctionListService.getList(
