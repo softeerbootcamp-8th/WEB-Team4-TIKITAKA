@@ -104,4 +104,10 @@ public abstract class Auction extends BaseTimeEntity {
     public boolean hasCurrentPrice() {
         return currentPrice != null;
     }
+
+    public boolean isSealedBidRevealed() {
+        return status == AuctionStatus.WINNER_DETERMINING
+                || status == AuctionStatus.COMPLETED
+                || status == AuctionStatus.UNSOLD;
+    }
 }

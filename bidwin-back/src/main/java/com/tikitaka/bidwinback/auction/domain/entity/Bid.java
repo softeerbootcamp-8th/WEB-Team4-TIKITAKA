@@ -49,7 +49,7 @@ public class Bid extends BaseTimeEntity {
     private long price;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20)")
     private BidStatus status;
 
     @Builder

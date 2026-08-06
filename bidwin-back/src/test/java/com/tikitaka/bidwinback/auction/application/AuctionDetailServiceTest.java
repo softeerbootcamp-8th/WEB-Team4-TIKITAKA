@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -85,7 +86,8 @@ class AuctionDetailServiceTest {
                 .thenReturn("https://cdn.example.com/auction-images/product.jpg");
         when(auction.hasCurrentPrice()).thenReturn(true);
         when(auction.getCurrentPrice()).thenReturn(240_000L);
-        when(bidRepository.countByAuctionId(1L)).thenReturn(3L);
+        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, false))
+                .thenReturn(3L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -115,8 +117,10 @@ class AuctionDetailServiceTest {
         );
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(bidRepository.findHighestPriceByAuctionId(1L)).thenReturn(null);
-        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
+        when(bidRepository.findHighestPriceByAuctionIdAndStatus(1L, BidStatus.UP))
+                .thenReturn(null);
+        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, false))
+                .thenReturn(0L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -135,11 +139,13 @@ class AuctionDetailServiceTest {
                 LocalDateTime.of(2026, 8, 1, 13, 0)
         );
         when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        when(auction.isSealedBidRevealed()).thenReturn(true);
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
         when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
                 .thenReturn(Optional.of(300_000L));
-        when(bidRepository.countByAuctionId(1L)).thenReturn(5L);
+        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, true))
+                .thenReturn(5L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);

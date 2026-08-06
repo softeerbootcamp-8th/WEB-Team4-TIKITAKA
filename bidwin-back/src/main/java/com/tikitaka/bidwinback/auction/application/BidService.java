@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 
 import static com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus.BID_ONGOING;
 import static com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus.OPEN;
+import static com.tikitaka.bidwinback.auction.domain.enums.BidStatus.UP;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_ALREADY_ENDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_ONGOING;
@@ -112,7 +113,10 @@ public class BidService {
         }
 
         // 스키마 변경 전에 생성된 경매만 Bid 최고가로 현재가를 보정한다.
-        Long highestPrice = bidRepository.findHighestPriceByAuctionId(auction.getId());
+        Long highestPrice = bidRepository.findHighestPriceByAuctionIdAndStatus(
+                auction.getId(),
+                UP
+        );
         return highestPrice == null ? auction.getStartPrice() : highestPrice;
     }
 }

@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -30,9 +31,18 @@ public class BidHistoryService {
     public BidHistoryResponse getBidHistory(long auctionId, long memberId) {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(ErrorCode.AUCTION_NOT_FOUND));
+        boolean revealSealed = auction.isSealedBidRevealed();
 
-        long bidCount = bidRepository.countByAuctionId(auctionId);
-        List<BidHistoryItemResponse> bidLog = bidRepository.findHistoryByAuctionId(auctionId)
+        long bidCount = bidRepository.countVisibleByAuctionId(
+                auctionId,
+                BidStatus.SEALED,
+                revealSealed
+        );
+        List<BidHistoryItemResponse> bidLog = bidRepository.findVisibleHistoryByAuctionId(
+                        auctionId,
+                        BidStatus.SEALED,
+                        revealSealed
+                )
                 .stream()
                 .map(bid -> toResponse(bid, memberId))
                 .toList();

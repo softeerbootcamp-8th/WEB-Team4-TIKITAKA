@@ -78,9 +78,17 @@ class BidRepositoryIntegrationTest {
                 .executeUpdate();
         entityManager.clear();
 
-        long bidCount = bidRepository.countByAuctionId(auction.getId());
+        long bidCount = bidRepository.countVisibleByAuctionId(
+                auction.getId(),
+                BidStatus.SEALED,
+                false
+        );
         List<BidHistoryRow> bidHistory =
-                bidRepository.findHistoryByAuctionId(auction.getId());
+                bidRepository.findVisibleHistoryByAuctionId(
+                        auction.getId(),
+                        BidStatus.SEALED,
+                        false
+                );
 
         List<Long> expectedIds = new ArrayList<>();
         for (int index = bids.size() - 1; index >= 2; index--) {
@@ -123,7 +131,10 @@ class BidRepositoryIntegrationTest {
         entityManager.persist(auction);
         entityManager.flush();
 
-        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId())).isNull();
+        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
+                auction.getId(),
+                BidStatus.UP
+        )).isNull();
 
         entityManager.persist(Bid.builder()
                 .auction(auction)
@@ -140,8 +151,73 @@ class BidRepositoryIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId()))
+        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
+                auction.getId(),
+                BidStatus.UP
+        ))
                 .isEqualTo(103_000L);
+    }
+
+    @Test
+    void SEALED_입찰은_경매_상태에_따라_비공개하거나_공개한다() {
+        String suffix = UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 8);
+        Member seller = persistMember("sealed-seller-" + suffix, "판매" + suffix);
+        Member bidder = persistMember("sealed-bidder-" + suffix, "입찰" + suffix);
+        UpAuction auction = UpAuction.builder()
+                .seller(seller)
+                .title("밀봉 입찰 조회 통합 테스트")
+                .description("밀봉 입찰 비공개 검증")
+                .status(AuctionStatus.BID_ONGOING)
+                .category(AuctionCategory.HOUSEHOLD)
+                .startPrice(100_000L)
+                .endedAt(LocalDateTime.now().plusMinutes(4))
+                .tradeType(TradeType.DELIVERY)
+                .contact("01012345678")
+                .buyNowPrice(300_000L)
+                .build();
+        entityManager.persist(auction);
+        entityManager.persist(Bid.builder()
+                .auction(auction)
+                .bidder(bidder)
+                .price(101_000L)
+                .status(BidStatus.UP)
+                .build());
+        entityManager.persist(Bid.builder()
+                .auction(auction)
+                .bidder(bidder)
+                .price(150_000L)
+                .status(BidStatus.SEALED)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(bidRepository.countVisibleByAuctionId(
+                auction.getId(),
+                BidStatus.SEALED,
+                false
+        )).isEqualTo(1L);
+        assertThat(bidRepository.findVisibleHistoryByAuctionId(
+                auction.getId(),
+                BidStatus.SEALED,
+                false
+        )).extracting(BidHistoryRow::amount).containsExactly(101_000L);
+        assertThat(bidRepository.countVisibleByAuctionId(
+                auction.getId(),
+                BidStatus.SEALED,
+                true
+        )).isEqualTo(2L);
+        assertThat(bidRepository.findVisibleHistoryByAuctionId(
+                auction.getId(),
+                BidStatus.SEALED,
+                true
+        )).extracting(BidHistoryRow::amount).containsExactly(150_000L, 101_000L);
+        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
+                auction.getId(),
+                BidStatus.UP
+        )).isEqualTo(101_000L);
     }
 
     private Member persistMember(String identifier, String nickname) {
