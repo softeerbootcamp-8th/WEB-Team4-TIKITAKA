@@ -10,6 +10,13 @@ import java.util.Optional;
 public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
 
     @Query("""
+            select max(sealedBid.price)
+            from SealedBid sealedBid
+            where sealedBid.auction.id = :auctionId
+            """)
+    Long findHighestPriceByAuctionId(@Param("auctionId") long auctionId);
+
+    @Query("""
             select sealedBid
             from SealedBid sealedBid
             join fetch sealedBid.bidder

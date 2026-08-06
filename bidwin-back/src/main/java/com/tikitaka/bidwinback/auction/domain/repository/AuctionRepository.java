@@ -48,7 +48,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("bidUnit") long bidUnit
     );
 
-    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 경매 상태만 변경한다.
+    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 시작가·일반·밀봉 최고가보다 높은 입찰만 허용한다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
@@ -62,14 +62,24 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND ended_at > SYSDATE(6)
               AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
               AND seller_id <> :bidderId
-              AND COALESCE(
-                    current_price,
-                    (
-                        SELECT MAX(bid.price)
-                        FROM bid
-                        WHERE bid.auction_id = auction.id
+              AND GREATEST(
+                    COALESCE(
+                          current_price,
+                          (
+                              SELECT MAX(bid.price)
+                              FROM bid
+                              WHERE bid.auction_id = auction.id
+                          ),
+                          start_price
                     ),
-                    start_price
+                    COALESCE(
+                          (
+                              SELECT MAX(sealed_bid.price)
+                              FROM sealed_bid
+                              WHERE sealed_bid.auction_id = auction.id
+                          ),
+                          start_price
+                    )
               ) <= :price - :bidUnit
             """, nativeQuery = true)
     int tryUpdateAuctionForSealedBid(

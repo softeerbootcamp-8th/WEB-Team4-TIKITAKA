@@ -197,7 +197,7 @@ public class BidService {
         if (auction.getSeller().getId().equals(memberId)) {
             throw new BidException(SELF_BID_NOT_ALLOWED);
         }
-        if (price - BID_UNIT < currentPriceOf(auction)) {
+        if (price - BID_UNIT < highestAcceptedPriceOf(auction, bidType)) {
             throw new BidException(BID_PRICE_TOO_LOW);
         }
 
@@ -219,5 +219,19 @@ public class BidService {
         // 스키마 변경 전에 생성된 경매만 Bid 최고가로 현재가를 보정한다.
         Long highestPrice = bidRepository.findHighestPriceByAuctionId(auction.getId());
         return highestPrice == null ? auction.getStartPrice() : highestPrice;
+    }
+
+    private long highestAcceptedPriceOf(Auction auction, BidType bidType) {
+        long currentPrice = currentPriceOf(auction);
+        if (bidType != BidType.SEALED) {
+            return currentPrice;
+        }
+
+        Long highestSealedPrice = sealedBidRepository.findHighestPriceByAuctionId(
+                auction.getId()
+        );
+        return highestSealedPrice == null
+                ? currentPrice
+                : Math.max(currentPrice, highestSealedPrice);
     }
 }

@@ -89,10 +89,16 @@ class BidServiceIntegrationTest {
     }
 
     @Test
-    void 마감까지_5분_이하이면_공개가를_바꾸지_않고_밀봉입찰을_저장한다() {
+    void 일반입찰이_없으면_밀봉입찰은_시작가보다_천원_이상_높아야_한다() {
         Fixture fixture = createFixture(1);
         moveAuctionIntoSealedWindow(fixture.auctionId());
 
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().getFirst(),
+                fixture.auctionId(),
+                START_PRICE,
+                BidType.SEALED
+        ));
         BidResult result = bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
@@ -100,6 +106,11 @@ class BidServiceIntegrationTest {
                 BidType.SEALED
         );
 
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
         assertThat(result.status()).isEqualTo(BidStatus.SEALED);
         assertThat(result.price()).isNull();
         assertThat(findBidPrices(fixture.auctionId())).isEmpty();
@@ -117,6 +128,120 @@ class BidServiceIntegrationTest {
                         INITIAL_POINT - DEPOSIT_AMOUNT,
                         DEPOSIT_AMOUNT
                 ));
+    }
+
+    @Test
+    void 일반입찰이_있으면_밀봉입찰은_일반_최고가보다_천원_이상_높아야_한다() {
+        Fixture fixture = createFixture(2);
+        Long openBidderId = fixture.bidderIds().get(0);
+        Long sealedBidderId = fixture.bidderIds().get(1);
+        bidService.place(
+                openBidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.OPEN
+        );
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                sealedBidderId,
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        ));
+        bidService.place(
+                sealedBidderId,
+                fixture.auctionId(),
+                SECOND_BID_PRICE,
+                BidType.SEALED
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(findBidPrices(fixture.auctionId()))
+                .containsExactly(FIRST_BID_PRICE);
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(SECOND_BID_PRICE);
+        assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
+                .isEqualTo(FIRST_BID_PRICE);
+    }
+
+    @Test
+    void 기존_밀봉_최고가보다_낮은_밀봉입찰은_거절한다() {
+        Fixture fixture = createFixture(3);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+        bidService.place(
+                fixture.bidderIds().get(0),
+                fixture.auctionId(),
+                SECOND_BID_PRICE,
+                BidType.SEALED
+        );
+
+        Throwable rejected = catchThrowable(() -> bidService.place(
+                fixture.bidderIds().get(1),
+                fixture.auctionId(),
+                FIRST_BID_PRICE,
+                BidType.SEALED
+        ));
+        bidService.place(
+                fixture.bidderIds().get(2),
+                fixture.auctionId(),
+                SECOND_BID_PRICE + 1_000L,
+                BidType.SEALED
+        );
+
+        assertThat(rejected).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
+        );
+        assertThat(findSealedBidPrices(fixture.auctionId()))
+                .containsExactly(SECOND_BID_PRICE, SECOND_BID_PRICE + 1_000L);
+        assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(2);
+    }
+
+    @Test
+    void 동일한_가격의_동시_밀봉입찰은_한_건만_성공한다() throws Exception {
+        Fixture fixture = createFixture(2);
+        moveAuctionIntoSealedWindow(fixture.auctionId());
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Attempt> first = executor.submit(attemptAfterBarrier(
+                    barrier,
+                    fixture.bidderIds().get(0),
+                    fixture.auctionId(),
+                    FIRST_BID_PRICE,
+                    BidType.SEALED
+            ));
+            Future<Attempt> second = executor.submit(attemptAfterBarrier(
+                    barrier,
+                    fixture.bidderIds().get(1),
+                    fixture.auctionId(),
+                    FIRST_BID_PRICE,
+                    BidType.SEALED
+            ));
+
+            List<Attempt> attempts = List.of(
+                    first.get(10, TimeUnit.SECONDS),
+                    second.get(10, TimeUnit.SECONDS)
+            );
+
+            assertThat(attempts).filteredOn(Attempt::succeeded).hasSize(1);
+            assertThat(attempts)
+                    .filteredOn(attempt -> !attempt.succeeded())
+                    .extracting(Attempt::errorCode)
+                    .containsExactly(ErrorCode.BID_PRICE_TOO_LOW);
+            assertThat(findSealedBidPrices(fixture.auctionId()))
+                    .containsExactly(FIRST_BID_PRICE);
+            assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(1);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -567,12 +692,22 @@ class BidServiceIntegrationTest {
             Long auctionId,
             long price
     ) {
+        return attemptAfterBarrier(barrier, memberId, auctionId, price, BidType.OPEN);
+    }
+
+    private Callable<Attempt> attemptAfterBarrier(
+            CyclicBarrier barrier,
+            Long memberId,
+            Long auctionId,
+            long price,
+            BidType bidType
+    ) {
         return () -> {
             barrier.await(5, TimeUnit.SECONDS);
             try {
                 return Attempt.success(
                         price,
-                        bidService.place(memberId, auctionId, price, BidType.OPEN)
+                        bidService.place(memberId, auctionId, price, bidType)
                 );
             } catch (BusinessException exception) {
                 return Attempt.failure(price, exception.getErrorCode());

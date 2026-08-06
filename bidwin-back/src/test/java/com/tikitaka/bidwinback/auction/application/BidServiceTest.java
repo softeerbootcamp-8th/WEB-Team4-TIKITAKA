@@ -296,6 +296,34 @@ class BidServiceTest {
         verifyNoInteractions(memberRepository, bidRepository, sealedBidRepository);
     }
 
+    @Test
+    void 기존_밀봉_최고가보다_천원_이상_높지_않으면_거절한다() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        )).thenReturn(0);
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusMinutes(2));
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+        when(auction.hasCurrentPrice()).thenReturn(true);
+        when(auction.getCurrentPrice()).thenReturn(CURRENT_PRICE);
+        when(auction.getId()).thenReturn(AUCTION_ID);
+        when(sealedBidRepository.findHighestPriceByAuctionId(AUCTION_ID))
+                .thenReturn(PRICE);
+        stubSeller(2L);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
+        verifyNoInteractions(memberRepository, bidRepository);
+    }
+
     @ParameterizedTest
     @ValueSource(longs = {0L, -1_000L, 232_500L})
     void 양수가_아니거나_천원_단위가_아닌_가격은_Repository_호출_없이_거절한다(
