@@ -8,4 +8,11 @@ public interface DepositSettlementService {
             Long buyerId,
             long targetAmount
     );
+
+    // 경매·구매자의 보증금을 반환한다. 잠금액을 사용 가능 잔액으로 되돌린다.
+    void refund(
+            Long auctionId,
+            Long buyerId,
+            long expectedAmount
+    );
 }

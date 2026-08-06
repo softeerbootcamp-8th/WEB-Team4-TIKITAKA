@@ -23,6 +23,23 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
             DepositStatus status
     );
 
+    // HELD이고 예약 금액이 기대치와 같을 때만 다음 상태로 전이해, 이중 정산과 예약금 변동을 원자적으로 막는다.
+    // Native UPDATE는 @LastModifiedDate가 적용되지 않아 last_modified_at을 직접 갱신한다.
+    @Modifying
+    @Query(value = """
+            UPDATE auction_deposit
+            SET status = :status,
+                last_modified_at = SYSDATE(6)
+            WHERE id = :depositId
+              AND status = 'HELD'
+              AND reserved_amount = :expectedAmount
+            """, nativeQuery = true)
+    int settleIfHeldWithAmount(
+            @Param("depositId") Long depositId,
+            @Param("status") String status,
+            @Param("expectedAmount") long expectedAmount
+    );
+
     // 예약 금액을 기대한 현재값에서 새 값으로만 올려, 동시 증액 시 갱신 유실을 막는다.
     @Modifying
     @Query(value = """

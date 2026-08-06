@@ -270,6 +270,11 @@ public enum ErrorCode {
             "DEPOSIT_409_1",
             "이미 반환되었거나 몰수된 보증금입니다."
     ),
+    DEPOSIT_AMOUNT_MISMATCH(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_2",
+            "보증금 예약 금액이 기대한 금액과 일치하지 않습니다."
+    ),
 
     // Trade / settlement
     TRADE_NOT_FOUND(

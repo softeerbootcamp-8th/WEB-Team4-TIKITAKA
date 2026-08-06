@@ -43,4 +43,19 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             @Param("memberId") Long memberId,
             @Param("amount") long amount
     );
+
+    // 보증금 반환: 잠금액을 사용 가능 잔액으로 원자적으로 되돌린다.
+    // 회원 상태와 무관하게 정산돼야 하므로 status 조건 없이 잠금 잔액만 확인한다.
+    @Modifying
+    @Query(value = """
+            UPDATE member
+            SET total_point = total_point + :amount,
+                locked_point = locked_point - :amount
+            WHERE id = :memberId
+              AND locked_point >= :amount
+            """, nativeQuery = true)
+    int refundLockedPoint(
+            @Param("memberId") Long memberId,
+            @Param("amount") long amount
+    );
 }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_ALREADY_SETTLED;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_AMOUNT_MISMATCH;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 
@@ -52,5 +53,33 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
             throw new DepositException(DEPOSIT_ALREADY_SETTLED);
         }
         return new DepositFundingResult(current, targetAmount, delta);
+    }
+
+    @Override
+    @Transactional
+    public void refund(Long auctionId, Long buyerId, long expectedAmount) {
+        settle(auctionId, buyerId, expectedAmount, DepositStatus.REFUNDED);
+
+        int refunded = memberRepository.refundLockedPoint(buyerId, expectedAmount);
+        if (refunded != 1) {
+            throw new IllegalStateException("보증금 반환 중 잠금 포인트를 되돌리지 못했습니다.");
+        }
+    }
+
+    // HELD이고 예약 금액이 기대치와 같을 때만 원자적으로 상태를 전이한다.
+    private void settle(Long auctionId, Long buyerId, long expectedAmount, DepositStatus status) {
+        AuctionDeposit deposit = auctionDepositRepository
+                .findByAuctionIdAndMemberIdAndStatus(auctionId, buyerId, DepositStatus.HELD)
+                .orElseThrow(() -> new DepositException(DEPOSIT_NOT_FOUND));
+
+        if (deposit.getReservedAmount() != expectedAmount) {
+            throw new DepositException(DEPOSIT_AMOUNT_MISMATCH);
+        }
+
+        int settled = auctionDepositRepository.settleIfHeldWithAmount(
+                deposit.getId(), status.name(), expectedAmount);
+        if (settled != 1) {
+            throw new DepositException(DEPOSIT_ALREADY_SETTLED);
+        }
     }
 }
