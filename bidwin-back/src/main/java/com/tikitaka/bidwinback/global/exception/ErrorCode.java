@@ -253,6 +253,16 @@ public enum ErrorCode {
             "BID_409_4",
             "동시 입찰 처리에 실패했습니다. 최신 가격을 확인한 뒤 다시 시도해주세요."
     ),
+    SEALED_BID_ALREADY_SUBMITTED(
+            HttpStatus.CONFLICT,
+            "BID_409_5",
+            "해당 경매에는 밀봉입찰을 한 번만 제출할 수 있습니다."
+    ),
+    BID_PHASE_CHANGED(
+            HttpStatus.CONFLICT,
+            "BID_409_6",
+            "입찰 단계가 변경되었습니다. 최신 경매 상태를 확인한 뒤 다시 입찰해주세요."
+    ),
 
     // Trade / settlement
     TRADE_NOT_FOUND(
