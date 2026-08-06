@@ -124,7 +124,7 @@ class BidHistoryServiceTest {
         assertThat(response.bidCount()).isEqualTo(3L);
         assertThat(response.bidLog()).satisfiesExactly(
                 bid -> {
-                    assertThat(bid.id()).isEqualTo(-14L);
+                    assertThat(bid.id()).isEqualTo(14L);
                     assertThat(bid.bidder()).isEqualTo("나");
                     assertThat(bid.amount()).isEqualTo(250_000L);
                 },
@@ -133,7 +133,7 @@ class BidHistoryServiceTest {
                     assertThat(bid.amount()).isEqualTo(210_000L);
                 },
                 bid -> {
-                    assertThat(bid.id()).isEqualTo(-12L);
+                    assertThat(bid.id()).isEqualTo(12L);
                     assertThat(bid.amount()).isEqualTo(230_000L);
                 }
         );

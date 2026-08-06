@@ -61,24 +61,12 @@ public class BidHistoryService {
     ) {
         Stream<BidHistoryRow> sealedBids = sealedBidRepository
                 .findHistoryByAuctionId(auctionId)
-                .stream()
-                .map(this::namespaceSealedBidId);
+                .stream();
 
         return Stream.concat(openBids.stream(), sealedBids)
                 .sorted(RECENT_BID_FIRST)
                 .limit(BID_HISTORY_LIMIT)
                 .toList();
-    }
-
-    // Bid와 SealedBid는 별도 PK 시퀀스를 사용하므로 응답 ID 충돌을 음수 영역으로 분리한다.
-    private BidHistoryRow namespaceSealedBidId(BidHistoryRow bid) {
-        return new BidHistoryRow(
-                -bid.id(),
-                bid.bidderId(),
-                bid.bidderNickname(),
-                bid.amount(),
-                bid.biddedAt()
-        );
     }
 
     private BidHistoryItemResponse toResponse(BidHistoryRow bid, long memberId) {
