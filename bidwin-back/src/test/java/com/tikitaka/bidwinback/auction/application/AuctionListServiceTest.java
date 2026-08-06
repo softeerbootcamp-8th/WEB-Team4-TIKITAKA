@@ -60,7 +60,7 @@ class AuctionListServiceTest {
                 imageRepository,
                 imageUrlResolver
         );
-        lenient().when(imageRepository.findByAuctionIdInOrderByIdAsc(anyList())).thenReturn(List.of());
+        lenient().when(imageRepository.findFirstImageByAuctionIds(anyList())).thenReturn(List.of());
     }
 
     @Test

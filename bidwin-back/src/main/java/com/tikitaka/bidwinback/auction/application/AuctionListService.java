@@ -2,7 +2,6 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
-import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -21,7 +20,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -102,15 +100,12 @@ public class AuctionListService {
             return Map.of();
         }
 
-        // findByAuctionIdInOrderByIdAsc가 auctionId당 여러 장을 오름차순으로 주므로,
-        // putIfAbsent로 각 경매의 "맨 처음 등록한" 이미지만 남긴다.
-        Map<Long, String> firstObjectKeyByAuctionId = new LinkedHashMap<>();
-        for (Image image : imageRepository.findByAuctionIdInOrderByIdAsc(auctionIds)) {
-            firstObjectKeyByAuctionId.putIfAbsent(image.getAuction().getId(), image.getObjectKey());
-        }
-
-        return firstObjectKeyByAuctionId.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> imageUrlResolver.resolve(entry.getValue())));
+        // findFirstImageByAuctionIds가 auctionId당 대표 이미지 한 장만 주므로,
+        // 자바에서 따로 골라낼 필요 없이 그대로 Map으로 옮긴다.
+        return imageRepository.findFirstImageByAuctionIds(auctionIds).stream()
+                .collect(Collectors.toMap(
+                        image -> image.getAuction().getId(),
+                        image -> imageUrlResolver.resolve(image.getObjectKey())));
     }
 
     private AuctionSummaryResponse toSummary(
