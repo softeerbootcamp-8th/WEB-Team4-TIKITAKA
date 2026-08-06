@@ -30,7 +30,6 @@ class AuctionRepositoryIntegrationTest {
     private EntityManager entityManager;
 
     @Test
-
     void 판매_물품은_최신_3건까지만_조회한다() {
         // given
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -69,7 +68,9 @@ class AuctionRepositoryIntegrationTest {
                 .extracting(Auction::getId)
                 .isSortedAccordingTo((left, right) -> Long.compare(right, left));
     }
-  
+
+    
+    @Test
     void asOf_이후에_생성된_경매는_같은_asOf로_조회한_목록에_나타나지_않는다() {
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
 
