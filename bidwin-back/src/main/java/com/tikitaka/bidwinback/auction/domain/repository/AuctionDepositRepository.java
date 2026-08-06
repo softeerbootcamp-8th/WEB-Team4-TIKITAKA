@@ -15,7 +15,11 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
 
     boolean existsByMemberIdAndAuctionId(Long memberId, Long auctionId);
 
-    // 증액·반환·몰수가 모두 보증금 행을 먼저 잠그게 해 동일 요청을 직렬화하고 회원 행과의 락 순서를 통일한다.
+    // 정산 재시도도 기존 행을 잠근 뒤 상태를 판별할 수 있도록 상태 조건 없이 조회한다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<AuctionDeposit> findByAuctionIdAndMemberId(Long auctionId, Long memberId);
+
+    // 증액 요청도 보증금 행을 먼저 잠그게 해 동일 요청을 직렬화하고 회원 행과의 락 순서를 통일한다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<AuctionDeposit> findByAuctionIdAndMemberIdAndStatus(
             Long auctionId,

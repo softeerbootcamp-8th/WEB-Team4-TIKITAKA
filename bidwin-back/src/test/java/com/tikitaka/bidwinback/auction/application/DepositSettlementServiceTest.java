@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_ALREADY_SETTLED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_NOT_FOUND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -109,5 +110,22 @@ class DepositSettlementServiceTest {
         // then
         assertThat(exception.getErrorCode()).isEqualTo(DEPOSIT_NOT_FOUND);
         verify(auctionDepositRepository, never()).save(any(AuctionDeposit.class));
+    }
+
+    @Test
+    void 이미_정산한_보증금의_반환을_재시도하면_중복_정산으로_거부한다() {
+        // given
+        when(auctionDepositRepository.findByAuctionIdAndMemberId(AUCTION_ID, BUYER_ID))
+                .thenReturn(Optional.of(deposit));
+        when(deposit.getStatus()).thenReturn(DepositStatus.REFUNDED);
+
+        // when
+        DepositException exception = assertThrows(
+                DepositException.class,
+                () -> service.refund(AUCTION_ID, BUYER_ID, 30_000L)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(DEPOSIT_ALREADY_SETTLED);
     }
 }

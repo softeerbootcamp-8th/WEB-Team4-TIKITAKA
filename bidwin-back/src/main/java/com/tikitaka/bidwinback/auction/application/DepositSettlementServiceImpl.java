@@ -99,8 +99,12 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
     // HELD이고 예약 금액이 기대치와 같을 때만 원자적으로 상태를 전이한다.
     private void settle(Long auctionId, Long buyerId, long expectedAmount, DepositStatus status) {
         AuctionDeposit deposit = auctionDepositRepository
-                .findByAuctionIdAndMemberIdAndStatus(auctionId, buyerId, DepositStatus.HELD)
+                .findByAuctionIdAndMemberId(auctionId, buyerId)
                 .orElseThrow(() -> new DepositException(DEPOSIT_NOT_FOUND));
+
+        if (deposit.getStatus() != DepositStatus.HELD) {
+            throw new DepositException(DEPOSIT_ALREADY_SETTLED);
+        }
 
         if (deposit.getReservedAmount() != expectedAmount) {
             throw new DepositException(DEPOSIT_AMOUNT_MISMATCH);
