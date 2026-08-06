@@ -54,7 +54,7 @@ class AuctionBidControllerTest {
     private static final String VALID_OPEN_REQUEST = """
             {
               "price": 232000,
-              "bidType": "UP"
+              "bidType": "OPEN"
             }
             """;
     private static final String VALID_SEALED_REQUEST = """
@@ -106,7 +106,7 @@ class AuctionBidControllerTest {
                 BidStatus.UP,
                 bidAt
         );
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenReturn(result);
 
         // when & then
@@ -123,7 +123,7 @@ class AuctionBidControllerTest {
                 .andExpect(jsonPath("$.data.status").value("UP"))
                 .andExpect(jsonPath("$.data.bidAt").value(bidAt.toString()));
 
-        verify(bidService).place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP);
+        verify(bidService).place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
     }
 
     @Test
@@ -158,7 +158,7 @@ class AuctionBidControllerTest {
                         .content("""
                                 {
                                   "price": 0,
-                                  "bidType": "UP"
+                                  "bidType": "OPEN"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -172,7 +172,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_천원_단위가_아니면_400을_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L, BidType.UP))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, 232_500L, BidType.OPEN))
                 .thenThrow(new BidException(INVALID_BID_UNIT));
 
         mockMvc.perform(post(ENDPOINT)
@@ -181,7 +181,7 @@ class AuctionBidControllerTest {
                         .content("""
                                 {
                                   "price": 232500,
-                                  "bidType": "UP"
+                                  "bidType": "OPEN"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -191,7 +191,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰가가_현재가보다_천원_이상_높지_않으면_422를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenThrow(new BidException(BID_PRICE_TOO_LOW));
 
         mockMvc.perform(post(ENDPOINT)
@@ -205,7 +205,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 동시_입찰_락_획득에_실패하면_409를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenThrow(new BidException(CONCURRENT_BID_CONFLICT));
 
         mockMvc.perform(post(ENDPOINT)
@@ -219,7 +219,7 @@ class AuctionBidControllerTest {
 
     @Test
     void 요청한_입찰_단계와_현재_단계가_다르면_409를_응답한다() throws Exception {
-        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP))
+        when(bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN))
                 .thenThrow(new BidException(BID_PHASE_CHANGED));
 
         mockMvc.perform(post(ENDPOINT)

@@ -114,7 +114,7 @@ class BidServiceTest {
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP);
+        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
@@ -142,7 +142,7 @@ class BidServiceTest {
                 .thenReturn(1);
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP);
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         ArgumentCaptor<AuctionDeposit> depositCaptor =
                 ArgumentCaptor.forClass(AuctionDeposit.class);
@@ -163,7 +163,7 @@ class BidServiceTest {
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP);
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verify(auctionDepositRepository, never()).save(any(AuctionDeposit.class));
@@ -178,7 +178,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INSUFFICIENT_DEPOSIT);
@@ -255,7 +255,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PHASE_CHANGED);
@@ -331,7 +331,7 @@ class BidServiceTest {
     ) {
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, invalidPrice, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, invalidPrice, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_BID_UNIT);
@@ -350,7 +350,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
@@ -370,7 +370,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
@@ -383,7 +383,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
@@ -397,7 +397,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_ONGOING);
@@ -413,7 +413,7 @@ class BidServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_ALREADY_ENDED);
@@ -430,7 +430,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(SELF_BID_NOT_ALLOWED);
@@ -456,7 +456,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
@@ -475,7 +475,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -494,7 +494,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -513,7 +513,7 @@ class BidServiceTest {
 
         BidException exception = assertThrows(
                 BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP)
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_BID_CONFLICT);
@@ -527,7 +527,7 @@ class BidServiceTest {
         stubPersistedBid();
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
-        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.UP);
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         InOrder order = inOrder(
                 auctionRepository,

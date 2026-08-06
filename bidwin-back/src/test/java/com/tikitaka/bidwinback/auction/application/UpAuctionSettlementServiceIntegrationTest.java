@@ -76,7 +76,7 @@ class UpAuctionSettlementServiceIntegrationTest {
         Fixture fixture = createFixture(2);
         Long openBidderId = fixture.bidderIds().get(0);
         Long sealedBidderId = fixture.bidderIds().get(1);
-        bidService.place(openBidderId, fixture.auctionId(), 101_000L, BidType.UP);
+        bidService.place(openBidderId, fixture.auctionId(), 101_000L, BidType.OPEN);
         moveEndedAt(fixture.auctionId(), "SYSDATE(6) + INTERVAL 2 MINUTE");
         bidService.place(
                 sealedBidderId,
@@ -123,7 +123,7 @@ class UpAuctionSettlementServiceIntegrationTest {
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 101_000L,
-                BidType.UP
+                BidType.OPEN
         );
         moveEndedAt(fixture.auctionId(), "SYSDATE(6) - INTERVAL 1 SECOND");
         CyclicBarrier barrier = new CyclicBarrier(2);

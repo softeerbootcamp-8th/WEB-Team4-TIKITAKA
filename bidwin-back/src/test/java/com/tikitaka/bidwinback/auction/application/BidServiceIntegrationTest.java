@@ -139,7 +139,7 @@ class BidServiceIntegrationTest {
                 openBidderId,
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
-                BidType.UP
+                BidType.OPEN
         );
         moveAuctionIntoSealedWindow(fixture.auctionId());
 
@@ -301,7 +301,7 @@ class BidServiceIntegrationTest {
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
-                BidType.UP
+                BidType.OPEN
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -318,8 +318,8 @@ class BidServiceIntegrationTest {
         Fixture fixture = createFixture(1);
         Long bidderId = fixture.bidderIds().getFirst();
 
-        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.UP);
-        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.UP);
+        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.OPEN);
+        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.OPEN);
 
         assertThat(findDepositSnapshots(fixture.auctionId()))
                 .containsExactly(new DepositSnapshot(DEPOSIT_AMOUNT, DepositStatus.HELD));
@@ -341,7 +341,7 @@ class BidServiceIntegrationTest {
                 bidderId,
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
-                BidType.UP
+                BidType.OPEN
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -482,14 +482,14 @@ class BidServiceIntegrationTest {
         Fixture fixture = createFixture(1);
         Long bidderId = fixture.bidderIds().getFirst();
 
-        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.UP);
-        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.UP);
+        bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.OPEN);
+        bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.OPEN);
         Throwable thrown = catchThrowable(
                 () -> bidService.place(
                         bidderId,
                         fixture.auctionId(),
                         102_500L,
-                        BidType.UP
+                        BidType.OPEN
                 )
         );
 
@@ -513,7 +513,7 @@ class BidServiceIntegrationTest {
                 fixture.sellerId(),
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
-                BidType.UP
+                BidType.OPEN
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -544,7 +544,7 @@ class BidServiceIntegrationTest {
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
-                BidType.UP
+                BidType.OPEN
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -589,13 +589,13 @@ class BidServiceIntegrationTest {
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 legacyHighestPrice,
-                BidType.UP
+                BidType.OPEN
         ));
         BidResult accepted = bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 legacyHighestPrice + 1_000L,
-                BidType.UP
+                BidType.OPEN
         );
 
         assertThat(rejected).isInstanceOfSatisfying(
@@ -628,7 +628,7 @@ class BidServiceIntegrationTest {
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
                 MAX_UNIT_PRICE,
-                BidType.UP
+                BidType.OPEN
         ));
 
         assertThat(thrown).isInstanceOfSatisfying(
@@ -664,7 +664,7 @@ class BidServiceIntegrationTest {
                     fixture.bidderIds().getFirst(),
                     fixture.auctionId(),
                     FIRST_BID_PRICE,
-                    BidType.UP
+                    BidType.OPEN
             ));
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(
                     System.nanoTime() - startedAt
@@ -692,7 +692,7 @@ class BidServiceIntegrationTest {
             Long auctionId,
             long price
     ) {
-        return attemptAfterBarrier(barrier, memberId, auctionId, price, BidType.UP);
+        return attemptAfterBarrier(barrier, memberId, auctionId, price, BidType.OPEN);
     }
 
     private Callable<Attempt> attemptAfterBarrier(

@@ -65,7 +65,7 @@ public class BidService {
         // bidType은 클라이언트가 인지한 입찰 단계일 뿐이며, 실제 단계는 DB 시각을 사용하는
         // 조건부 UPDATE가 판정한다. 단계가 바뀌어도 다른 입찰 유형으로 자동 전환하지 않는다.
         int updatedRows = switch (bidType) {
-            case UP -> updateCurrentPrice(memberId, auctionId, price);
+            case OPEN -> updateCurrentPrice(memberId, auctionId, price);
             case SEALED -> tryUpdateAuctionForSealedBid(memberId, auctionId, price);
         };
         if (updatedRows != 1) {
@@ -78,7 +78,7 @@ public class BidService {
         reserveDepositForFirstBid(memberId, auctionId, auction, bidder);
 
         return switch (bidType) {
-            case UP -> saveOpenBid(auction, bidder, price);
+            case OPEN -> saveOpenBid(auction, bidder, price);
             case SEALED -> saveSealedBid(auction, bidder, price);
         };
     }
@@ -210,7 +210,7 @@ public class BidService {
                 SEALED_BID_WINDOW_MINUTES
         );
         return databaseTime.isBefore(sealedBidStartedAt)
-                ? BidType.UP
+                ? BidType.OPEN
                 : BidType.SEALED;
     }
 
