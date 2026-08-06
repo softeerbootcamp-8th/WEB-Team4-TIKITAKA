@@ -87,6 +87,22 @@ class AuctionRepositoryIntegrationTest {
                 .doesNotContain(completed.getId());
     }
 
+    @Test
+    void asOf_이후에_완료_처리된_경매는_같은_asOf_페이지_조회에서_계속_노출된다() {
+        LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
+
+        UpAuction completedAfterAsOf = persistAuction("조회 도중 즉시구매 체결", asOf.plusDays(1));
+        overrideCreatedAt(completedAfterAsOf, asOf.minusDays(1));
+        overrideCompletedAt(completedAfterAsOf, asOf.plusMinutes(1));
+
+        entityManager.clear();
+
+        List<Auction> result = auctionRepository.findAllForList(null, asOf);
+
+        assertThat(result).extracting(Auction::getId)
+                .contains(completedAfterAsOf.getId());
+    }
+
     private UpAuction persistAuction(String title, LocalDateTime endedAt) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         Member seller = persistMember("seller-" + suffix, "판매" + suffix);
