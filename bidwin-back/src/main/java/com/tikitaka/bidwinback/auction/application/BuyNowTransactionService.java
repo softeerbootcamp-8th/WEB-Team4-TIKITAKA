@@ -36,6 +36,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DE
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 
 @Service
 @RequiredArgsConstructor
@@ -98,6 +99,8 @@ public class BuyNowTransactionService {
                 command.purchasedAt()
         );
         if (completed != 1) {
+            // 검증 후 조건부 UPDATE 전에 마감 경계를 넘었는지 최신 DB 시각으로 다시 확인한다.
+            validateAuction(auction, auctionRepository.currentDatabaseTime());
             throw new BidException(CONCURRENT_TRADE_CONFLICT);
         }
 
@@ -178,6 +181,11 @@ public class BuyNowTransactionService {
         // 요구사항: DB 현재 시각이 종료 시각과 같거나 지난 경매는 구매할 수 없다.
         if (!auction.getEndedAt().isAfter(databaseTime)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
+        }
+        // 상향 경매는 마감 5분 전 밀봉입찰 구간부터 즉시구매할 수 없다.
+        if (auction instanceof UpAuction
+                && !databaseTime.isBefore(auction.getEndedAt().minusMinutes(5))) {
+            throw new AuctionException(UP_BUY_NOW_CLOSED_NEAR_DEADLINE);
         }
     }
 

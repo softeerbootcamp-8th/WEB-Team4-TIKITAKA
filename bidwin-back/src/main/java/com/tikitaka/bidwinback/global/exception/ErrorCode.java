@@ -184,6 +184,11 @@ public enum ErrorCode {
             "AUCTION_409_4",
             "등록된 경매는 수정하거나 삭제할 수 없습니다."
     ),
+    UP_BUY_NOW_CLOSED_NEAR_DEADLINE(
+            HttpStatus.CONFLICT,
+            "AUCTION_409_5",
+            "상향 경매는 마감 5분 전까지만 즉시구매할 수 있습니다."
+    ),
 
     // Upload
     UNSUPPORTED_IMAGE_TYPE(
