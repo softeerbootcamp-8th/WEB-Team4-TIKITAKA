@@ -119,6 +119,10 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND status = 'OPEN'
               AND completed_at IS NULL
               AND ended_at > SYSDATE(6)
+              AND (
+                    auction_type = 'DOWN'
+                    OR ended_at > DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
+              )
               AND seller_id <> :buyerId
             """, nativeQuery = true)
     int completeForBuyNow(
