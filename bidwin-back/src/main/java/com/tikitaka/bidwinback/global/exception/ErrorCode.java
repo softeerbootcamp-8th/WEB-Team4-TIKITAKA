@@ -264,6 +264,23 @@ public enum ErrorCode {
             "입찰 단계가 변경되었습니다. 최신 경매 상태를 확인한 뒤 다시 입찰해주세요."
     ),
 
+    // Deposit
+    DEPOSIT_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "DEPOSIT_404_1",
+            "해당 경매의 보증금 내역을 찾을 수 없습니다."
+    ),
+    DEPOSIT_ALREADY_SETTLED(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_1",
+            "이미 반환되었거나 몰수된 보증금입니다."
+    ),
+    DEPOSIT_AMOUNT_MISMATCH(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_2",
+            "보증금 예약 금액이 기대한 금액과 일치하지 않습니다."
+    ),
+
     // Trade / settlement
     TRADE_NOT_FOUND(
             HttpStatus.NOT_FOUND,
