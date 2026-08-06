@@ -43,6 +43,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALRE
 public class BidService {
 
     private static final long BID_UNIT = 1_000L;
+    private static final long SEALED_BID_WINDOW_MINUTES = 5L;
     private static final long DEPOSIT_RATE_NUMERATOR = 3L;
     private static final long DEPOSIT_RATE_DENOMINATOR = 10L;
 
@@ -205,7 +206,9 @@ public class BidService {
     }
 
     private BidType currentBidType(Auction auction, LocalDateTime databaseTime) {
-        LocalDateTime sealedBidStartedAt = auction.getEndedAt().minusMinutes(5);
+        LocalDateTime sealedBidStartedAt = auction.getEndedAt().minusMinutes(
+                SEALED_BID_WINDOW_MINUTES
+        );
         return databaseTime.isBefore(sealedBidStartedAt)
                 ? BidType.OPEN
                 : BidType.SEALED;

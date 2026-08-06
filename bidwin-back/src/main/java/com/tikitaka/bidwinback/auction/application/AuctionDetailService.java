@@ -11,6 +11,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSellerResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
@@ -41,6 +42,7 @@ public class AuctionDetailService {
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
+    private final SealedBidRepository sealedBidRepository;
     private final ImageRepository imageRepository;
     private final AuctionTradeRepository auctionTradeRepository;
     private final ImageUrlResolver imageUrlResolver;
@@ -86,6 +88,9 @@ public class AuctionDetailService {
     ) {
         long currentPrice = finalPrice.orElseGet(() -> currentPriceOf(auction));
         long bidCount = bidRepository.countByAuctionId(auction.getId());
+        if (auction.isSealedBidRevealed()) {
+            bidCount += sealedBidRepository.countByAuctionId(auction.getId());
+        }
 
         return new UpAuctionDetailResponse(
                 auction.getId(),
