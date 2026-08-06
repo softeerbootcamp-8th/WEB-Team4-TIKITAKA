@@ -12,8 +12,7 @@ const CHEVRON_SIZE = 14
  * 그래서 버튼 대신 "지금 얼마를 쓸 수 있는지"를 먼저 보여준다.
  */
 function DepositCard({ deposit }: { deposit: DepositAccount }) {
-  /* 잔액에는 입찰에 묶인 금액도 포함돼 있어서, 실제로 쓸 수 있는 금액을 따로 계산한다. */
-  const available = deposit.balance - deposit.inUse
+  const total = deposit.balance + deposit.inUse
 
   return (
     <Card>
@@ -31,13 +30,13 @@ function DepositCard({ deposit }: { deposit: DepositAccount }) {
       <p className="mt-sm flex flex-wrap items-baseline gap-xs">
         <span className="text-sm text-body">{DEPOSIT_TEXT.balanceLabel}</span>
         <span className="text-3xl font-bold tracking-tight text-ink">
-          {formatWon(deposit.balance)}
+          {formatWon(total)}
         </span>
       </p>
 
       <div className="mt-base grid grid-cols-2 gap-sm">
         <DepositStat label={DEPOSIT_TEXT.inUseLabel} amount={deposit.inUse} />
-        <DepositStat label={DEPOSIT_TEXT.availableLabel} amount={available} isHighlighted />
+        <DepositStat label={DEPOSIT_TEXT.availableLabel} amount={deposit.balance} isHighlighted />
       </div>
 
       <p className="mt-base text-xs leading-relaxed text-muted">{DEPOSIT_TEXT.notice}</p>

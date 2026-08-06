@@ -33,9 +33,6 @@ export function historyPath(tab: HistoryTabKey) {
 
 /** 섹션마다 미리 보여줄 물품 수. 나머지는 "전체 보기"로 내역 페이지에 넘긴다. */
 export const ITEM_PREVIEW_LIMIT = 3
-/** 상단 배너에 한 번에 노출할 진행 중 거래 수 */
-export const ACTIVE_TRADE_PREVIEW_LIMIT = 4
-
 /*
  * 드로어가 열리고 닫히는 데 걸리는 시간(ms).
  * 마크업의 duration-300과 같은 값이어야 닫히는 애니메이션이 끝난 뒤 언마운트된다. 둘을 함께 바꾼다.
@@ -53,10 +50,8 @@ export const MYPAGE_TEXT = {
 
 export const ACTIVE_TRADE_TEXT = {
   title: (count: number) => `진행 중인 거래가 ${count}건 있어요`,
-  description: '기한 안에 다음 단계를 마쳐야 거래가 완료돼요.',
+  description: '남은 단계를 마치면 거래가 완료돼요.',
   viewAll: '전체 보기',
-  dueSuffix: '남음',
-  overdue: '기한 지남',
 } as const
 
 export const TRADE_ROLE_LABEL: Record<TradeRole, string> = {
