@@ -6,7 +6,6 @@ import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -14,6 +13,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -50,6 +50,9 @@ class AuctionDetailServiceTest {
     private BidRepository bidRepository;
 
     @Mock
+    private SealedBidRepository sealedBidRepository;
+
+    @Mock
     private ImageRepository imageRepository;
 
     @Mock
@@ -65,6 +68,7 @@ class AuctionDetailServiceTest {
         auctionDetailService = new AuctionDetailService(
                 auctionRepository,
                 bidRepository,
+                sealedBidRepository,
                 imageRepository,
                 auctionTradeRepository,
                 imageUrlResolver
@@ -86,8 +90,7 @@ class AuctionDetailServiceTest {
                 .thenReturn("https://cdn.example.com/auction-images/product.jpg");
         when(auction.hasCurrentPrice()).thenReturn(true);
         when(auction.getCurrentPrice()).thenReturn(240_000L);
-        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, false))
-                .thenReturn(3L);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(3L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -117,10 +120,8 @@ class AuctionDetailServiceTest {
         );
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(bidRepository.findHighestPriceByAuctionIdAndStatus(1L, BidStatus.UP))
-                .thenReturn(null);
-        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, false))
-                .thenReturn(0L);
+        when(bidRepository.findHighestPriceByAuctionId(1L)).thenReturn(null);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -131,7 +132,7 @@ class AuctionDetailServiceTest {
     }
 
     @Test
-    void 완료된_상승_경매만_최종_거래가를_조회한다() {
+    void 완료된_상승_경매는_최종_거래가와_밀봉입찰을_포함한_건수를_조회한다() {
         UpAuction auction = mock(UpAuction.class);
         stubCommonAuction(
                 auction,
@@ -144,14 +145,14 @@ class AuctionDetailServiceTest {
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
         when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
                 .thenReturn(Optional.of(300_000L));
-        when(bidRepository.countVisibleByAuctionId(1L, BidStatus.SEALED, true))
-                .thenReturn(5L);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(5L);
+        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(2L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
 
         assertThat(response.currentPrice()).isEqualTo(300_000L);
-        assertThat(response.bidCount()).isEqualTo(5L);
+        assertThat(response.bidCount()).isEqualTo(7L);
         verify(auctionTradeRepository).findFinalPriceByAuctionId(1L);
     }
 

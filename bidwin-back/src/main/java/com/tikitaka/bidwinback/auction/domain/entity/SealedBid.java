@@ -1,12 +1,8 @@
 package com.tikitaka.bidwinback.auction.domain.entity;
 
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
-import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -15,23 +11,35 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
+
+import java.time.LocalDateTime;
 
 import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
 @Table(
-        name = "Bid",
+        name = "sealed_bid",
+        uniqueConstraints = @UniqueConstraint(
+                name = SealedBid.AUCTION_BIDDER_UNIQUE_CONSTRAINT,
+                columnNames = {"auction_id", "bidder_id"}
+        ),
         indexes = @Index(
-                name = "idx_bid_auction_id_price",
+                name = "idx_sealed_bid_auction_price",
                 columnList = "auction_id, price"
         )
 )
 @NoArgsConstructor(access = PROTECTED)
-public class Bid extends BaseTimeEntity {
+public class SealedBid {
+
+    public static final String AUCTION_BIDDER_UNIQUE_CONSTRAINT =
+            "uk_sealed_bid_auction_bidder";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,15 +56,19 @@ public class Bid extends BaseTimeEntity {
     @Column(nullable = false)
     private long price;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private BidStatus status;
+    @CreationTimestamp(source = SourceType.DB)
+    @Column(
+            name = "submitted_at",
+            nullable = false,
+            updatable = false,
+            columnDefinition = "datetime(6) default current_timestamp(6)"
+    )
+    private LocalDateTime submittedAt;
 
     @Builder
-    private Bid(Auction auction, Member bidder, long price, BidStatus status) {
+    private SealedBid(Auction auction, Member bidder, long price) {
         this.auction = auction;
         this.bidder = bidder;
         this.price = price;
-        this.status = status;
     }
 }

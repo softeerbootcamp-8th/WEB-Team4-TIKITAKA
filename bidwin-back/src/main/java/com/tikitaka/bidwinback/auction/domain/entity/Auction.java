@@ -110,4 +110,26 @@ public abstract class Auction extends BaseTimeEntity {
                 || status == AuctionStatus.COMPLETED
                 || status == AuctionStatus.UNSOLD;
     }
+
+    public void complete(long finalPrice, LocalDateTime completedAt) {
+        if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
+            throw new IllegalStateException("진행 중인 경매만 낙찰 처리할 수 있습니다.");
+        }
+        if (finalPrice <= 0) {
+            throw new IllegalArgumentException("낙찰가는 0보다 커야 합니다.");
+        }
+
+        this.currentPrice = finalPrice;
+        this.status = AuctionStatus.COMPLETED;
+        this.completedAt = completedAt;
+    }
+
+    public void markUnsold(LocalDateTime completedAt) {
+        if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
+            throw new IllegalStateException("진행 중인 경매만 유찰 처리할 수 있습니다.");
+        }
+
+        this.status = AuctionStatus.UNSOLD;
+        this.completedAt = completedAt;
+    }
 }

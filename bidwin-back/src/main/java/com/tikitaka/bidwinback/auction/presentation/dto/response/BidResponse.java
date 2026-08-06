@@ -5,17 +5,20 @@ import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 
 import java.time.LocalDateTime;
 
-public record BidResponse(
-        Long bidId,
-        Long auctionId,
-        Long bidderId,
-        long price,
-        BidStatus status,
-        LocalDateTime bidAt
-) {
+public sealed interface BidResponse {
 
     public static BidResponse from(BidResult result) {
-        return new BidResponse(
+        if (result.status() == BidStatus.SEALED) {
+            return new Sealed(
+                    result.bidId(),
+                    result.auctionId(),
+                    result.bidderId(),
+                    result.status(),
+                    result.bidAt()
+            );
+        }
+
+        return new Open(
                 result.bidId(),
                 result.auctionId(),
                 result.bidderId(),
@@ -23,5 +26,24 @@ public record BidResponse(
                 result.status(),
                 result.bidAt()
         );
+    }
+
+    record Open(
+            Long bidId,
+            Long auctionId,
+            Long bidderId,
+            long price,
+            BidStatus status,
+            LocalDateTime bidAt
+    ) implements BidResponse {
+    }
+
+    record Sealed(
+            Long bidId,
+            Long auctionId,
+            Long bidderId,
+            BidStatus status,
+            LocalDateTime bidAt
+    ) implements BidResponse {
     }
 }

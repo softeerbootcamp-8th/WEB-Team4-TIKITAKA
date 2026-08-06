@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
+import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -28,6 +29,9 @@ class BidRepositoryIntegrationTest {
 
     @Autowired
     private BidRepository bidRepository;
+
+    @Autowired
+    private SealedBidRepository sealedBidRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -78,17 +82,9 @@ class BidRepositoryIntegrationTest {
                 .executeUpdate();
         entityManager.clear();
 
-        long bidCount = bidRepository.countVisibleByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                false
-        );
+        long bidCount = bidRepository.countByAuctionId(auction.getId());
         List<BidHistoryRow> bidHistory =
-                bidRepository.findVisibleHistoryByAuctionId(
-                        auction.getId(),
-                        BidStatus.SEALED,
-                        false
-                );
+                bidRepository.findHistoryByAuctionId(auction.getId());
 
         List<Long> expectedIds = new ArrayList<>();
         for (int index = bids.size() - 1; index >= 2; index--) {
@@ -131,10 +127,7 @@ class BidRepositoryIntegrationTest {
         entityManager.persist(auction);
         entityManager.flush();
 
-        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
-                auction.getId(),
-                BidStatus.UP
-        )).isNull();
+        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId())).isNull();
 
         entityManager.persist(Bid.builder()
                 .auction(auction)
@@ -151,25 +144,21 @@ class BidRepositoryIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
-                auction.getId(),
-                BidStatus.UP
-        ))
+        assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId()))
                 .isEqualTo(103_000L);
     }
 
     @Test
-    void SEALED_입찰은_경매_상태에_따라_비공개하거나_공개한다() {
+    void 밀봉입찰의_전체_건수와_최신_10건을_조회한다() {
         String suffix = UUID.randomUUID()
                 .toString()
                 .replace("-", "")
                 .substring(0, 8);
         Member seller = persistMember("sealed-seller-" + suffix, "판매" + suffix);
-        Member bidder = persistMember("sealed-bidder-" + suffix, "입찰" + suffix);
         UpAuction auction = UpAuction.builder()
                 .seller(seller)
-                .title("밀봉 입찰 조회 통합 테스트")
-                .description("밀봉 입찰 비공개 검증")
+                .title("밀봉 입찰 내역 통합 테스트")
+                .description("밀봉 입찰 Repository 쿼리 검증")
                 .status(AuctionStatus.BID_ONGOING)
                 .category(AuctionCategory.HOUSEHOLD)
                 .startPrice(100_000L)
@@ -179,45 +168,44 @@ class BidRepositoryIntegrationTest {
                 .buyNowPrice(300_000L)
                 .build();
         entityManager.persist(auction);
-        entityManager.persist(Bid.builder()
-                .auction(auction)
-                .bidder(bidder)
-                .price(101_000L)
-                .status(BidStatus.UP)
-                .build());
-        entityManager.persist(Bid.builder()
-                .auction(auction)
-                .bidder(bidder)
-                .price(150_000L)
-                .status(BidStatus.SEALED)
-                .build());
+
+        List<SealedBid> sealedBids = new ArrayList<>();
+        for (int index = 0; index < 12; index++) {
+            Member bidder = persistMember(
+                    "sealed-bidder-" + index + "-" + suffix,
+                    "입찰" + index
+            );
+            SealedBid sealedBid = SealedBid.builder()
+                    .auction(auction)
+                    .bidder(bidder)
+                    .price(101_000L + index * 1_000L)
+                    .build();
+            entityManager.persist(sealedBid);
+            sealedBids.add(sealedBid);
+        }
         entityManager.flush();
+
+        LocalDateTime submittedAt = LocalDateTime.of(2026, 8, 3, 12, 0);
+        entityManager.createNativeQuery("""
+                        update sealed_bid
+                        set submitted_at = :submittedAt
+                        where auction_id = :auctionId
+                        """)
+                .setParameter("submittedAt", submittedAt)
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
         entityManager.clear();
 
-        assertThat(bidRepository.countVisibleByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                false
-        )).isEqualTo(1L);
-        assertThat(bidRepository.findVisibleHistoryByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                false
-        )).extracting(BidHistoryRow::amount).containsExactly(101_000L);
-        assertThat(bidRepository.countVisibleByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                true
-        )).isEqualTo(2L);
-        assertThat(bidRepository.findVisibleHistoryByAuctionId(
-                auction.getId(),
-                BidStatus.SEALED,
-                true
-        )).extracting(BidHistoryRow::amount).containsExactly(150_000L, 101_000L);
-        assertThat(bidRepository.findHighestPriceByAuctionIdAndStatus(
-                auction.getId(),
-                BidStatus.UP
-        )).isEqualTo(101_000L);
+        List<Long> expectedIds = new ArrayList<>();
+        for (int index = sealedBids.size() - 1; index >= 2; index--) {
+            expectedIds.add(sealedBids.get(index).getId());
+        }
+
+        assertThat(sealedBidRepository.countByAuctionId(auction.getId())).isEqualTo(12L);
+        assertThat(sealedBidRepository.findHistoryByAuctionId(auction.getId()))
+                .hasSize(10)
+                .extracting(BidHistoryRow::id)
+                .containsExactlyElementsOf(expectedIds);
     }
 
     private Member persistMember(String identifier, String nickname) {

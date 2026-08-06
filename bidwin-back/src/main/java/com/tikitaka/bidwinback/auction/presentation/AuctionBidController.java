@@ -37,8 +37,8 @@ public class AuctionBidController {
         BidResult result = bidService.place(
                 authMember.memberId(),
                 auctionId,
-                request.status(),
-                request.price()
+                request.price(),
+                request.bidType()
         );
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(BidResponse.from(result)));
