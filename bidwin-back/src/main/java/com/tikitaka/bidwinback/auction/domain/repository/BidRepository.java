@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.MyBidAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -71,4 +72,15 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
             @Param("auctionIds") List<Long> auctionIds,
             @Param("asOf") LocalDateTime asOf
     );
+
+    // 마이페이지 입찰 내역용. 내가 입찰한 경매별로 내 최고가·마지막 입찰 시각만 뽑는다.
+    @Query("""
+            select new com.tikitaka.bidwinback.auction.domain.repository.dto.MyBidAggregate(
+                bid.auction.id, max(bid.price), max(bid.createdAt)
+            )
+            from Bid bid
+            where bid.bidder.id = :memberId
+            group by bid.auction.id
+            """)
+    List<MyBidAggregate> summarizeMyBidsByMemberId(@Param("memberId") Long memberId);
 }
