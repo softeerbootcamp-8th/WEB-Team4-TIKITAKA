@@ -23,4 +23,11 @@ public interface DepositSettlementService {
             Long sellerId,
             long expectedAmount
     );
+
+    // 경매·구매자의 보증금을 몰수한다. 잠금액을 차감하고 되돌리지 않는다.
+    void forfeit(
+            Long auctionId,
+            Long buyerId,
+            long expectedAmount
+    );
 }
