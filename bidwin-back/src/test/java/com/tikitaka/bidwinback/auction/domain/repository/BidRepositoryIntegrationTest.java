@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
+import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -142,6 +143,57 @@ class BidRepositoryIntegrationTest {
 
         assertThat(bidRepository.findHighestPriceByAuctionId(auction.getId()))
                 .isEqualTo(103_000L);
+    }
+
+    @Test
+    void 일반입찰과_밀봉입찰에_참여한_경매를_중복_없이_센다() {
+        // given
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Member seller = persistMember("count-seller-" + suffix, "판매" + suffix);
+        Member bidder = persistMember("count-bidder-" + suffix, "입찰" + suffix);
+        UpAuction bothAuction = persistAuction(seller, "일반·밀봉 모두 참여");
+        UpAuction sealedOnlyAuction = persistAuction(seller, "밀봉만 참여");
+        entityManager.persist(Bid.builder()
+                .auction(bothAuction)
+                .bidder(bidder)
+                .price(110_000L)
+                .status(BidStatus.UP)
+                .build());
+        entityManager.persist(SealedBid.builder()
+                .auction(bothAuction)
+                .bidder(bidder)
+                .price(120_000L)
+                .build());
+        entityManager.persist(SealedBid.builder()
+                .auction(sealedOnlyAuction)
+                .bidder(bidder)
+                .price(130_000L)
+                .build());
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        long count = bidRepository.countDistinctAuctionByBidderId(bidder.getId());
+
+        // then
+        assertThat(count).isEqualTo(2L);
+    }
+
+    private UpAuction persistAuction(Member seller, String title) {
+        UpAuction auction = UpAuction.builder()
+                .seller(seller)
+                .title(title)
+                .description("경매 참여 횟수 테스트")
+                .status(AuctionStatus.OPEN)
+                .category(AuctionCategory.HOUSEHOLD)
+                .startPrice(100_000L)
+                .endedAt(LocalDateTime.now().plusDays(1))
+                .tradeType(TradeType.DELIVERY)
+                .contact("01012345678")
+                .buyNowPrice(300_000L)
+                .build();
+        entityManager.persist(auction);
+        return auction;
     }
 
     private Member persistMember(String identifier, String nickname) {
