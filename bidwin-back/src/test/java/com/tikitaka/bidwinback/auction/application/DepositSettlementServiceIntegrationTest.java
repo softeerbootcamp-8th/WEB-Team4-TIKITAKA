@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 @SpringBootTest(properties = "app.storage.s3.bucket=test-bucket")
 class DepositSettlementServiceIntegrationTest {
@@ -34,6 +35,7 @@ class DepositSettlementServiceIntegrationTest {
     private static final long INITIAL_RESERVED_AMOUNT = 30_000L;
     private static final long TARGET_AMOUNT = 150_000L;
     private static final long INITIAL_TOTAL_POINT = 1_970_000L;
+    private static final long INITIAL_SELLER_POINT = 2_000_000L;
 
     @Autowired
     private DepositSettlementService depositSettlementService;
@@ -100,16 +102,58 @@ class DepositSettlementServiceIntegrationTest {
             assertThat(findSnapshot()).isEqualTo(new DepositSnapshot(
                     TARGET_AMOUNT,
                     INITIAL_TOTAL_POINT - (TARGET_AMOUNT - INITIAL_RESERVED_AMOUNT),
-                    TARGET_AMOUNT
+                    TARGET_AMOUNT,
+                    INITIAL_SELLER_POINT,
+                    "HELD"
             ));
         } finally {
             executor.shutdownNow();
         }
     }
 
+    @Test
+    void 보증금을_몰수하면_구매자_잠금액이_판매자에게_지급된다() {
+        // given
+
+        // when
+        depositSettlementService.forfeit(
+                auctionId, buyerId, sellerId, INITIAL_RESERVED_AMOUNT);
+
+        // then
+        assertThat(findSnapshot()).isEqualTo(new DepositSnapshot(
+                INITIAL_RESERVED_AMOUNT,
+                INITIAL_TOTAL_POINT,
+                0L,
+                INITIAL_SELLER_POINT + INITIAL_RESERVED_AMOUNT,
+                "FORFEITED"
+        ));
+    }
+
+    @Test
+    void 몰수금을_판매자에게_지급할_수_없으면_보증금과_구매자_잠금액을_유지한다() {
+        // given
+        long unknownSellerId = Long.MAX_VALUE;
+
+        // when
+        Throwable exception = catchThrowable(() -> depositSettlementService.forfeit(
+                auctionId, buyerId, unknownSellerId, INITIAL_RESERVED_AMOUNT));
+
+        // then
+        assertThat(exception)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("보증금 몰수 중 판매자 잔액을 지급하지 못했습니다.");
+        assertThat(findSnapshot()).isEqualTo(new DepositSnapshot(
+                INITIAL_RESERVED_AMOUNT,
+                INITIAL_TOTAL_POINT,
+                INITIAL_RESERVED_AMOUNT,
+                INITIAL_SELLER_POINT,
+                "HELD"
+        ));
+    }
+
     private void createFixture() {
         executeInTransaction(entityManager -> {
-            sellerId = persistMember(entityManager, "s", 2_000_000L, 0L).getId();
+            sellerId = persistMember(entityManager, "s", INITIAL_SELLER_POINT, 0L).getId();
             Member buyer = persistMember(
                     entityManager,
                     "b",
@@ -167,8 +211,8 @@ class DepositSettlementServiceIntegrationTest {
 
     private DepositSnapshot findSnapshot() {
         return executeInTransaction(entityManager -> {
-            Number reservedAmount = (Number) entityManager.createNativeQuery("""
-                            SELECT reserved_amount
+            Object[] deposit = (Object[]) entityManager.createNativeQuery("""
+                            SELECT reserved_amount, status
                             FROM auction_deposit
                             WHERE auction_id = :auctionId
                               AND member_id = :buyerId
@@ -176,17 +220,26 @@ class DepositSettlementServiceIntegrationTest {
                     .setParameter("auctionId", auctionId)
                     .setParameter("buyerId", buyerId)
                     .getSingleResult();
-            Object[] points = (Object[]) entityManager.createNativeQuery("""
+            Object[] buyerPoints = (Object[]) entityManager.createNativeQuery("""
                             SELECT total_point, locked_point
                             FROM member
                             WHERE id = :buyerId
                             """)
                     .setParameter("buyerId", buyerId)
                     .getSingleResult();
+            Number sellerPoint = (Number) entityManager.createNativeQuery("""
+                            SELECT total_point
+                            FROM member
+                            WHERE id = :sellerId
+                            """)
+                    .setParameter("sellerId", sellerId)
+                    .getSingleResult();
             return new DepositSnapshot(
-                    reservedAmount.longValue(),
-                    ((Number) points[0]).longValue(),
-                    ((Number) points[1]).longValue()
+                    ((Number) deposit[0]).longValue(),
+                    ((Number) buyerPoints[0]).longValue(),
+                    ((Number) buyerPoints[1]).longValue(),
+                    sellerPoint.longValue(),
+                    (String) deposit[1]
             );
         });
     }
@@ -219,7 +272,9 @@ class DepositSettlementServiceIntegrationTest {
     private record DepositSnapshot(
             long reservedAmount,
             long totalPoint,
-            long lockedPoint
+            long lockedPoint,
+            long sellerPoint,
+            String status
     ) {
     }
 }

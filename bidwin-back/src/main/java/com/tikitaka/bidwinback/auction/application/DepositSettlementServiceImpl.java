@@ -83,12 +83,16 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
 
     @Override
     @Transactional
-    public void forfeit(Long auctionId, Long buyerId, long expectedAmount) {
+    public void forfeit(Long auctionId, Long buyerId, Long sellerId, long expectedAmount) {
         settle(auctionId, buyerId, expectedAmount, DepositStatus.FORFEITED);
 
         int forfeited = memberRepository.forfeitLockedPoint(buyerId, expectedAmount);
         if (forfeited != 1) {
             throw new IllegalStateException("보증금 몰수 중 잠금 포인트를 차감하지 못했습니다.");
+        }
+        int credited = memberRepository.creditPoint(sellerId, expectedAmount);
+        if (credited != 1) {
+            throw new IllegalStateException("보증금 몰수 중 판매자 잔액을 지급하지 못했습니다.");
         }
     }
 
