@@ -66,6 +66,21 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
         }
     }
 
+    @Override
+    @Transactional
+    public void transferToSeller(Long auctionId, Long buyerId, Long sellerId, long expectedAmount) {
+        settle(auctionId, buyerId, expectedAmount, DepositStatus.USED);
+
+        int deducted = memberRepository.forfeitLockedPoint(buyerId, expectedAmount);
+        if (deducted != 1) {
+            throw new IllegalStateException("보증금 정산 중 구매자 잠금 포인트를 차감하지 못했습니다.");
+        }
+        int credited = memberRepository.creditPoint(sellerId, expectedAmount);
+        if (credited != 1) {
+            throw new IllegalStateException("보증금 정산 중 판매자 잔액을 지급하지 못했습니다.");
+        }
+    }
+
     // HELD이고 예약 금액이 기대치와 같을 때만 원자적으로 상태를 전이한다.
     private void settle(Long auctionId, Long buyerId, long expectedAmount, DepositStatus status) {
         AuctionDeposit deposit = auctionDepositRepository

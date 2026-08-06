@@ -15,4 +15,12 @@ public interface DepositSettlementService {
             Long buyerId,
             long expectedAmount
     );
+
+    // 경매·구매자의 보증금을 판매자에게 지급한다. 구매자 잠금액을 판매자 잔액으로 옮긴다.
+    void transferToSeller(
+            Long auctionId,
+            Long buyerId,
+            Long sellerId,
+            long expectedAmount
+    );
 }

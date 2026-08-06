@@ -58,4 +58,29 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             @Param("memberId") Long memberId,
             @Param("amount") long amount
     );
+
+    // 보증금 몰수: 잠금액만 원자적으로 차감하고 사용 가능 잔액으로 되돌리지 않는다.
+    @Modifying
+    @Query(value = """
+            UPDATE member
+            SET locked_point = locked_point - :amount
+            WHERE id = :memberId
+              AND locked_point >= :amount
+            """, nativeQuery = true)
+    int forfeitLockedPoint(
+            @Param("memberId") Long memberId,
+            @Param("amount") long amount
+    );
+
+    // 판매자 정산 지급: 사용 가능 잔액을 원자적으로 늘린다.
+    @Modifying
+    @Query(value = """
+            UPDATE member
+            SET total_point = total_point + :amount
+            WHERE id = :memberId
+            """, nativeQuery = true)
+    int creditPoint(
+            @Param("memberId") Long memberId,
+            @Param("amount") long amount
+    );
 }
