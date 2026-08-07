@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
@@ -18,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -49,6 +51,9 @@ class UpAuctionSettlementServiceTest {
 
     @Mock
     private AuctionTradeRepository auctionTradeRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private UpAuction auction;
@@ -114,7 +119,45 @@ class UpAuctionSettlementServiceTest {
     }
 
     @Test
+    void 낙찰이_확정되면_최종_상태_변경_이벤트를_발행한다() {
+        // given
+        stubOngoingEndedAuction();
+        when(bidRepository.findWinnerByAuctionIdAndStatus(AUCTION_ID, BidStatus.UP))
+                .thenReturn(Optional.of(openBid));
+        when(sealedBidRepository.findWinnerByAuctionId(AUCTION_ID))
+                .thenReturn(Optional.empty());
+        when(openBid.getBidder()).thenReturn(openBidder);
+        when(openBid.getPrice()).thenReturn(200_000L);
+        when(openBidder.getId()).thenReturn(7L);
+        when(auctionTradeRepository.save(any(AuctionTrade.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        settlementService.settle(AUCTION_ID);
+
+        // then
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
+    }
+
+    @Test
+    void 입찰_없이_유찰되면_최종_상태_변경_이벤트를_발행한다() {
+        // given
+        stubOngoingEndedAuction();
+        when(bidRepository.findWinnerByAuctionIdAndStatus(AUCTION_ID, BidStatus.UP))
+                .thenReturn(Optional.empty());
+        when(sealedBidRepository.findWinnerByAuctionId(AUCTION_ID))
+                .thenReturn(Optional.empty());
+
+        // when
+        settlementService.settle(AUCTION_ID);
+
+        // then
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
+    }
+
+    @Test
     void 이미_완료된_경매는_거래를_반환하고_이벤트를_중복_발행하지_않는다() {
+        // given
         Member winner = sealedBidder;
         AuctionTrade trade = AuctionTrade.builder()
                 .auction(auction)
@@ -130,10 +173,13 @@ class UpAuctionSettlementServiceTest {
         when(auctionTradeRepository.findByAuctionId(AUCTION_ID))
                 .thenReturn(Optional.of(trade));
 
+        // when
         UpAuctionSettlementResult result = settlementService.settle(AUCTION_ID);
 
+        // then
         assertThat(result.winnerId()).isEqualTo(7L);
         verifyNoInteractions(bidRepository, sealedBidRepository);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

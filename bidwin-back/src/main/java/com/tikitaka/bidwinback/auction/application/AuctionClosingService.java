@@ -1,9 +1,11 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +15,7 @@ public class AuctionClosingService {
 
     private final AuctionRepository auctionRepository;
     private final UpAuctionSettlementService upAuctionSettlementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public boolean closeIfAvailable(long auctionId) {
@@ -28,6 +31,7 @@ public class AuctionClosingService {
 
         if (auction.getStatus() == AuctionStatus.OPEN) {
             auction.markUnsold(auctionRepository.currentDatabaseTime());
+            eventPublisher.publishEvent(new AuctionStateChanged(auctionId));
             return true;
         }
         if (auction.getStatus() == AuctionStatus.BID_ONGOING) {

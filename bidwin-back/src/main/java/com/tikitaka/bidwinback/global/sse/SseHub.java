@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
@@ -26,6 +27,7 @@ public class SseHub {
     private final int maxChannelsPerConnection;
     private final int maxPendingMessagesPerConnection;
     private final int maxConnections;
+    private final Semaphore connectionPermits;
 
     public SseHub(
             @Value("${app.sse.connection-timeout-ms:300000}") long timeoutMs,
@@ -48,6 +50,7 @@ public class SseHub {
         this.maxChannelsPerConnection = maxChannelsPerConnection;
         this.maxPendingMessagesPerConnection = maxPendingMessagesPerConnection;
         this.maxConnections = maxConnections;
+        this.connectionPermits = new Semaphore(maxConnections);
     }
 
     public SseEmitter subscribe(
@@ -64,30 +67,32 @@ public class SseHub {
     ) {
         Set<SseChannel> subscriptions = new LinkedHashSet<>(channels);
         validateSubscriptions(subscriptions);
-        // 인증이 없는 공개 경로라, 연결이 붙기 전에 전체 동시 연결 수를 막는다.
-        validateConnectionLimit();
         SseConnection connection = new SseConnection(
                 emitter,
                 reconnectTimeMs,
                 maxPendingMessagesPerConnection,
                 closed -> unsubscribe(subscriptions, closed)
         );
-
-        // snapshot 조회 중 발행된 변경도 받도록 색인과 writer를 먼저 활성화한다.
-        connections.add(connection);
-        subscriptions.forEach(channel ->
-                connectionsByChannel.compute(channel, (ignored, subscribers) -> {
-                    Set<SseConnection> indexed = subscribers == null
-                            ? ConcurrentHashMap.newKeySet()
-                            : subscribers;
-                    // 마지막 연결의 해지와 겹쳐도 맵에 연결이 없는 순간이 생기지 않게 한다.
-                    indexed.add(connection);
-                    return indexed;
-                })
-        );
-        connection.activate();
+        // 검사와 등록 사이의 경쟁으로 상한을 넘지 않도록 연결 자리를 먼저 원자적으로 예약한다.
+        reserveConnection();
 
         try {
+            // snapshot 조회 중 발행된 변경도 받도록 색인과 writer를 먼저 활성화한다.
+            connections.add(connection);
+            // 일부 채널만 색인된 순간 연결이 종료돼도, 해지가 전체 등록 뒤 정리하게 한다.
+            synchronized (connection) {
+                subscriptions.forEach(channel ->
+                        connectionsByChannel.compute(channel, (ignored, subscribers) -> {
+                            Set<SseConnection> indexed = subscribers == null
+                                    ? ConcurrentHashMap.newKeySet()
+                                    : subscribers;
+                            // 마지막 연결의 해지와 겹쳐도 맵에 연결이 없는 순간이 생기지 않게 한다.
+                            indexed.add(connection);
+                            return indexed;
+                        })
+                );
+            }
+            connection.activate();
             initialMessages.get().forEach(message -> {
                 if (!subscriptions.contains(message.channel())) {
                     throw new IllegalArgumentException("구독하지 않은 채널의 초기 메시지입니다.");
@@ -102,15 +107,20 @@ public class SseHub {
     }
 
     private void unsubscribe(Set<SseChannel> channels, SseConnection connection) {
-        if (!connections.remove(connection)) {
+        boolean registered = connections.remove(connection);
+        // terminate가 이 콜백을 한 번만 호출하므로, 등록 도중 실패한 예약도 정확히 한 번 반환한다.
+        connectionPermits.release();
+        if (!registered) {
             return;
         }
-        channels.forEach(channel ->
-                connectionsByChannel.computeIfPresent(channel, (ignored, subscribers) -> {
-                    subscribers.remove(connection);
-                    return subscribers.isEmpty() ? null : subscribers;
-                })
-        );
+        synchronized (connection) {
+            channels.forEach(channel ->
+                    connectionsByChannel.computeIfPresent(channel, (ignored, subscribers) -> {
+                        subscribers.remove(connection);
+                        return subscribers.isEmpty() ? null : subscribers;
+                    })
+            );
+        }
     }
 
     public void publish(SseMessage<?> message) {
@@ -154,8 +164,8 @@ public class SseHub {
     }
 
     // 초과분은 gateway가 아닌 애플리케이션에서도 막아, 반복 재연결이 서버 자원을 고갈시키지 못하게 한다.
-    private void validateConnectionLimit() {
-        if (connections.size() >= maxConnections) {
+    private void reserveConnection() {
+        if (!connectionPermits.tryAcquire()) {
             throw new SseException(
                     SSE_CONNECTION_LIMIT_EXCEEDED,
                     "전체 SSE 연결 상한(" + maxConnections + ")을 초과했습니다."

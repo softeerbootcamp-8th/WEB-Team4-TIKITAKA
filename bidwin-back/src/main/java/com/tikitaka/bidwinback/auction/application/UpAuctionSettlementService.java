@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -15,6 +16,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class UpAuctionSettlementService {
     private final BidRepository bidRepository;
     private final SealedBidRepository sealedBidRepository;
     private final AuctionTradeRepository auctionTradeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 종료 감지 스케줄러가 경매 ID 단위로 호출하는 낙찰 처리 진입점이다.
     @Transactional
@@ -126,6 +129,7 @@ public class UpAuctionSettlementService {
                         .purchasedAt(settledAt)
                         .build()
         );
+        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         return UpAuctionSettlementResult.completed(trade);
     }
 
@@ -134,6 +138,7 @@ public class UpAuctionSettlementService {
             LocalDateTime settledAt
     ) {
         auction.markUnsold(settledAt);
+        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         return UpAuctionSettlementResult.unsold(auction.getId(), settledAt);
     }
 

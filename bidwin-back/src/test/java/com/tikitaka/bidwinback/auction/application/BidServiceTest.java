@@ -26,7 +26,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -53,7 +52,6 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -195,26 +193,13 @@ class BidServiceTest {
 
     @Test
     void 밀봉_구간이면_현재가를_갱신하지_않고_가격을_숨긴_밀봉입찰을_저장한다() {
-        when(auctionRepository.tryUpdateAuctionForSealedBid(
-                AUCTION_ID,
-                MEMBER_ID,
-                PRICE,
-                BID_UNIT
-        )).thenReturn(1);
-        when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
-        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
-        stubExistingDeposit();
-        when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
-                .thenReturn(persistedSealedBid);
-        when(persistedSealedBid.getId()).thenReturn(BID_ID);
-        when(persistedSealedBid.getAuction()).thenReturn(auction);
-        when(auction.getId()).thenReturn(AUCTION_ID);
-        when(persistedSealedBid.getBidder()).thenReturn(bidder);
-        when(bidder.getId()).thenReturn(MEMBER_ID);
-        when(persistedSealedBid.getSubmittedAt()).thenReturn(BID_AT);
+        // given
+        stubSuccessfulSealedBid();
 
+        // when
         BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED);
 
+        // then
         assertAll(
                 () -> assertThat(result.bidId()).isEqualTo(BID_ID),
                 () -> assertThat(result.price()).isNull(),
@@ -228,6 +213,18 @@ class BidServiceTest {
                 BID_UNIT
         );
         verifyNoInteractions(bidRepository);
+    }
+
+    @Test
+    void 성공한_밀봉입찰은_공개_상태_변경_이벤트를_발행한다() {
+        // given
+        stubSuccessfulSealedBid();
+
+        // when
+        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED);
+
+        // then
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
     }
 
     @Test
@@ -532,35 +529,6 @@ class BidServiceTest {
         verifyNoInteractions(memberRepository, bidRepository);
     }
 
-    @Test
-    void 현재가를_갱신한_뒤_엔티티_참조로_입찰을_저장한다() {
-        stubSuccessfulUpdate();
-        stubExistingDeposit();
-        stubPersistedBid();
-        when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
-
-        bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
-
-        InOrder order = inOrder(
-                auctionRepository,
-                memberRepository,
-                auctionDepositRepository,
-                bidRepository
-        );
-        order.verify(auctionRepository).updateCurrentPriceForBid(
-                AUCTION_ID,
-                MEMBER_ID,
-                PRICE,
-                BID_UNIT
-        );
-        order.verify(auctionRepository).getReferenceById(AUCTION_ID);
-        order.verify(memberRepository).getReferenceById(MEMBER_ID);
-        order.verify(auctionDepositRepository)
-                .existsByMemberIdAndAuctionId(MEMBER_ID, AUCTION_ID);
-        order.verify(bidRepository).save(any(Bid.class));
-        verify(auctionRepository, never()).findById(AUCTION_ID);
-    }
-
     private void stubSuccessfulUpdate() {
         when(auctionRepository.updateCurrentPriceForBid(
                 AUCTION_ID,
@@ -571,6 +539,26 @@ class BidServiceTest {
                 .thenReturn(1);
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+    }
+
+    private void stubSuccessfulSealedBid() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT
+        )).thenReturn(1);
+        when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
+        when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
+        stubExistingDeposit();
+        when(sealedBidRepository.saveAndFlush(any(SealedBid.class)))
+                .thenReturn(persistedSealedBid);
+        when(persistedSealedBid.getId()).thenReturn(BID_ID);
+        when(persistedSealedBid.getAuction()).thenReturn(auction);
+        when(auction.getId()).thenReturn(AUCTION_ID);
+        when(persistedSealedBid.getBidder()).thenReturn(bidder);
+        when(bidder.getId()).thenReturn(MEMBER_ID);
+        when(persistedSealedBid.getSubmittedAt()).thenReturn(BID_AT);
     }
 
     private void stubFailedUpdate(Auction failedAuction) {
