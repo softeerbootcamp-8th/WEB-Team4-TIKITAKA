@@ -10,7 +10,7 @@ interface AuctionImageItem {
   file: File
   previewUrl: string
   status: AuctionImageStatus
-  objectKey?: string
+  uploadId?: string
 }
 
 interface ImageUploaderProps {

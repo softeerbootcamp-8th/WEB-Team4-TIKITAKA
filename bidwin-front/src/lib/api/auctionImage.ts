@@ -18,6 +18,7 @@ interface AuctionImagePresignRequest {
   fileName: string
   contentType: string
   size: number
+  checksumSha256: string
 }
 
 interface AuctionImagePresignBatchRequest {
@@ -28,7 +29,7 @@ interface AuctionImagePresignBatchRequest {
 /* 백엔드 AuctionImagePresignResponse. signedHeaders는 S3 PUT 업로드 시 그대로 실어 보내야 한다. */
 interface AuctionImagePresignResponse {
   presignedUrl: string
-  objectKey: string
+  uploadId: string
   signedHeaders: Record<string, string[]>
   expiresAt: string
 }
@@ -49,8 +50,14 @@ function requestAuctionImagePresign(
   )
 }
 
+async function calculateFileChecksumSha256(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  const bytes = new Uint8Array(digest)
+  return btoa(String.fromCharCode(...bytes))
+}
+
 /*
- * presign 응답의 objectKey/signedHeaders를 그대로 S3에 PUT한다.
+ * presign 응답의 signedHeaders를 그대로 S3에 PUT한다.
  * 우리 서버가 아닌 스토리지로 직접 올리는 요청이라 쿠키·JSON 봉투를 쓰지 않는다.
  */
 async function uploadImageToPresignedUrl(
@@ -77,6 +84,7 @@ async function uploadImageToPresignedUrl(
 export {
   requestAuctionImageDraft,
   requestAuctionImagePresign,
+  calculateFileChecksumSha256,
   uploadImageToPresignedUrl,
 }
 export type {
