@@ -5,6 +5,8 @@ const AUTH_API_PATH = {
   login: '/api/v1/auth/login',
   session: '/api/v1/auth/session',
   signUp: '/api/v1/auth/signups',
+  emailAvailability: '/api/v1/auth/signups/email/verify',
+  nicknameAvailability: '/api/v1/auth/signups/nickname/verify',
 }
 
 interface LoginRequest {
@@ -28,6 +30,26 @@ interface SignUpResponse {
   nickname: string
 }
 
+interface AvailabilityResponse {
+  available: boolean
+}
+
+function requestEmailAvailability(email: string): Promise<ApiResult<AvailabilityResponse>> {
+  return postJson<AvailabilityResponse, { email: string }>(
+    AUTH_API_PATH.emailAvailability,
+    { email },
+  )
+}
+
+function requestNicknameAvailability(
+  nickname: string,
+): Promise<ApiResult<AvailabilityResponse>> {
+  return postJson<AvailabilityResponse, { nickname: string }>(
+    AUTH_API_PATH.nicknameAvailability,
+    { nickname },
+  )
+}
+
 function requestSignUp(request: SignUpRequest): Promise<ApiResult<SignUpResponse>> {
   return postJson<SignUpResponse, SignUpRequest>(AUTH_API_PATH.signUp, request)
 }
@@ -40,5 +62,11 @@ function requestSession(): Promise<ApiResult<void>> {
   return getJson<void>(AUTH_API_PATH.session)
 }
 
-export { requestLogin, requestSession, requestSignUp }
-export type { LoginRequest, SignUpRequest, SignUpResponse }
+export {
+  requestEmailAvailability,
+  requestLogin,
+  requestNicknameAvailability,
+  requestSession,
+  requestSignUp,
+}
+export type { AvailabilityResponse, LoginRequest, SignUpRequest, SignUpResponse }
