@@ -4,397 +4,407 @@ import {
   Flag,
   Heart,
   ImageOff,
+  ShieldCheck,
   TrendingDown,
   Truck,
 } from 'lucide-react'
 import type { ChangeEvent } from 'react'
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import {
+  createSearchParams,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom'
 import Badge from '../../../components/ui/Badge'
 import type { BadgeTone } from '../../../components/ui/Badge'
 import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import TextInput from '../../../components/ui/TextInput'
+import { useAuctionEvents } from '../../../hooks/useAuctionEvents'
+import { useAuth } from '../../../hooks/useAuth'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
 import { useToast } from '../../../hooks/useToast'
 import {
-  getLiveAuctionPrice,
-  getOrInitStartedAt,
-  setLiveAuctionPrice,
-} from '../../../lib/auctionLiveStore'
-import { computeDropHistory } from '../../../lib/auctionPricing'
+  requestAuctionDetail,
+  requestBid,
+  requestBidHistory,
+  requestBuyNow,
+} from '../../../lib/api/auctions'
+import type {
+  AuctionDetail,
+  AuctionSeller,
+  AuctionStatus,
+  BidHistoryItem,
+  BidType,
+  DownAuctionDetail,
+  UpAuctionDetail,
+} from '../../../lib/api/auctions'
+import type { ApiFailure } from '../../../lib/api/client'
+import { computeCurrentDownPrice, computeDropHistory } from '../../../lib/auctionPricing'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
 
-/*
- * 경매 상세 API가 아직 없어서 임시 데이터를 쓴다 (경매 목록/상세/입찰/즉시구매 전부 미구현).
- * 실제 연동 시 이 배열을 fetch 결과로 바꾸면 된다 (예: src/routes/auctions/detail/api.ts).
- * 타입은 실제 백엔드 엔티티/enum(Auction, UpAuction, DownAuction, AuctionStatus 등)에 맞춰뒀다.
- * auctionId 1~8은 메인 페이지(src/routes/page.tsx) 목업과 같은 상품 — 제목/가격/하락
- * 파라미터를 반드시 맞춰서 화면 넘어갈 때 내용이 안 바뀌게 한다. 101/102는 화면 상태
- * 확인용(종료/유찰) 테스트 데이터라 메인 페이지엔 없다.
- */
-const BID_INCREMENT_OPTIONS = [10000, 50000, 100000] as const
-const DOWN_DROP_INTERVAL_MS = 15 * 1000
-
-type AuctionCategory = 'HOUSEHOLD' | 'FOOD' | 'FURNITURE'
-type AuctionStatus =
-  | 'OPEN'
-  | 'BID_ONGOING'
-  | 'WINNER_DETERMINING'
-  | 'COMPLETED'
-  | 'UNSOLD'
-  | 'CANCELED'
-
-const CATEGORY_LABEL: Record<AuctionCategory, string> = {
+const CATEGORY_LABEL = {
   HOUSEHOLD: '생활용품',
   FOOD: '먹거리',
   FURNITURE: '가구',
-}
+} as const
 
 const STATUS_LABEL: Record<AuctionStatus, string> = {
-  OPEN: '대기중',
-  BID_ONGOING: '진행중',
-  WINNER_DETERMINING: '낙찰자 결정 중',
-  COMPLETED: '거래 완료',
+  OPEN: '진행 중',
+  BID_ONGOING: '입찰 진행 중',
+  WINNER_DETERMINING: '낙찰자 선정 중',
+  COMPLETED: '거래 확정',
   UNSOLD: '유찰',
-  CANCELED: '취소됨',
 }
 
 const STATUS_BADGE_TONE: Record<AuctionStatus, BadgeTone> = {
-  OPEN: 'muted',
+  OPEN: 'live',
   BID_ONGOING: 'live',
-  WINNER_DETERMINING: 'dark',
+  WINNER_DETERMINING: 'primary',
   COMPLETED: 'success',
-  UNSOLD: 'muted',
-  CANCELED: 'danger',
+  UNSOLD: 'ended',
 }
 
-interface Seller {
-  name: string
-  verified: boolean
-  dealCount: number
-  rating: number
+const TRADE_LABEL = {
+  DELIVERY: '택배 거래',
+  DIRECT: '직거래',
+} as const
+
+const BID_UNIT = 1_000
+const BID_INCREMENT_OPTIONS = [1_000, 10_000, 50_000] as const
+const BID_HISTORY_LIMIT = 10
+
+type ActionKind = 'bid' | 'buy' | null
+
+function isOngoing(status: AuctionStatus) {
+  return status === 'OPEN' || status === 'BID_ONGOING'
 }
 
-interface AuctionBase {
-  auctionId: number
-  title: string
-  description: string
-  category: AuctionCategory
-  status: AuctionStatus
-  images: string[]
-  startPrice: number
-  deposit: number
-  seller: Seller
-  viewCount: number
-  deliveryNote: string
+function isTerminal(status: AuctionStatus) {
+  return status === 'COMPLETED' || status === 'UNSOLD'
 }
 
-interface BidEntry {
-  id: string
-  bidder: string
-  amount: number
-  biddedAt: number
-  isMe?: boolean
+function mergeBidHistory(
+  current: BidHistoryItem[],
+  incoming: BidHistoryItem[],
+): BidHistoryItem[] {
+  const entries = new Map(current.map((bid) => [bid.entryId, bid]))
+  incoming.forEach((bid) => entries.set(bid.entryId, bid))
+  return [...entries.values()]
+    .sort((left, right) => (
+      right.biddedAt - left.biddedAt || right.entryId.localeCompare(left.entryId)
+    ))
+    .slice(0, BID_HISTORY_LIMIT)
 }
 
-interface UpAuctionDetail extends AuctionBase {
-  auctionType: 'UP'
-  buyNowPrice: number
-  currentPrice: number
-  deadline: number
-  bidLog: BidEntry[]
+function createIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `buy-now-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
-
-interface DownAuctionDetail extends AuctionBase {
-  auctionType: 'DOWN'
-  minimumPrice: number
-  dropPrice: number
-  priceDropIntervalMs: number
-  startedAt: number
-}
-
-type AuctionDetail = UpAuctionDetail | DownAuctionDetail
-
-const MOCK_AUCTIONS: AuctionDetail[] = [
-  {
-    auctionId: 1,
-    title: '소니 WH-1000XM5 노이즈캔슬링 헤드폰 (미개봉)',
-    description: '미개봉 새 상품입니다.\n구성품: 본체, 충전 케이블, 파우치, 보증서.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 180000,
-    deposit: 30000,
-    seller: { name: '급처직거래', verified: true, dealCount: 128, rating: 4.9 },
-    viewCount: 214,
-    deliveryNote: '직거래 또는 택배 거래 가능합니다. 직거래 희망 시 강남역 인근에서 만나요.',
-    auctionType: 'UP',
-    buyNowPrice: 320000,
-    currentPrice: 210000,
-    deadline: Date.now() + 8 * 60 * 1000,
-    bidLog: [
-      { id: 'b1', bidder: '민준**', amount: 190000, biddedAt: Date.now() - 3 * 60 * 1000 },
-      { id: 'b2', bidder: '서연**', amount: 200000, biddedAt: Date.now() - 2 * 60 * 1000 },
-      { id: 'b3', bidder: '나', amount: 210000, biddedAt: Date.now() - 1 * 60 * 1000, isMe: true },
-    ],
-  },
-  {
-    auctionId: 2,
-    title: '애플워치 울트라2 (미개봉)',
-    description: '미개봉 새 상품입니다.\n사이즈 49mm, 티타늄 케이스.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 480000,
-    deposit: 40000,
-    seller: { name: '급처직거래2', verified: true, dealCount: 42, rating: 4.7 },
-    viewCount: 132,
-    deliveryNote: '택배 거래만 가능합니다.',
-    auctionType: 'DOWN',
-    minimumPrice: 400000,
-    dropPrice: 8000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: getOrInitStartedAt(2),
-  },
-  {
-    auctionId: 3,
-    title: '캠핑 4인용 텐트 세트',
-    description: '2~3회 사용, 상태 좋습니다. 수납가방 포함.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 95000,
-    deposit: 15000,
-    seller: { name: '캠핑용품매니아', verified: true, dealCount: 21, rating: 4.6 },
-    viewCount: 76,
-    deliveryNote: '직거래만 가능합니다.',
-    auctionType: 'DOWN',
-    minimumPrice: 60000,
-    dropPrice: 3000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: getOrInitStartedAt(3),
-  },
-  {
-    auctionId: 4,
-    title: '닌텐도 스위치 OLED',
-    description: '사용감 있는 상품입니다. 박스/구성품 포함.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 220000,
-    deposit: 20000,
-    seller: { name: '중고나라짱', verified: false, dealCount: 8, rating: 4.2 },
-    viewCount: 98,
-    deliveryNote: '택배 거래만 가능합니다.',
-    auctionType: 'UP',
-    buyNowPrice: 300000,
-    currentPrice: 260000,
-    deadline: Date.now() + 20 * 60 * 1000,
-    bidLog: [
-      { id: 'b1', bidder: '하윤**', amount: 240000, biddedAt: Date.now() - 10 * 60 * 1000 },
-      { id: 'b2', bidder: '도윤**', amount: 260000, biddedAt: Date.now() - 4 * 60 * 1000 },
-    ],
-  },
-  {
-    auctionId: 5,
-    title: '르크루제 무쇠 냄비 세트',
-    description: '혼수 선물로 받았으나 미사용. 정품입니다.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 145000,
-    deposit: 20000,
-    seller: { name: '주방용품셀러', verified: true, dealCount: 64, rating: 4.8 },
-    viewCount: 143,
-    deliveryNote: '택배 거래만 가능합니다.',
-    auctionType: 'DOWN',
-    minimumPrice: 100000,
-    dropPrice: 4000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: getOrInitStartedAt(5),
-  },
-  {
-    auctionId: 6,
-    title: '다이슨 에어랩 컴플리트',
-    description: '박스 개봉만 했고 사용은 안 했습니다.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 320000,
-    deposit: 30000,
-    seller: { name: '뷰티가전셀러', verified: true, dealCount: 37, rating: 4.7 },
-    viewCount: 201,
-    deliveryNote: '직거래 또는 택배 거래 가능합니다.',
-    auctionType: 'DOWN',
-    minimumPrice: 250000,
-    dropPrice: 6000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: getOrInitStartedAt(6),
-  },
-  {
-    auctionId: 7,
-    title: '아이패드 프로 11 (M4)',
-    description: '미개봉 새 제품입니다. 256GB, Wi-Fi 모델.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 800000,
-    deposit: 60000,
-    seller: { name: '애플정품셀러', verified: true, dealCount: 210, rating: 4.9 },
-    viewCount: 302,
-    deliveryNote: '택배 거래만 가능합니다.',
-    auctionType: 'UP',
-    buyNowPrice: 1050000,
-    currentPrice: 890000,
-    deadline: Date.now() + 15 * 60 * 1000,
-    bidLog: [
-      { id: 'b1', bidder: '지호**', amount: 850000, biddedAt: Date.now() - 6 * 60 * 1000 },
-      { id: 'b2', bidder: '나', amount: 890000, biddedAt: Date.now() - 2 * 60 * 1000, isMe: true },
-    ],
-  },
-  {
-    auctionId: 8,
-    title: '삼성 비스포크 냉장고',
-    description: '이사로 인한 급처입니다. 사용감 적음.',
-    category: 'HOUSEHOLD',
-    status: 'BID_ONGOING',
-    images: [],
-    startPrice: 720000,
-    deposit: 50000,
-    seller: { name: '이사정리셀러', verified: false, dealCount: 5, rating: 4.3 },
-    viewCount: 88,
-    deliveryNote: '직거래만 가능합니다 (냉장고 특성상 배송이 어려워요).',
-    auctionType: 'DOWN',
-    minimumPrice: 600000,
-    dropPrice: 10000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: getOrInitStartedAt(8),
-  },
-  {
-    auctionId: 101,
-    title: '[테스트] 종료된 경매 화면 확인용',
-    description: '화면 상태 확인용 목업입니다.',
-    category: 'HOUSEHOLD',
-    status: 'COMPLETED',
-    images: [],
-    startPrice: 220000,
-    deposit: 20000,
-    seller: { name: '중고나라짱', verified: false, dealCount: 8, rating: 4.2 },
-    viewCount: 98,
-    deliveryNote: '택배 거래만 가능합니다.',
-    auctionType: 'UP',
-    buyNowPrice: 300000,
-    currentPrice: 265000,
-    deadline: Date.now() - 60 * 60 * 1000,
-    bidLog: [
-      { id: 'b1', bidder: '하윤**', amount: 250000, biddedAt: Date.now() - 2 * 60 * 60 * 1000 },
-      { id: 'b2', bidder: '도윤**', amount: 265000, biddedAt: Date.now() - 90 * 60 * 1000 },
-    ],
-  },
-  {
-    auctionId: 102,
-    title: '[테스트] 유찰된 하락경매 화면 확인용',
-    description: '화면 상태 확인용 목업입니다.',
-    category: 'HOUSEHOLD',
-    status: 'UNSOLD',
-    images: [],
-    startPrice: 80000,
-    deposit: 10000,
-    seller: { name: '급처직거래3', verified: false, dealCount: 3, rating: 4.0 },
-    viewCount: 12,
-    deliveryNote: '직거래만 가능합니다.',
-    auctionType: 'DOWN',
-    minimumPrice: 50000,
-    dropPrice: 5000,
-    priceDropIntervalMs: DOWN_DROP_INTERVAL_MS,
-    startedAt: Date.now() - 5 * 60 * 1000,
-  },
-]
 
 function AuctionDetailPage() {
-  const { auctionId } = useParams<{ auctionId: string }>()
-  const found = MOCK_AUCTIONS.find((item) => item.auctionId === Number(auctionId))
-
-  if (!found) return <NotFoundState />
-
-  // 이전에 이 경매에 입찰/구매한 적이 있으면(같은 세션 안에서) 그 가격으로 시작한다.
-  const livePrice = getLiveAuctionPrice(found.auctionId)
-  const auction = found.auctionType === 'UP' && livePrice !== undefined
-    ? { ...found, currentPrice: livePrice }
-    : found
-
-  return <AuctionDetailView key={auction.auctionId} auction={auction} />
-}
-
-function AuctionDetailView({ auction: initialAuction }: { auction: AuctionDetail }) {
-  const [auction, setAuction] = useState(initialAuction)
+  const { auctionId: rawAuctionId } = useParams()
+  const auctionId = Number(rawAuctionId)
+  const validAuctionId = Number.isSafeInteger(auctionId) && auctionId > 0
+  const [auction, setAuction] = useState<AuctionDetail | null>(null)
+  const [bidHistory, setBidHistory] = useState<BidHistoryItem[]>([])
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [serverOffsetMs, setServerOffsetMs] = useState(0)
+  const [isLoading, setIsLoading] = useState(validAuctionId)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(!validAuctionId)
+  const [retryToken, setRetryToken] = useState(0)
+  const [pendingAction, setPendingAction] = useState<ActionKind>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [ownBidEntryIds, setOwnBidEntryIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
+  const [hasSubmittedSealedBid, setHasSubmittedSealedBid] = useState(false)
+  const buyNowKeyRef = useRef<string | null>(null)
+  const { isAuthenticated, setAuthenticated } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  function handleBidPlaced(amount: number) {
-    if (auction.auctionType !== 'UP') return
-    const newBid: BidEntry = {
-      id: `local-${auction.bidLog.length}-${amount}`,
-      bidder: '나',
-      amount,
-      biddedAt: Date.now(),
-      isMe: true,
+  useEffect(() => {
+    if (!validAuctionId) {
+      setNotFound(true)
+      setIsLoading(false)
+      return
     }
-    setAuction({ ...auction, currentPrice: amount, bidLog: [newBid, ...auction.bidLog] })
-    setLiveAuctionPrice(auction.auctionId, amount)
-    showToast(`${formatWon(amount)}으로 입찰했어요.`, 'success')
+
+    const controller = new AbortController()
+    let active = true
+    const requestedAt = Date.now()
+
+    setIsLoading(true)
+    setLoadError(null)
+    setHistoryError(null)
+    setNotFound(false)
+
+    Promise.all([
+      requestAuctionDetail(auctionId, controller.signal),
+      requestBidHistory(auctionId, controller.signal),
+    ]).then(([detailResult, historyResult]) => {
+      if (!active) return
+      setIsLoading(false)
+
+      if (!detailResult.ok) {
+        setAuction(null)
+        if (detailResult.status === 404) {
+          setNotFound(true)
+        } else {
+          setLoadError(detailResult.message)
+        }
+        return
+      }
+
+      const receivedAt = Date.now()
+      setAuction(detailResult.data)
+      setServerOffsetMs(
+        detailResult.data.serverTime - Math.round((requestedAt + receivedAt) / 2),
+      )
+
+      if (historyResult.ok) {
+        setBidHistory((current) => mergeBidHistory(current, historyResult.data.bidLog))
+      } else if (detailResult.data.auctionType === 'UP') {
+        setHistoryError(historyResult.message)
+      }
+    })
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [auctionId, retryToken, validAuctionId])
+
+  useEffect(() => {
+    setOwnBidEntryIds(new Set())
+    setHasSubmittedSealedBid(false)
+    setBidHistory([])
+    setPendingAction(null)
+    setActionError(null)
+    buyNowKeyRef.current = null
+  }, [auctionId])
+
+  const connectionStatus = useAuctionEvents(
+    'detail',
+    auction ? [auction.auctionId] : [],
+    {
+      onState: (state) => {
+        setAuction((current) => {
+          if (
+            !current
+            || state.auctionId !== current.auctionId
+            || state.auctionType !== current.auctionType
+            || state.revision < current.revision
+          ) {
+            return current
+          }
+
+          if (current.auctionType === 'UP') {
+            return {
+              ...current,
+              status: state.status,
+              revision: state.revision,
+              currentPrice: state.currentPrice,
+              bidCount: state.bidCount,
+            }
+          }
+
+          return {
+            ...current,
+            status: state.status,
+            revision: state.revision,
+            finalPrice: isTerminal(state.status)
+              ? state.currentPrice
+              : current.finalPrice,
+          }
+        })
+      },
+      onBidCreated: (bid) => {
+        setBidHistory((current) => mergeBidHistory(current, [bid]))
+      },
+      onBidHistorySnapshot: (history) => {
+        setBidHistory((current) => mergeBidHistory(current, history.bidLog))
+        setAuction((current) => (
+          current?.auctionType === 'UP' && history.bidCount > current.bidCount
+            ? { ...current, bidCount: history.bidCount }
+            : current
+        ))
+      },
+    },
+  )
+
+  function redirectToLogin() {
+    const next = `${location.pathname}${location.search}`
+    navigate({
+      pathname: '/login',
+      search: `?${createSearchParams({ next })}`,
+    })
   }
 
-  function handleBuyNow() {
-    if (auction.auctionType !== 'UP') return
-    const newBid: BidEntry = {
-      id: `local-buynow-${auction.buyNowPrice}`,
-      bidder: '나',
-      amount: auction.buyNowPrice,
-      biddedAt: Date.now(),
-      isMe: true,
+  function ensureAuthenticated() {
+    if (isAuthenticated === true) return true
+    if (isAuthenticated === false) redirectToLogin()
+    return false
+  }
+
+  function handleActionFailure(failure: ApiFailure) {
+    setActionError(failure.message)
+    if (failure.status === 401) {
+      setAuthenticated(false)
+      redirectToLogin()
     }
-    setAuction({
-      ...auction,
-      status: 'COMPLETED',
-      currentPrice: auction.buyNowPrice,
-      bidLog: [newBid, ...auction.bidLog],
+  }
+
+  async function handleBid(price: number, bidType: BidType) {
+    if (!ensureAuthenticated() || pendingAction !== null) return false
+
+    setPendingAction('bid')
+    setActionError(null)
+    const result = await requestBid(auctionId, { price, bidType })
+    setPendingAction(null)
+
+    if (!result.ok) {
+      handleActionFailure(result)
+      return false
+    }
+
+    const entryId = result.data.status === 'SEALED'
+      ? `SEALED:${result.data.bidId}`
+      : `BID:${result.data.bidId}`
+    setOwnBidEntryIds((current) => new Set(current).add(entryId))
+
+    if (result.data.status === 'SEALED') {
+      setHasSubmittedSealedBid(true)
+      showToast('밀봉 입찰을 제출했어요. 마감 후 결과가 공개됩니다.', 'success')
+    } else {
+      showToast(`${formatWon(result.data.price)}으로 입찰했어요.`, 'success')
+    }
+    return true
+  }
+
+  async function handleBuyNow() {
+    if (
+      !auction
+      || !ensureAuthenticated()
+      || pendingAction !== null
+    ) {
+      return
+    }
+
+    const key = buyNowKeyRef.current ?? createIdempotencyKey()
+    buyNowKeyRef.current = key
+    setPendingAction('buy')
+    setActionError(null)
+    const result = await requestBuyNow(auction.auctionType, auction.auctionId, key)
+    setPendingAction(null)
+
+    if (!result.ok) {
+      // 전송 여부를 알 수 없는 네트워크 실패만 같은 키로 재시도한다.
+      if (result.status !== null) buyNowKeyRef.current = null
+      handleActionFailure(result)
+      return
+    }
+
+    buyNowKeyRef.current = null
+    setAuction((current) => {
+      if (!current) return current
+      if (current.auctionType === 'UP') {
+        return {
+          ...current,
+          status: 'COMPLETED',
+          currentPrice: result.data.finalPrice,
+        }
+      }
+      return {
+        ...current,
+        status: 'COMPLETED',
+        finalPrice: result.data.finalPrice,
+      }
     })
-    setLiveAuctionPrice(auction.auctionId, auction.buyNowPrice)
-    showToast(`${formatWon(auction.buyNowPrice)}에 즉시구매했어요.`, 'success')
+    showToast(`${formatWon(result.data.finalPrice)}에 구매가 확정됐어요.`, 'success')
+  }
+
+  if (!validAuctionId || notFound) return <NotFoundState />
+
+  if (isLoading) {
+    return (
+      <main className="mx-auto flex max-w-[1200px] items-center justify-center px-lg py-section text-sm text-muted">
+        경매를 불러오는 중…
+      </main>
+    )
+  }
+
+  if (loadError || !auction) {
+    return (
+      <LoadErrorState
+        message={loadError ?? '경매 정보를 불러오지 못했습니다.'}
+        onRetry={() => setRetryToken((value) => value + 1)}
+      />
+    )
   }
 
   return (
-    <main className="mx-auto max-w-[1200px] px-lg py-xl max-[860px]:pb-32">
-      <AuctionHeader auction={auction} />
+    <main className="mx-auto max-w-[1200px] px-lg py-xl">
+      <AuctionHeader
+        auction={auction}
+        connectionStatus={connectionStatus}
+      />
 
       <div className="mt-lg grid grid-cols-1 gap-xl lg:grid-cols-[1fr_380px]">
-        <div className="flex flex-col gap-xl">
+        <div className="order-2 flex flex-col gap-xl lg:order-1">
           <AuctionGallery images={auction.images} title={auction.title} />
           <ProductTabs auction={auction} />
           {auction.auctionType === 'UP' ? (
-            <BidHistoryPanel bidLog={auction.bidLog} />
+            <BidHistoryPanel
+              bidCount={auction.bidCount}
+              bidLog={bidHistory}
+              ownBidEntryIds={ownBidEntryIds}
+              sealedBidActive={
+                isOngoing(auction.status)
+                && Date.now() + serverOffsetMs >= auction.sealedBidStartsAt
+                && Date.now() + serverOffsetMs < auction.deadline
+              }
+              error={historyError}
+              onRetry={() => setRetryToken((value) => value + 1)}
+            />
           ) : (
-            <PriceDropTimeline auction={auction} />
+            <PriceDropTimeline auction={auction} serverOffsetMs={serverOffsetMs} />
           )}
         </div>
 
-        {/* top-[88px] = TopNav 높이(64px, sticky) + 여백(24px) — 안 맞추면 상단 네비랑 겹쳐서 밀려 보임 */}
-        <div className="lg:sticky lg:top-[88px] lg:max-h-[calc(100dvh-104px)] lg:self-start lg:overflow-y-auto">
+        <div className="order-1 lg:sticky lg:top-[88px] lg:order-2 lg:max-h-[calc(100dvh-104px)] lg:self-start lg:overflow-y-auto">
           {auction.auctionType === 'UP' ? (
             <UpBidPanel
               auction={auction}
-              onBidPlaced={handleBidPlaced}
+              serverOffsetMs={serverOffsetMs}
+              pendingAction={pendingAction}
+              actionError={actionError}
+              hasSubmittedSealedBid={hasSubmittedSealedBid}
+              authPending={isAuthenticated === null}
+              onClearError={() => setActionError(null)}
+              onBid={handleBid}
               onBuyNow={handleBuyNow}
             />
           ) : (
-            <DownBuyPanel auction={auction} />
+            <DownBuyPanel
+              auction={auction}
+              serverOffsetMs={serverOffsetMs}
+              pendingAction={pendingAction}
+              actionError={actionError}
+              authPending={isAuthenticated === null}
+              onClearError={() => setActionError(null)}
+              onBuyNow={handleBuyNow}
+            />
           )}
         </div>
       </div>
-
-      <MobileStickyBar auction={auction} />
     </main>
   )
 }
@@ -406,9 +416,25 @@ function NotFoundState() {
     <main className="mx-auto flex max-w-[1200px] flex-col items-center gap-base px-lg py-section text-center">
       <p className="text-lg font-semibold text-ink">경매를 찾을 수 없어요.</p>
       <p className="text-sm text-body">삭제되었거나 잘못된 주소예요.</p>
-      <Button variant="secondary" size="md" onClick={() => navigate('/auctions')}>
+      <Button variant="secondary" onClick={() => navigate('/auctions')}>
         경매 목록으로 돌아가기
       </Button>
+    </main>
+  )
+}
+
+function LoadErrorState({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <main className="mx-auto flex max-w-[1200px] flex-col items-center gap-base px-lg py-section text-center">
+      <p className="text-lg font-semibold text-ink">경매를 불러오지 못했어요.</p>
+      <p className="text-sm text-body">{message}</p>
+      <Button variant="secondary" onClick={onRetry}>다시 시도</Button>
     </main>
   )
 }
@@ -417,8 +443,19 @@ function EmptyState({ message }: { message: string }) {
   return <p className="py-xl text-center text-sm text-muted">{message}</p>
 }
 
-function AuctionHeader({ auction }: { auction: AuctionDetail }) {
+function AuctionHeader({
+  auction,
+  connectionStatus,
+}: {
+  auction: AuctionDetail
+  connectionStatus: ReturnType<typeof useAuctionEvents>
+}) {
   const [interested, setInterested] = useState(false)
+  const liveLabel = connectionStatus === 'open'
+    ? '실시간 연결됨'
+    : connectionStatus === 'reconnecting'
+      ? '실시간 재연결 중'
+      : '실시간 연결 중'
 
   return (
     <div className="flex flex-col gap-sm">
@@ -426,11 +463,11 @@ function AuctionHeader({ auction }: { auction: AuctionDetail }) {
 
       <div className="flex flex-wrap items-start justify-between gap-sm">
         <div>
-          <div className="flex items-center gap-xs">
-            <Badge tone={STATUS_BADGE_TONE[auction.status]}>{STATUS_LABEL[auction.status]}</Badge>
-            <span className="text-xs text-muted">
-              조회 {auction.viewCount.toLocaleString('ko-KR')}회
-            </span>
+          <div className="flex flex-wrap items-center gap-xs">
+            <Badge tone={STATUS_BADGE_TONE[auction.status]}>
+              {STATUS_LABEL[auction.status]}
+            </Badge>
+            <span className="text-xs text-muted" aria-live="polite">{liveLabel}</span>
           </div>
           <h1 className="mt-xs text-2xl font-bold text-ink">{auction.title}</h1>
         </div>
@@ -438,7 +475,8 @@ function AuctionHeader({ auction }: { auction: AuctionDetail }) {
         <div className="flex shrink-0 gap-xs">
           <button
             type="button"
-            onClick={() => setInterested((prev) => !prev)}
+            onClick={() => setInterested((current) => !current)}
+            aria-pressed={interested}
             className={`flex h-9 items-center gap-1 rounded-pill border px-base text-xs font-semibold transition-colors ${
               interested
                 ? 'border-down-tint bg-down-tint text-down'
@@ -464,24 +502,24 @@ function AuctionHeader({ auction }: { auction: AuctionDetail }) {
 function AuctionGallery({ images, title }: { images: string[]; title: string }) {
   const [active, setActive] = useState(0)
   const [broken, setBroken] = useState<Record<number, boolean>>({})
-
   const hasImages = images.length > 0
-  const loadFailed = hasImages && broken[active]
 
   return (
     <div className="flex flex-col gap-sm">
       <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-surface-soft">
-        {!hasImages ? null : loadFailed ? (
+        {!hasImages || broken[active] ? (
           <div className="flex flex-col items-center gap-xs text-muted">
             <ImageOff size={32} />
-            <span className="text-xs">이미지를 불러오지 못했어요</span>
+            <span className="text-xs">
+              {hasImages ? '이미지를 불러오지 못했어요' : '등록된 이미지가 없어요'}
+            </span>
           </div>
         ) : (
           <img
             src={images[active]}
             alt={title}
             className="h-full w-full object-cover"
-            onError={() => setBroken((prev) => ({ ...prev, [active]: true }))}
+            onError={() => setBroken((current) => ({ ...current, [active]: true }))}
           />
         )}
       </div>
@@ -490,7 +528,7 @@ function AuctionGallery({ images, title }: { images: string[]; title: string }) 
         <div className="flex gap-sm overflow-x-auto">
           {images.map((src, index) => (
             <button
-              key={src}
+              key={`${src}-${index}`}
               type="button"
               onClick={() => setActive(index)}
               aria-label={`상품 이미지 ${index + 1}`}
@@ -505,7 +543,7 @@ function AuctionGallery({ images, title }: { images: string[]; title: string }) 
                   src={src}
                   alt=""
                   className="h-full w-full object-cover"
-                  onError={() => setBroken((prev) => ({ ...prev, [index]: true }))}
+                  onError={() => setBroken((current) => ({ ...current, [index]: true }))}
                 />
               )}
             </button>
@@ -542,11 +580,13 @@ function ProductTabs({ auction }: { auction: AuctionDetail }) {
       </div>
 
       <div className="pt-base text-sm text-body">
-        {active === '상품 정보' && <p className="whitespace-pre-line">{auction.description}</p>}
+        {active === '상품 정보' && (
+          <p className="whitespace-pre-line">{auction.description}</p>
+        )}
         {active === '배송·거래' && (
           <div className="flex items-start gap-sm">
             <Truck size={16} className="mt-0.5 shrink-0 text-muted" />
-            <p>{auction.deliveryNote}</p>
+            <p>{TRADE_LABEL[auction.tradeType]}</p>
           </div>
         )}
         {active === '판매자 정보' && <SellerInfo seller={auction.seller} />}
@@ -555,20 +595,26 @@ function ProductTabs({ auction }: { auction: AuctionDetail }) {
   )
 }
 
-function SellerInfo({ seller }: { seller: Seller }) {
+function SellerInfo({ seller }: { seller: AuctionSeller }) {
   return (
     <div className="flex items-center gap-sm">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-strong text-base font-bold text-body">
-        {seller.name.slice(0, 1)}
-      </span>
+      {seller.profileImageUrl ? (
+        <img
+          src={seller.profileImageUrl}
+          alt=""
+          className="h-11 w-11 shrink-0 rounded-full object-cover"
+        />
+      ) : (
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-strong text-base font-bold text-body">
+          {seller.name.slice(0, 1)}
+        </span>
+      )}
       <div>
         <div className="flex items-center gap-1 font-semibold text-ink">
           {seller.name}
           {seller.verified && <BadgeCheck size={14} className="text-primary" />}
         </div>
-        <p className="text-xs text-muted">
-          거래 {seller.dealCount}회 · 평점 {seller.rating.toFixed(1)}
-        </p>
+        <p className="text-xs text-muted">완료 거래 {seller.dealCount}회</p>
       </div>
     </div>
   )
@@ -585,74 +631,120 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 interface UpBidPanelProps {
   auction: UpAuctionDetail
-  onBidPlaced: (amount: number) => void
-  onBuyNow: () => void
+  serverOffsetMs: number
+  pendingAction: ActionKind
+  actionError: string | null
+  hasSubmittedSealedBid: boolean
+  authPending: boolean
+  onClearError: () => void
+  onBid: (amount: number, bidType: BidType) => Promise<boolean>
+  onBuyNow: () => Promise<void>
 }
 
-function UpBidPanel({ auction, onBidPlaced, onBuyNow }: UpBidPanelProps) {
-  const { remaining, isUrgent, isEnded } = useCountdown(auction.deadline)
-  const nextMinBid = auction.currentPrice + BID_INCREMENT_OPTIONS[0]
+function UpBidPanel({
+  auction,
+  serverOffsetMs,
+  pendingAction,
+  actionError,
+  hasSubmittedSealedBid,
+  authPending,
+  onClearError,
+  onBid,
+  onBuyNow,
+}: UpBidPanelProps) {
+  const deadline = useCountdown(auction.deadline - serverOffsetMs)
+  const sealedStart = useCountdown(auction.sealedBidStartsAt - serverOffsetMs)
+  const nextMinBid = auction.currentPrice + BID_UNIT
   const [amount, setAmount] = useState(nextMinBid)
-  const [error, setError] = useState<string | null>(null)
-
-  const ended = isEnded || auction.status !== 'BID_ONGOING'
+  const [inputError, setInputError] = useState<string | null>(null)
+  const ended = deadline.isEnded || !isOngoing(auction.status)
+  const sealedBidActive = !ended && sealedStart.isEnded
+  const canBuyNow = (
+    !ended
+    && !sealedBidActive
+    && auction.status === 'OPEN'
+    && auction.buyNowPrice !== null
+  )
+  const busy = pendingAction !== null
 
   function handleChip(increment: number) {
     setAmount(auction.currentPrice + increment)
-    setError(null)
+    setInputError(null)
+    onClearError()
   }
 
   function handleAmountChange(event: ChangeEvent<HTMLInputElement>) {
-    const raw = event.target.value.replace(/[^0-9]/g, '')
+    const raw = event.target.value.replace(/[^0-9]/g, '').slice(0, 15)
     setAmount(raw === '' ? 0 : Number(raw))
-    setError(null)
+    setInputError(null)
+    onClearError()
   }
 
-  function handleSubmit() {
-    if (amount < nextMinBid) {
-      setError(`최소 ${formatWon(nextMinBid)} 이상 입찰해주세요.`)
+  async function handleSubmit() {
+    if (!Number.isSafeInteger(amount) || amount < nextMinBid) {
+      setInputError(`최소 ${formatWon(nextMinBid)} 이상 입찰해주세요.`)
       return
     }
-    onBidPlaced(amount)
-    setAmount(amount + BID_INCREMENT_OPTIONS[0])
+    if (amount % BID_UNIT !== 0) {
+      setInputError('입찰 금액은 1,000원 단위로 입력해주세요.')
+      return
+    }
+
+    const accepted = await onBid(amount, sealedBidActive ? 'SEALED' : 'OPEN')
+    if (accepted && !sealedBidActive) setAmount(amount + BID_UNIT)
   }
 
   return (
     <Card className="flex flex-col gap-lg p-lg">
-      <div className="flex items-center gap-xs">
-        <Badge tone={ended ? 'ended' : 'live'}>{ended ? '마감' : '진행 중'}</Badge>
-        <Badge tone="muted">판매자 인증</Badge>
+      <div className="flex flex-wrap items-center gap-xs">
+        <Badge tone={ended ? 'ended' : sealedBidActive ? 'primary' : 'live'}>
+          {ended ? '마감' : sealedBidActive ? '밀봉 입찰' : '진행 중'}
+        </Badge>
+        {auction.seller.verified && (
+          <Badge tone="muted">
+            <ShieldCheck size={13} />
+            판매자 인증
+          </Badge>
+        )}
       </div>
 
       <div>
-        <p className="text-xs text-muted">현재 최고가</p>
+        <p className="text-xs text-muted">현재 공개 최고가</p>
         <p className="text-3xl font-bold text-ink">{formatWon(auction.currentPrice)}</p>
-        <p
-          className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
-            isUrgent ? 'text-down' : 'text-body'
-          }`}
-        >
+        <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
+          deadline.isUrgent ? 'text-down' : 'text-body'
+        }`}>
           <Clock size={14} />
-          {ended ? '경매 종료' : `${formatClock(remaining)} 남음`}
+          {ended ? '경매 종료' : `${formatClock(deadline.remaining)} 남음`}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-sm border-y border-hairline-soft py-base text-sm">
-        <Stat label="입찰 수" value={`${auction.bidLog.length}회`} />
-        <Stat label="조회" value={`${auction.viewCount.toLocaleString('ko-KR')}회`} />
-        <Stat label="보증금" value={formatWon(auction.deposit)} />
-        <Stat label="즉시구매가" value={formatWon(auction.buyNowPrice)} />
+        <Stat label="입찰 수" value={`${auction.bidCount.toLocaleString('ko-KR')}회`} />
+        <Stat label="시작가" value={formatWon(auction.startPrice)} />
+        <Stat
+          label="즉시구매가"
+          value={auction.buyNowPrice === null ? '미설정' : formatWon(auction.buyNowPrice)}
+        />
+        <Stat label="거래 방식" value={TRADE_LABEL[auction.tradeType]} />
       </div>
 
       {!ended && (
         <>
+          {sealedBidActive && (
+            <p className="rounded-md bg-primary-tint p-sm text-xs leading-relaxed text-primary">
+              입찰 금액은 마감 전까지 공개되지 않으며 한 번만 제출할 수 있어요.
+            </p>
+          )}
+
           <div className="flex gap-sm">
             {BID_INCREMENT_OPTIONS.map((increment) => (
               <button
                 key={increment}
                 type="button"
                 onClick={() => handleChip(increment)}
-                className="flex-1 rounded-pill border border-hairline py-sm text-sm font-semibold text-body hover:bg-surface-strong"
+                disabled={busy || hasSubmittedSealedBid && sealedBidActive}
+                className="flex-1 rounded-pill border border-hairline py-sm text-sm font-semibold text-body hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
               >
                 +{increment.toLocaleString('ko-KR')}
               </button>
@@ -660,66 +752,100 @@ function UpBidPanel({ auction, onBidPlaced, onBuyNow }: UpBidPanelProps) {
           </div>
 
           <TextInput
-            label="입찰 금액"
+            label={sealedBidActive ? '밀봉 입찰 금액' : '입찰 금액'}
             inputMode="numeric"
-            value={amount.toLocaleString('ko-KR')}
+            value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
             onChange={handleAmountChange}
-            error={error ?? undefined}
+            error={inputError ?? actionError ?? undefined}
+            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
           />
 
-          <Button variant="primary" size="lg" onClick={handleSubmit}>
-            {formatWon(amount)}으로 입찰하기
+          <Button
+            size="lg"
+            onClick={handleSubmit}
+            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
+          >
+            {pendingAction === 'bid'
+              ? '입찰 처리 중…'
+              : hasSubmittedSealedBid && sealedBidActive
+                ? '밀봉 입찰 제출 완료'
+                : `${formatWon(amount)}으로 입찰하기`}
           </Button>
-          <Button variant="secondary" size="md" onClick={onBuyNow}>
-            즉시구매 {formatWon(auction.buyNowPrice)}
-          </Button>
+
+          {canBuyNow && (
+            <Button
+              variant="secondary"
+              onClick={onBuyNow}
+              disabled={busy || authPending}
+            >
+              {pendingAction === 'buy'
+                ? '구매 처리 중…'
+                : `즉시구매 ${formatWon(auction.buyNowPrice!)}`}
+            </Button>
+          )}
         </>
       )}
     </Card>
   )
 }
 
-function DownBuyPanel({ auction }: { auction: DownAuctionDetail }) {
-  const { showToast } = useToast()
-  const { currentPrice, remaining, isUrgent, atFloor } = useDownAuctionClock(auction)
-  const ended = auction.status !== 'BID_ONGOING'
+interface DownBuyPanelProps {
+  auction: DownAuctionDetail
+  serverOffsetMs: number
+  pendingAction: ActionKind
+  actionError: string | null
+  authPending: boolean
+  onClearError: () => void
+  onBuyNow: () => Promise<void>
+}
 
-  function handleBuy() {
-    showToast(`${formatWon(currentPrice)}에 구매를 확정했어요.`, 'success')
-  }
+function DownBuyPanel({
+  auction,
+  serverOffsetMs,
+  pendingAction,
+  actionError,
+  authPending,
+  onClearError,
+  onBuyNow,
+}: DownBuyPanelProps) {
+  const clock = useDownAuctionClock(auction)
+  const deadline = useCountdown(auction.deadline - serverOffsetMs)
+  const ended = deadline.isEnded || auction.status !== 'OPEN'
+  const currentPrice = ended && auction.finalPrice !== null
+    ? auction.finalPrice
+    : ended
+      ? computeCurrentDownPrice(auction, auction.deadline)
+      : clock.currentPrice
 
   return (
     <Card className="flex flex-col gap-lg p-lg">
-      <div className="flex items-center gap-xs">
+      <div className="flex flex-wrap items-center gap-xs">
         <Badge tone={ended ? 'ended' : 'live'}>{ended ? '마감' : '하락 중'}</Badge>
-        <Badge tone="muted">판매자 인증</Badge>
+        {auction.seller.verified && (
+          <Badge tone="muted">
+            <ShieldCheck size={13} />
+            판매자 인증
+          </Badge>
+        )}
       </div>
 
       <div>
-        <p className="text-xs text-muted">지금 이 가격</p>
-        <p className="flex items-center gap-1.5">
-          <span
-            key={currentPrice}
-            className="text-3xl font-bold text-down"
-            style={{ animation: 'price-drop-pop 0.5s ease-out' }}
-          >
-            {formatWon(currentPrice)}
-          </span>
-          {!ended && !atFloor && (
-            <TrendingDown size={20} className="animate-bounce text-down" />
-          )}
+        <p className="text-xs text-muted">
+          {ended && auction.status === 'COMPLETED' ? '최종 구매가' : '지금 이 가격'}
         </p>
-        {!ended && !atFloor && (
-          <p
-            className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
-              isUrgent ? 'text-down' : 'text-body'
-            }`}
-          >
+        <p className="flex items-center gap-1.5">
+          <span className="text-3xl font-bold text-down">{formatWon(currentPrice)}</span>
+          {!ended && !clock.atFloor && <TrendingDown size={20} className="text-down" />}
+        </p>
+        {!ended && !clock.atFloor && (
+          <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
+            clock.isUrgent ? 'text-down' : 'text-body'
+          }`}>
             <Clock size={14} />
-            {formatClock(remaining)} 후 추가 하락
+            {formatClock(clock.remaining)} 후 추가 하락
           </p>
         )}
-        {!ended && atFloor && (
+        {!ended && clock.atFloor && (
           <p className="mt-1 text-sm font-semibold text-body">최저가에 도달했어요</p>
         )}
       </div>
@@ -733,17 +859,27 @@ function DownBuyPanel({ auction }: { auction: DownAuctionDetail }) {
       <div className="grid grid-cols-2 gap-sm border-y border-hairline-soft py-base text-sm">
         <Stat label="시작가" value={formatWon(auction.startPrice)} />
         <Stat label="최저가" value={formatWon(auction.minimumPrice)} />
-        <Stat label="조회" value={`${auction.viewCount.toLocaleString('ko-KR')}회`} />
-        <Stat label="보증금" value={formatWon(auction.deposit)} />
+        <Stat label="하락 폭" value={formatWon(auction.dropPrice)} />
+        <Stat label="거래 방식" value={TRADE_LABEL[auction.tradeType]} />
       </div>
 
       {!ended && (
         <>
-          <Button variant="primary" size="lg" onClick={handleBuy}>
-            {formatWon(currentPrice)}에 구매하기
+          <Button
+            size="lg"
+            onClick={() => {
+              onClearError()
+              void onBuyNow()
+            }}
+            disabled={pendingAction !== null || authPending}
+          >
+            {pendingAction === 'buy'
+              ? '구매 처리 중…'
+              : `${formatWon(currentPrice)}에 구매하기`}
           </Button>
+          {actionError && <p className="text-sm text-down">{actionError}</p>}
           <p className="text-center text-xs text-muted">
-            시간이 지날수록 가격이 자동으로 내려가요. 선착순으로 구매가 확정됩니다.
+            서버의 구매 확정 시각에 계산된 가격으로 선착순 거래가 확정됩니다.
           </p>
         </>
       )}
@@ -762,7 +898,9 @@ function DropProgress({
 }) {
   const totalRange = startPrice - minimumPrice
   const dropped = startPrice - currentPrice
-  const percent = totalRange > 0 ? Math.min(100, Math.max(0, (dropped / totalRange) * 100)) : 0
+  const percent = totalRange > 0
+    ? Math.min(100, Math.max(0, (dropped / totalRange) * 100))
+    : 0
 
   if (dropped <= 0) return null
 
@@ -782,59 +920,110 @@ function DropProgress({
   )
 }
 
-function BidHistoryPanel({ bidLog }: { bidLog: BidEntry[] }) {
+function BidHistoryPanel({
+  bidCount,
+  bidLog,
+  ownBidEntryIds,
+  sealedBidActive,
+  error,
+  onRetry,
+}: {
+  bidCount: number
+  bidLog: BidHistoryItem[]
+  ownBidEntryIds: ReadonlySet<string>
+  sealedBidActive: boolean
+  error: string | null
+  onRetry: () => void
+}) {
   return (
     <Card className="p-lg">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-sm">
         <h2 className="text-lg font-bold text-ink">입찰 기록</h2>
-        <span className="text-sm text-muted">전체 {bidLog.length}회</span>
+        <span className="text-sm text-muted">전체 {bidCount.toLocaleString('ko-KR')}회</span>
       </div>
 
-      {bidLog.length === 0 ? (
-        <EmptyState message="아직 입찰 기록이 없어요." />
+      {sealedBidActive && (
+        <p className="mt-sm rounded-md bg-primary-tint p-sm text-xs text-primary">
+          밀봉 입찰 내역은 경매 마감 후 한 번에 공개됩니다.
+        </p>
+      )}
+
+      {error ? (
+        <div className="flex flex-col items-center gap-sm py-xl text-center">
+          <p className="text-sm text-muted">{error}</p>
+          <Button variant="secondary" onClick={onRetry}>다시 시도</Button>
+        </div>
+      ) : bidLog.length === 0 ? (
+        <EmptyState message="아직 공개된 입찰 기록이 없어요." />
       ) : (
         <ul
           aria-live="polite"
           className="mt-base flex max-h-[360px] flex-col divide-y divide-hairline-soft overflow-y-auto"
         >
-          {bidLog.map((bid) => (
-            <li key={bid.id} className="flex items-center justify-between py-sm text-sm">
-              <span className="text-muted">{formatTimeOfDay(new Date(bid.biddedAt))}</span>
-              <span className={bid.isMe ? 'font-semibold text-primary' : 'text-body'}>
-                {bid.isMe ? '나의 입찰' : bid.bidder}
-              </span>
-              <span className={`font-semibold ${bid.isMe ? 'text-primary' : 'text-ink'}`}>
-                {formatWon(bid.amount)}
-              </span>
-            </li>
-          ))}
+          {bidLog.map((bid) => {
+            const isMine = ownBidEntryIds.has(bid.entryId)
+            return (
+              <li
+                key={bid.entryId}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-base py-sm text-sm"
+              >
+                <span className="text-muted">
+                  {formatTimeOfDay(new Date(bid.biddedAt))}
+                </span>
+                <span className={isMine ? 'font-semibold text-primary' : 'text-body'}>
+                  {isMine ? '나의 입찰' : bid.bidder}
+                </span>
+                <span className={`font-semibold ${
+                  isMine ? 'text-primary' : 'text-ink'
+                }`}>
+                  {formatWon(bid.amount)}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </Card>
   )
 }
 
-function PriceDropTimeline({ auction }: { auction: DownAuctionDetail }) {
-  // 1초마다 재렌더링돼야 새로 떨어진 가격이 목록에 바로 반영된다.
+function PriceDropTimeline({
+  auction,
+  serverOffsetMs,
+}: {
+  auction: DownAuctionDetail
+  serverOffsetMs: number
+}) {
+  // 진행 중에는 매 tick마다 새 하락 내역이 즉시 추가되도록 재렌더링한다.
   useDownAuctionClock(auction)
-  const history = computeDropHistory(auction, Date.now())
-  const newestFirst = [...history].reverse()
+  const completedAt = auction.finalPrice === null
+    ? null
+    : auction.startedAt
+      + Math.ceil((auction.startPrice - auction.finalPrice) / auction.dropPrice)
+      * auction.priceDropIntervalMs
+  const effectiveNow = auction.status === 'COMPLETED' && completedAt !== null
+    ? completedAt
+    : auction.status === 'UNSOLD'
+      ? auction.deadline
+      : Math.min(Date.now() + serverOffsetMs, auction.deadline)
+  const history = computeDropHistory(auction, effectiveNow).reverse()
 
   return (
     <Card className="p-lg">
       <h2 className="text-lg font-bold text-ink">전체 가격 변동 내역</h2>
 
-      {newestFirst.length === 0 ? (
+      {history.length === 0 ? (
         <EmptyState message="아직 가격이 내려간 적이 없어요." />
       ) : (
         <ul className="mt-base flex flex-col divide-y divide-hairline-soft">
-          {newestFirst.map((entry, index) => (
+          {history.map((entry) => (
             <li
-              key={entry.droppedAt}
-              style={index === 0 ? { animation: 'drop-row-flash 1.4s ease-out' } : undefined}
-              className="flex items-center justify-between rounded-md px-xs py-sm text-sm"
+              key={`${entry.droppedAt}-${entry.price}`}
+              className="flex items-center justify-between px-xs py-sm text-sm"
             >
-              <span className="text-muted">{formatTimeOfDay(new Date(entry.droppedAt))}</span>
+              <span className="text-muted">
+                {formatTimeOfDay(new Date(entry.droppedAt))}
+              </span>
               <span className="flex items-center gap-1 font-semibold text-down">
                 <TrendingDown size={14} />
                 {formatWon(entry.price)}
@@ -844,84 +1033,6 @@ function PriceDropTimeline({ auction }: { auction: DownAuctionDetail }) {
         </ul>
       )}
     </Card>
-  )
-}
-
-function MobileStickyBar({ auction }: { auction: AuctionDetail }) {
-  return auction.auctionType === 'UP' ? (
-    <UpMobileStickyBar auction={auction} />
-  ) : (
-    <DownMobileStickyBar auction={auction} />
-  )
-}
-
-function UpMobileStickyBar({ auction }: { auction: UpAuctionDetail }) {
-  const { showToast } = useToast()
-  const { remaining, isUrgent, isEnded } = useCountdown(auction.deadline)
-  const ended = isEnded || auction.status !== 'BID_ONGOING'
-
-  function handleQuickAction() {
-    showToast(`${formatWon(auction.currentPrice + BID_INCREMENT_OPTIONS[0])}으로 입찰했어요.`, 'success')
-  }
-
-  return (
-    <StickyBarView
-      price={auction.currentPrice}
-      remaining={remaining}
-      isUrgent={isUrgent}
-      ended={ended}
-      actionLabel="빠른 입찰"
-      onAction={handleQuickAction}
-    />
-  )
-}
-
-function DownMobileStickyBar({ auction }: { auction: DownAuctionDetail }) {
-  const { showToast } = useToast()
-  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(auction)
-  const ended = auction.status !== 'BID_ONGOING'
-
-  function handleQuickAction() {
-    showToast(`${formatWon(currentPrice)}에 구매를 확정했어요.`, 'success')
-  }
-
-  return (
-    <StickyBarView
-      price={currentPrice}
-      remaining={remaining}
-      isUrgent={isUrgent}
-      ended={ended}
-      actionLabel="구매하기"
-      onAction={handleQuickAction}
-    />
-  )
-}
-
-interface StickyBarViewProps {
-  price: number
-  remaining: number
-  isUrgent: boolean
-  ended: boolean
-  actionLabel: string
-  onAction: () => void
-}
-
-function StickyBarView({ price, remaining, isUrgent, ended, actionLabel, onAction }: StickyBarViewProps) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-40 hidden items-center justify-between gap-base border-t border-hairline bg-canvas px-lg py-sm shadow-card max-[860px]:flex">
-      <div>
-        <p className="text-xs text-muted">현재가</p>
-        <p className="text-lg font-bold text-ink">{formatWon(price)}</p>
-        {!ended && (
-          <p className={`text-xs font-semibold ${isUrgent ? 'text-down' : 'text-muted'}`}>
-            {formatClock(remaining)} 남음
-          </p>
-        )}
-      </div>
-      <Button variant="primary" size="md" disabled={ended} onClick={onAction}>
-        {ended ? '경매 종료' : actionLabel}
-      </Button>
-    </div>
   )
 }
 

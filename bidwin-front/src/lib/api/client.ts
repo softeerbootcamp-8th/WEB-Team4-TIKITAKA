@@ -56,7 +56,7 @@ async function requestEnvelope<TData>(
   let response: Response
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(apiUrl(path), {
       credentials: CREDENTIALS_MODE,
       ...init,
     })
@@ -86,9 +86,13 @@ function postJson<TData, TBody>(path: string, body: TBody): Promise<ApiResult<TD
   })
 }
 
-function getJson<TData>(path: string): Promise<ApiResult<TData>> {
-  return requestEnvelope<TData>(path, { method: 'GET' })
+function getJson<TData>(path: string, signal?: AbortSignal): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, { method: 'GET', signal })
 }
 
-export { getJson, postJson }
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`
+}
+
+export { apiUrl, getJson, postJson }
 export type { ApiFailure, ApiResult, ApiSuccess }

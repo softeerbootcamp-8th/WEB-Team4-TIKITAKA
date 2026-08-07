@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import AuthFormError from '../../components/auth/AuthFormError'
 import AuthSplitLayout from '../../components/auth/AuthSplitLayout'
 import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
@@ -47,6 +47,17 @@ function validateCredentials(email: string, password: string) {
   return validateEmail(email) ?? validateLoginPassword(password)
 }
 
+function safeNextPath(next: string | null) {
+  if (!next?.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
+    return ROUTE.mypage
+  }
+
+  const target = new URL(next, window.location.origin)
+  return target.origin === window.location.origin
+    ? `${target.pathname}${target.search}${target.hash}`
+    : ROUTE.mypage
+}
+
 function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -54,6 +65,7 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const { setAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const handleEmailChange = (event: ChangeEvent<HTMLInputElement>) => {
     setEmail(event.target.value)
@@ -83,7 +95,7 @@ function LoginPage() {
     }
 
     setAuthenticated(true)
-    navigate(ROUTE.mypage, { replace: true })
+    navigate(safeNextPath(searchParams.get('next')), { replace: true })
   }
 
   const hasError = error !== null
