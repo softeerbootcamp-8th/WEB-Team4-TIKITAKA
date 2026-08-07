@@ -17,7 +17,13 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "Auction")
+@Table(
+        name = "Auction",
+        indexes = @Index(
+                name = "idx_auction_status_ended_at",
+                columnList = "status, ended_at"
+        )
+)
 @Inheritance(strategy = InheritanceType.JOINED)
 @DiscriminatorColumn(name = "auction_type")
 @NoArgsConstructor(access = PROTECTED)

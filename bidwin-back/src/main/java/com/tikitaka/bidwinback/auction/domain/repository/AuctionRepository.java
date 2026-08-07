@@ -17,6 +17,30 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
+    // 매초 실행되는 조회가 이미 종료된 경매 전체를 훑지 않도록 상태와 DB 시각으로 후보만 찾는다.
+    @Query(value = """
+            SELECT id
+            FROM auction
+            WHERE status IN ('OPEN', 'BID_ONGOING')
+              AND ended_at <= SYSDATE(6)
+            ORDER BY ended_at, id
+            """, nativeQuery = true)
+    List<Long> findClosingCandidateIds();
+
+    // 후보 조회 뒤 상태가 바뀔 수 있으므로 현재 조건을 다시 검사하며 한 행만 선점한다.
+    // 다른 트랜잭션이 입찰·즉시구매·마감을 진행 중이면 기다리지 않고 다음 주기에 재시도한다.
+    @Query(value = """
+            SELECT id
+            FROM auction
+            WHERE id = :auctionId
+              AND status IN ('OPEN', 'BID_ONGOING')
+              AND ended_at <= SYSDATE(6)
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    Optional<Long> findClosingCandidateIdForUpdateSkipLocked(
+            @Param("auctionId") long auctionId
+    );
+
     // 단일 조건부 UPDATE로 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
     // current_price가 없는 기존 경매만 Bid 최고가, 입찰도 없으면 시작가를 기준으로 한다.
     // 락 대기 중 흐른 시간까지 반영하도록 statement 시작 시각이 아닌 SYSDATE(6)를 사용한다.
@@ -93,11 +117,11 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     );
 
     // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
+    // 정산에서 사용하지 않는 판매자까지 잠그지 않도록 fetch join은 하지 않는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select auction
             from Auction auction
-            join fetch auction.seller
             where auction.id = :auctionId
             """)
     Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);

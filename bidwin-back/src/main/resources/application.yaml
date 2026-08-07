@@ -39,6 +39,8 @@ server:
         path: /
 
 app:
+  auction:
+    closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
   mail:
     rate-limit:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
