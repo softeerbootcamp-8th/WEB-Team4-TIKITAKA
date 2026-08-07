@@ -129,6 +129,7 @@ public abstract class Auction extends BaseTimeEntity {
         this.currentPrice = finalPrice;
         this.status = AuctionStatus.COMPLETED;
         this.completedAt = completedAt;
+        this.revision++;
     }
 
     public void markUnsold(LocalDateTime completedAt) {
@@ -138,5 +139,6 @@ public abstract class Auction extends BaseTimeEntity {
 
         this.status = AuctionStatus.UNSOLD;
         this.completedAt = completedAt;
+        this.revision++;
     }
 }
