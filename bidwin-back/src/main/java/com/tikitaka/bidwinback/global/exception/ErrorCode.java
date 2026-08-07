@@ -77,6 +77,16 @@ public enum ErrorCode {
             "MEMBER_400_5",
             "유효하지 않은 이메일 인증 토큰입니다."
     ),
+    CURRENT_PASSWORD_MISMATCH(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_6",
+            "현재 비밀번호가 일치하지 않습니다."
+    ),
+    NEW_PASSWORD_SAME_AS_CURRENT(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_7",
+            "새 비밀번호는 현재 비밀번호와 달라야 합니다."
+    ),
     EXPIRED_EMAIL_VERIFICATION_TOKEN(
             HttpStatus.GONE,
             "MEMBER_410_2",

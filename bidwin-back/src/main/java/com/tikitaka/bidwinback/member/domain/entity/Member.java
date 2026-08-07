@@ -111,6 +111,10 @@ public class Member extends BaseTimeEntity {
         this.authVersion++;
     }
 
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
     public void activate() {
         this.status = MemberStatus.ACTIVE;
     }

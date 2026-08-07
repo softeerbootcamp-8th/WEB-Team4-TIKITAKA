@@ -15,6 +15,7 @@ import java.util.Optional;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.EMAIL_VERIFICATION_PENDING;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.EMAIL_UNIQUE_CONSTRAINT;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.NICKNAME_UNIQUE_CONSTRAINT;
 
@@ -63,6 +64,25 @@ public class MemberService {
         } catch (DataIntegrityViolationException exception) {
             throw translateDataIntegrityViolation(exception);
         }
+    }
+
+    @Transactional
+    public String changeNickname(Long memberId, String nickname) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
+
+        if (member.getNickname().equals(nickname)) {
+            return nickname;
+        }
+
+        member.changeNickname(nickname);
+        try {
+            // UPDATE의 UNIQUE 제약 위반도 서비스 호출 안에서 응답으로 변환한다.
+            memberRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw translateDataIntegrityViolation(exception);
+        }
+        return member.getNickname();
     }
 
     // 알려진 UNIQUE 제약 위반만 회원 중복 예외로 변환한다.
