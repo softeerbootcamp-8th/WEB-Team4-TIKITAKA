@@ -71,11 +71,14 @@ public class MyPageService {
 
         Map<Long, String> thumbnailUrls = resolveThumbnailUrls(sellingAuctions, buyingTrades, activeTrades);
 
+        // 하락 경매 현재가와 마감 판정 기준을 애플리케이션 서버 시계가 아닌 DB 시각으로 통일한다.
+        LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
+
         return new MyPageResponse(
                 toProfile(member),
                 toDeposit(member),
                 activeTrades.stream().map(trade -> toActiveTrade(trade, memberId, thumbnailUrls)).toList(),
-                sellingAuctions.stream().map(auction -> toSellingItem(auction, thumbnailUrls)).toList(),
+                sellingAuctions.stream().map(auction -> toSellingItem(auction, thumbnailUrls, databaseTime)).toList(),
                 buyingTrades.stream().map(trade -> toBuyingItem(trade, thumbnailUrls)).toList()
         );
     }
@@ -117,7 +120,11 @@ public class MyPageService {
         );
     }
 
-    private SellingItemResponse toSellingItem(Auction auction, Map<Long, String> thumbnailUrls) {
+    private SellingItemResponse toSellingItem(
+            Auction auction,
+            Map<Long, String> thumbnailUrls,
+            LocalDateTime databaseTime
+    ) {
         return new SellingItemResponse(
                 auction.getId(),
                 auction.getTitle(),
@@ -126,7 +133,7 @@ public class MyPageService {
                 auction.getStartPrice(),
                 sellingPrice(auction),
                 sellingStatus(auction.getStatus()),
-                downPricing(auction)
+                downPricing(auction, databaseTime)
         );
     }
 
@@ -140,16 +147,23 @@ public class MyPageService {
                 .orElseGet(auction::getCurrentPrice);
     }
 
-    private DownPricingResponse downPricing(Auction auction) {
+    private DownPricingResponse downPricing(Auction auction, LocalDateTime databaseTime) {
         if (!(auction instanceof DownAuction downAuction)) {
             return null;
         }
 
+        // 마감 시각이 지난 하락 경매는 더 이상 구매할 수 없으므로 현재가를 계속 떨어뜨리지 않는다.
+        if (!databaseTime.isBefore(downAuction.getEndedAt())) {
+            return null;
+        }
+
         return new DownPricingResponse(
+                downAuction.getStartPrice(),
                 downAuction.getMinimumPrice(),
                 downAuction.getDropPrice(),
                 Duration.ofMinutes(downAuction.getPriceDropInterval()).toMillis(),
-                toEpochMilli(downAuction.getStartedAt())
+                toEpochMilli(downAuction.getStartedAt()),
+                toEpochMilli(databaseTime)
         );
     }
 

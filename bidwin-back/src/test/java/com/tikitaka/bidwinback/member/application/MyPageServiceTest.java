@@ -138,6 +138,8 @@ class MyPageServiceTest {
     void 진행_중인_하향_판매_물품은_가격_계산_정보를_응답한다() {
         stubProfileBasics();
         LocalDateTime startedAt = LocalDateTime.of(2026, 8, 6, 12, 0);
+        LocalDateTime databaseTime = LocalDateTime.of(2026, 8, 6, 12, 30);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 8, 7, 12, 0);
         when(auctionRepository.findTop3BySellerIdOrderByIdDesc(MEMBER_ID))
                 .thenReturn(List.of(downAuction));
         when(auctionTradeRepository.findBuyingItems(eq(MEMBER_ID), any()))
@@ -147,6 +149,7 @@ class MyPageServiceTest {
                 TradeStatus.WAITING_CONFIRM,
                 TradeStatus.CONFIRMED
         )).thenReturn(List.of());
+        when(auctionRepository.currentDatabaseTime()).thenReturn(databaseTime);
         when(downAuction.getId()).thenReturn(202L);
         when(downAuction.getTitle()).thenReturn("하향 경매");
         when(downAuction.getStartPrice()).thenReturn(100_000L);
@@ -156,15 +159,48 @@ class MyPageServiceTest {
         when(downAuction.getDropPrice()).thenReturn(5_000L);
         when(downAuction.getPriceDropInterval()).thenReturn(10L);
         when(downAuction.getStartedAt()).thenReturn(startedAt);
+        when(downAuction.getEndedAt()).thenReturn(endedAt);
         when(imageRepository.findRepresentativeThumbnails(any())).thenReturn(List.of());
 
         SellingItemResponse item = myPageService.getMyPage(MEMBER_ID).sellingItems().getFirst();
 
         assertThat(item.downPricing()).isNotNull();
+        assertThat(item.downPricing().startPrice()).isEqualTo(100_000L);
         assertThat(item.downPricing().minimumPrice()).isEqualTo(40_000L);
         assertThat(item.downPricing().dropPrice()).isEqualTo(5_000L);
         assertThat(item.downPricing().priceDropIntervalMs()).isEqualTo(600_000L);
         assertThat(item.downPricing().startedAt()).isEqualTo(toEpochMilli(startedAt));
+        assertThat(item.downPricing().serverTime()).isEqualTo(toEpochMilli(databaseTime));
+    }
+
+    @Test
+    void 마감_시각이_지난_하향_판매_물품은_가격_계산_정보를_내리지_않는다() {
+        stubProfileBasics();
+        LocalDateTime startedAt = LocalDateTime.of(2026, 8, 6, 12, 0);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 8, 6, 18, 0);
+        LocalDateTime databaseTime = LocalDateTime.of(2026, 8, 6, 18, 1);
+        when(auctionRepository.findTop3BySellerIdOrderByIdDesc(MEMBER_ID))
+                .thenReturn(List.of(downAuction));
+        when(auctionTradeRepository.findBuyingItems(eq(MEMBER_ID), any()))
+                .thenReturn(List.of());
+        when(auctionTradeRepository.findActiveTrades(
+                MEMBER_ID,
+                TradeStatus.WAITING_CONFIRM,
+                TradeStatus.CONFIRMED
+        )).thenReturn(List.of());
+        when(auctionRepository.currentDatabaseTime()).thenReturn(databaseTime);
+        when(downAuction.getId()).thenReturn(202L);
+        when(downAuction.getTitle()).thenReturn("하향 경매");
+        when(downAuction.getStartPrice()).thenReturn(100_000L);
+        when(downAuction.getCurrentPrice()).thenReturn(50_000L);
+        when(downAuction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(downAuction.getEndedAt()).thenReturn(endedAt);
+        when(imageRepository.findRepresentativeThumbnails(any())).thenReturn(List.of());
+
+        SellingItemResponse item = myPageService.getMyPage(MEMBER_ID).sellingItems().getFirst();
+
+        assertThat(item.downPricing()).isNull();
+        assertThat(item.price()).isEqualTo(50_000L);
     }
 
     @Test
