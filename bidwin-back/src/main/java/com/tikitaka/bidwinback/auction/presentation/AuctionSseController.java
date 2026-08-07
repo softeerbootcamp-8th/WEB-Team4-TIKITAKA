@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.sse.SseHub;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
@@ -52,7 +53,7 @@ public class AuctionSseController {
             produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
     public ResponseEntity<SseEmitter> subscribeAuctionList(
-            @RequestParam List<@Positive Long> auctionIds
+            @RequestParam List<@NotNull @Positive Long> auctionIds
     ) {
         // 채널은 Set으로 정규화되지만 snapshot 공급자는 원본을 그대로 조회하므로,
         // 같은 ID를 반복해 IN 절과 컬렉션을 부풀리지 못하도록 여기서 먼저 중복을 제거한다.
