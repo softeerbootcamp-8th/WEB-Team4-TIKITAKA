@@ -3,6 +3,7 @@ import type { ApiResult } from './client'
 
 const AUTH_API_PATH = {
   login: '/api/v1/auth/login',
+  logout: '/api/v1/auth/logout',
   session: '/api/v1/auth/session',
   signUp: '/api/v1/auth/signups',
   emailAvailability: '/api/v1/auth/signups/email/verify',
@@ -89,6 +90,10 @@ function requestLogin(request: LoginRequest): Promise<ApiResult<void>> {
   return postJson<void, LoginRequest>(AUTH_API_PATH.login, request)
 }
 
+function requestLogout(): Promise<ApiResult<void>> {
+  return postJson<void, Record<string, never>>(AUTH_API_PATH.logout, {})
+}
+
 function requestSession(): Promise<ApiResult<void>> {
   return getJson<void>(AUTH_API_PATH.session)
 }
@@ -98,6 +103,7 @@ export {
   requestEmailVerification,
   requestEmailVerificationConfirm,
   requestLogin,
+  requestLogout,
   requestNicknameAvailability,
   requestPasswordReset,
   requestPasswordResetConfirm,
