@@ -32,6 +32,7 @@ class MemberProfileImageServiceTest {
 
     private static final long MEMBER_ID = 1L;
     private static final String NEW_KEY = "profile-images/1/new.jpg";
+    private static final String OLD_KEY = "profile-images/1/old.jpg";
     private static final String DEFAULT_KEY = "profiles/default-profile.png";
 
     @Mock
@@ -60,7 +61,8 @@ class MemberProfileImageServiceTest {
     void 업로드된_이미지로_프로필을_변경하고_발급_기록을_소비한다() {
         Member member = mock(Member.class);
         when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(pendingProfileImageStore.findByMemberIdAndObjectKey(MEMBER_ID, NEW_KEY))
+        when(member.getProfileObjectKey()).thenReturn(OLD_KEY);
+        when(pendingProfileImageStore.findByMemberIdAndObjectKeyForUpdate(MEMBER_ID, NEW_KEY))
                 .thenReturn(Optional.of(PendingProfileImage.issue(MEMBER_ID, NEW_KEY)));
         when(objectStorage.exists(NEW_KEY)).thenReturn(true);
         when(imageUrlResolver.resolve(NEW_KEY)).thenReturn("https://cdn.example.com/new.jpg");
@@ -70,6 +72,21 @@ class MemberProfileImageServiceTest {
         assertThat(result.profileImageUrl()).isEqualTo("https://cdn.example.com/new.jpg");
         verify(member).changeProfileImage(NEW_KEY);
         verify(pendingProfileImageStore).deleteByObjectKeyIn(List.of(NEW_KEY));
+        verify(pendingProfileImageStore).save(MEMBER_ID, OLD_KEY);
+    }
+
+    @Test
+    void 기본_이미지는_정리_대상으로_저장하지_않는다() {
+        Member member = mock(Member.class);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getProfileObjectKey()).thenReturn(DEFAULT_KEY);
+        when(pendingProfileImageStore.findByMemberIdAndObjectKeyForUpdate(MEMBER_ID, NEW_KEY))
+                .thenReturn(Optional.of(PendingProfileImage.issue(MEMBER_ID, NEW_KEY)));
+        when(objectStorage.exists(NEW_KEY)).thenReturn(true);
+
+        service.change(MEMBER_ID, NEW_KEY);
+
+        verify(pendingProfileImageStore, never()).save(MEMBER_ID, DEFAULT_KEY);
     }
 
     @Test
@@ -99,7 +116,7 @@ class MemberProfileImageServiceTest {
     void 발급_기록이_없는_이미지는_거절한다() {
         Member member = mock(Member.class);
         when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(pendingProfileImageStore.findByMemberIdAndObjectKey(MEMBER_ID, NEW_KEY))
+        when(pendingProfileImageStore.findByMemberIdAndObjectKeyForUpdate(MEMBER_ID, NEW_KEY))
                 .thenReturn(Optional.empty());
 
         assertThatExceptionOfType(UploadException.class)
@@ -113,7 +130,7 @@ class MemberProfileImageServiceTest {
     void S3에_업로드되지_않은_이미지는_거절한다() {
         Member member = mock(Member.class);
         when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(pendingProfileImageStore.findByMemberIdAndObjectKey(MEMBER_ID, NEW_KEY))
+        when(pendingProfileImageStore.findByMemberIdAndObjectKeyForUpdate(MEMBER_ID, NEW_KEY))
                 .thenReturn(Optional.of(PendingProfileImage.issue(MEMBER_ID, NEW_KEY)));
         when(objectStorage.exists(NEW_KEY)).thenReturn(false);
 
@@ -136,5 +153,20 @@ class MemberProfileImageServiceTest {
         assertThat(result.profileImageUrl()).isEqualTo("https://cdn.example.com/default.png");
         verify(member).resetProfileImage();
         verifyNoInteractions(pendingProfileImageStore, objectStorage);
+    }
+
+    @Test
+    void 초기화하면_이전_사용자_이미지를_정리_대상으로_저장한다() {
+        Member member = mock(Member.class);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getProfileObjectKey())
+                .thenReturn(OLD_KEY, DEFAULT_KEY);
+        when(imageUrlResolver.resolve(DEFAULT_KEY))
+                .thenReturn("https://cdn.example.com/default.png");
+
+        service.reset(MEMBER_ID);
+
+        verify(member).resetProfileImage();
+        verify(pendingProfileImageStore).save(MEMBER_ID, OLD_KEY);
     }
 }
