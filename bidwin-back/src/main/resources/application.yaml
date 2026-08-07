@@ -18,12 +18,11 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password:
-    # serverTimezone은 드라이버 변환 기준일 뿐 MySQL 세션 time_zone을 바꾸지 않는다.
-    # SYSDATE(6)/current_timestamp()가 세션 시간대로 평가되므로, 세션까지 Asia/Seoul로
-    # 강제해 감사 시각과 마감 판정, epoch 변환이 서로 어긋나지 않게 한다.
-    url: jdbc:mysql://localhost:3306/bidwin?serverTimezone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    # 이름 기반 time zone은 MySQL time zone table이 비어 있으면 연결부터 실패한다.
+    # +09:00 세션 오프셋으로 DB 시각과 서비스의 Asia/Seoul 변환 기준을 맞춘다.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/bidwin?connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8}
   flyway:
     baseline-on-migrate: true
   jpa:
@@ -64,7 +63,7 @@ app:
     cloudfront:
       domain: ${AWS_CLOUDFRONT_DOMAIN:http://localhost:8080}
     s3:
-      bucket: ${AWS_S3_BUCKET}
+      bucket: ${AWS_S3_BUCKET:bidwin-local}
       region: ${AWS_REGION:ap-northeast-2}
       presign-duration: ${AWS_S3_PRESIGN_DURATION:5m}
       pending-auction-image:
