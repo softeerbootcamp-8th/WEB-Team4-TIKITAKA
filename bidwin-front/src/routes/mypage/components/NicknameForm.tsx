@@ -3,12 +3,12 @@ import type { FormEvent } from 'react'
 import Button from '../../../components/ui/Button'
 import TextInput from '../../../components/ui/TextInput'
 import { NICKNAME_MAX_LENGTH, validateNickname } from '../../../lib/auth/validation'
+import { requestNicknameUpdate } from '../../../lib/api/mypage'
 import { useToast } from '../../../hooks/useToast'
 import { MY_INFO_TEXT } from '../constants'
 
 /*
- * 닉네임 변경. 지금은 화면에서만 바꾸고, 백엔드 연동 시 onSubmit 자리에 API 호출을 넣는다.
- * 값이 그대로면 굳이 요청하지 않도록 여기서 먼저 걸러 낸다.
+ * 값이 그대로면 요청하지 않고, 성공 응답의 닉네임으로 상위 프로필을 갱신한다.
  */
 function NicknameForm({
   nickname,
@@ -20,11 +20,13 @@ function NicknameForm({
   const { showToast } = useToast()
   const [value, setValue] = useState(nickname)
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const trimmed = value.trim()
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (isSubmitting) return
 
     const validationError = validateNickname(trimmed)
     if (validationError) {
@@ -37,8 +39,16 @@ function NicknameForm({
     }
 
     setError('')
-    /* TODO: 백엔드 닉네임 변경 API 연동 */
-    onChangeNickname(trimmed)
+    setIsSubmitting(true)
+    const result = await requestNicknameUpdate(trimmed)
+    setIsSubmitting(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+
+    setValue(result.data.nickname)
+    onChangeNickname(result.data.nickname)
     showToast(MY_INFO_TEXT.nicknameDone)
   }
 
@@ -55,8 +65,12 @@ function NicknameForm({
         error={error}
       />
       {!error && <p className="text-xs text-muted">{MY_INFO_TEXT.nicknameHint}</p>}
-      <Button type="submit" variant="secondary" disabled={trimmed.length === 0}>
-        {MY_INFO_TEXT.nicknameSubmit}
+      <Button
+        type="submit"
+        variant="secondary"
+        disabled={trimmed.length === 0 || isSubmitting}
+      >
+        {isSubmitting ? '변경 중…' : MY_INFO_TEXT.nicknameSubmit}
       </Button>
     </form>
   )

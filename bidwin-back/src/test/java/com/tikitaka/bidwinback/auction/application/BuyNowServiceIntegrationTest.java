@@ -11,6 +11,7 @@ import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -25,6 +26,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -54,6 +57,12 @@ class BuyNowServiceIntegrationTest {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private AuctionRepository auctionRepository;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private final List<Long> auctionIds = new ArrayList<>();
     private final List<Long> memberIds = new ArrayList<>();
@@ -278,6 +287,40 @@ class BuyNowServiceIntegrationTest {
     }
 
     @Test
+    void 상향_경매는_마감_5분_전_구간에서_조건부_완료되지_않는다() {
+        // given
+        Fixture fixture = createFixture(AuctionStatus.OPEN, 1);
+        Long buyerId = fixture.buyerIds().getFirst();
+        moveAuctionEndToThreeMinutesLater(fixture.auctionId());
+        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
+
+        // when
+        int completed = completeForBuyNow(fixture.auctionId(), buyerId, purchasedAt);
+
+        // then
+        assertThat(completed).isZero();
+        assertThat(findAuctionStatus(fixture.auctionId()))
+                .isEqualTo(AuctionStatus.OPEN.name());
+    }
+
+    @Test
+    void 하향_경매는_마감_5분_전_구간에서도_조건부_완료된다() {
+        // given
+        Fixture fixture = createDownAuctionFixture();
+        Long buyerId = fixture.buyerIds().getFirst();
+        moveAuctionEndToThreeMinutesLater(fixture.auctionId());
+        LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
+
+        // when
+        int completed = completeForBuyNow(fixture.auctionId(), buyerId, purchasedAt);
+
+        // then
+        assertThat(completed).isOne();
+        assertThat(findAuctionStatus(fixture.auctionId()))
+                .isEqualTo(AuctionStatus.COMPLETED.name());
+    }
+
+    @Test
     void 판매자는_자신의_경매를_즉시구매할_수_없다() {
         Fixture fixture = createFixture(AuctionStatus.OPEN, 0);
 
@@ -401,6 +444,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             assertThat(findAuctionStatus(entityManager, auctionId))
                     .isEqualTo(AuctionStatus.COMPLETED.name());
+            assertThat(findAuctionRevision(entityManager, auctionId)).isEqualTo(1L);
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
@@ -467,6 +511,7 @@ class BuyNowServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             assertThat(findAuctionStatus(entityManager, auctionId))
                     .isEqualTo(expectedStatus.name());
+            assertThat(findAuctionRevision(entityManager, auctionId)).isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isZero();
@@ -636,6 +681,34 @@ class BuyNowServiceIntegrationTest {
         return runId + "-" + suffix;
     }
 
+    private void moveAuctionEndToThreeMinutesLater(Long auctionId) {
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET ended_at = CURRENT_TIMESTAMP(6) + INTERVAL 3 MINUTE
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .executeUpdate();
+            return null;
+        });
+    }
+
+    private int completeForBuyNow(
+            Long auctionId,
+            Long buyerId,
+            LocalDateTime purchasedAt
+    ) {
+        Integer completed = new TransactionTemplate(transactionManager).execute(
+                status -> auctionRepository.completeForBuyNow(
+                        auctionId,
+                        buyerId,
+                        purchasedAt
+                )
+        );
+        return completed == null ? 0 : completed;
+    }
+
     private String findAuctionStatus(EntityManager entityManager, Long auctionId) {
         return (String) entityManager.createNativeQuery("""
                         SELECT status
@@ -644,6 +717,23 @@ class BuyNowServiceIntegrationTest {
                         """)
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
+    }
+
+    private long findAuctionRevision(EntityManager entityManager, Long auctionId) {
+        Number revision = (Number) entityManager.createNativeQuery("""
+                        SELECT revision
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return revision.longValue();
+    }
+                                                                   
+    private String findAuctionStatus(Long auctionId) {
+        return executeInTransaction(
+                entityManager -> findAuctionStatus(entityManager, auctionId)
+        );
     }
 
     private long countRows(EntityManager entityManager, String sql, Long id) {

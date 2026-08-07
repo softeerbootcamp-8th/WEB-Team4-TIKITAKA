@@ -21,6 +21,17 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
             @Param("tokenHash") String tokenHash
     );
 
+    @Query("""
+            select count(token)
+            from PasswordResetToken token
+            where token.member.id = :memberId
+              and token.createdAt >= :issuedSince
+            """)
+    long countIssuedSince(
+            @Param("memberId") Long memberId,
+            @Param("issuedSince") LocalDateTime issuedSince
+    );
+
     // 재발급 시 이전에 발급된 미사용·미만료 토큰을 더 이상 사용할 수 없도록 폐기한다.
     @Modifying
     @Query("""

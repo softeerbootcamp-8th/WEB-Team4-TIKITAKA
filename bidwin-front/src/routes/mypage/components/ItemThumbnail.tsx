@@ -1,8 +1,7 @@
 import { ImageIcon } from 'lucide-react'
 
 /*
- * 마이페이지의 물품 썸네일. 이미지 API 연동 전이라 비어 있는 경우가 흔해서,
- * 자리표시자를 컴포넌트 안에 같이 두고 크기만 밖에서 정한다.
+ * 마이페이지 물품 썸네일. 이미지가 없는 응답에는 자리표시자를 그린다.
  */
 const PLACEHOLDER_ICON_SIZE = 20
 
@@ -10,7 +9,7 @@ function ItemThumbnail({
   thumbnailUrl,
   className,
 }: {
-  thumbnailUrl?: string
+  thumbnailUrl?: string | null
   className: string
 }) {
   if (thumbnailUrl) {

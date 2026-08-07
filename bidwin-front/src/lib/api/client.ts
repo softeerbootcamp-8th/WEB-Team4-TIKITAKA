@@ -10,6 +10,8 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 const POST_METHOD = 'POST'
+const PATCH_METHOD = 'PATCH'
+const DELETE_METHOD = 'DELETE'
 const CONTENT_TYPE_HEADER = 'Content-Type'
 const JSON_CONTENT_TYPE = 'application/json'
 /* 세션 쿠키 기반 인증이므로 쿠키를 항상 함께 보낸다. */
@@ -56,7 +58,7 @@ async function requestEnvelope<TData>(
   let response: Response
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(apiUrl(path), {
       credentials: CREDENTIALS_MODE,
       ...init,
     })
@@ -86,9 +88,25 @@ function postJson<TData, TBody>(path: string, body: TBody): Promise<ApiResult<TD
   })
 }
 
-function getJson<TData>(path: string): Promise<ApiResult<TData>> {
-  return requestEnvelope<TData>(path, { method: 'GET' })
+function patchJson<TData, TBody>(path: string, body: TBody): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, {
+    method: PATCH_METHOD,
+    headers: { [CONTENT_TYPE_HEADER]: JSON_CONTENT_TYPE },
+    body: JSON.stringify(body),
+  })
 }
 
-export { getJson, postJson }
+function deleteJson<TData>(path: string): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, { method: DELETE_METHOD })
+}
+
+function getJson<TData>(path: string, signal?: AbortSignal): Promise<ApiResult<TData>> {
+  return requestEnvelope<TData>(path, { method: 'GET', signal })
+}
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`
+}
+
+export { apiUrl, deleteJson, getJson, patchJson, postJson }
 export type { ApiFailure, ApiResult, ApiSuccess }

@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
@@ -20,6 +22,7 @@ import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +39,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DE
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +51,7 @@ public class BuyNowTransactionService {
     private final AuctionTradeRepository auctionTradeRepository;
     private final BidRepository bidRepository;
     private final InstantPurchaseRequestRepository requestRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public BuyNowResult buy(BuyNowCommand command) {
@@ -98,6 +103,8 @@ public class BuyNowTransactionService {
                 command.purchasedAt()
         );
         if (completed != 1) {
+            // 검증 후 조건부 UPDATE 전에 마감 경계를 넘었는지 최신 DB 시각으로 다시 확인한다.
+            validateAuction(auction, auctionRepository.currentDatabaseTime());
             throw new BidException(CONCURRENT_TRADE_CONFLICT);
         }
 
@@ -107,7 +114,7 @@ public class BuyNowTransactionService {
                 .reservedAmount(command.finalPrice())
                 .build());
 
-        bidRepository.save(Bid.builder()
+        Bid purchaseBid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(buyer)
                 .price(command.finalPrice())
@@ -125,6 +132,13 @@ public class BuyNowTransactionService {
                         .build()
         );
         request.complete(trade, command.finalPrice());
+        eventPublisher.publishEvent(new AuctionStateChanged(command.auctionId()));
+        if (auction instanceof UpAuction) {
+            eventPublisher.publishEvent(new AuctionBidCreated(
+                    command.auctionId(),
+                    purchaseBid.getId()
+            ));
+        }
 
         return BuyNowResult.from(trade);
     }
@@ -178,6 +192,11 @@ public class BuyNowTransactionService {
         // 요구사항: DB 현재 시각이 종료 시각과 같거나 지난 경매는 구매할 수 없다.
         if (!auction.getEndedAt().isAfter(databaseTime)) {
             throw new AuctionException(AUCTION_ALREADY_ENDED);
+        }
+        // 상향 경매는 마감 5분 전 밀봉입찰 구간부터 즉시구매할 수 없다.
+        if (auction instanceof UpAuction
+                && !databaseTime.isBefore(auction.getEndedAt().minusMinutes(5))) {
+            throw new AuctionException(UP_BUY_NOW_CLOSED_NEAR_DEADLINE);
         }
     }
 

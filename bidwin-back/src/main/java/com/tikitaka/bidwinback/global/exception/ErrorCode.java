@@ -25,6 +25,11 @@ public enum ErrorCode {
             "COMMON_500_1",
             "서버 내부 오류가 발생했습니다."
     ),
+    SSE_CONNECTION_LIMIT_EXCEEDED(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "COMMON_503_1",
+            "실시간 연결이 많아 잠시 후 다시 시도해주세요."
+    ),
 
     // Member / authentication
     INVALID_CREDENTIALS(
@@ -71,6 +76,16 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST,
             "MEMBER_400_5",
             "유효하지 않은 이메일 인증 토큰입니다."
+    ),
+    CURRENT_PASSWORD_MISMATCH(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_6",
+            "현재 비밀번호가 일치하지 않습니다."
+    ),
+    NEW_PASSWORD_SAME_AS_CURRENT(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_7",
+            "새 비밀번호는 현재 비밀번호와 달라야 합니다."
     ),
     EXPIRED_EMAIL_VERIFICATION_TOKEN(
             HttpStatus.GONE,
@@ -154,6 +169,11 @@ public enum ErrorCode {
             "AUCTION_400_7",
             "직거래를 선택한 경우 거래 희망 위치를 입력해야 합니다."
     ),
+    INVALID_PRICE_UNIT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_8",
+            "가격은 1,000원 단위로 입력해야 합니다."
+    ),
     AUCTION_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "AUCTION_403_1",
@@ -179,12 +199,27 @@ public enum ErrorCode {
             "AUCTION_409_4",
             "등록된 경매는 수정하거나 삭제할 수 없습니다."
     ),
+    UP_BUY_NOW_CLOSED_NEAR_DEADLINE(
+            HttpStatus.CONFLICT,
+            "AUCTION_409_5",
+            "상향 경매는 마감 5분 전까지만 즉시구매할 수 있습니다."
+    ),
+    INVALID_SORT(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_9",
+            "지원하지 않는 정렬 기준입니다."
+    ),
 
     // Upload
     UNSUPPORTED_IMAGE_TYPE(
             HttpStatus.BAD_REQUEST,
             "UPLOAD_400_1",
             "지원하지 않는 이미지 형식입니다."
+    ),
+    INVALID_IMAGE_REFERENCE(
+            HttpStatus.BAD_REQUEST,
+            "UPLOAD_400_2",
+            "존재하지 않거나 본인이 업로드하지 않은 이미지입니다."
     ),
 
     // Bid
@@ -232,6 +267,38 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "BID_409_3",
             "멱등 키를 다른 구매 요청에 재사용할 수 없습니다."
+    ),
+    CONCURRENT_BID_CONFLICT(
+            HttpStatus.CONFLICT,
+            "BID_409_4",
+            "동시 입찰 처리에 실패했습니다. 최신 가격을 확인한 뒤 다시 시도해주세요."
+    ),
+    SEALED_BID_ALREADY_SUBMITTED(
+            HttpStatus.CONFLICT,
+            "BID_409_5",
+            "해당 경매에는 밀봉입찰을 한 번만 제출할 수 있습니다."
+    ),
+    BID_PHASE_CHANGED(
+            HttpStatus.CONFLICT,
+            "BID_409_6",
+            "입찰 단계가 변경되었습니다. 최신 경매 상태를 확인한 뒤 다시 입찰해주세요."
+    ),
+
+    // Deposit
+    DEPOSIT_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "DEPOSIT_404_1",
+            "해당 경매의 보증금 내역을 찾을 수 없습니다."
+    ),
+    DEPOSIT_ALREADY_SETTLED(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_1",
+            "이미 반환되었거나 몰수된 보증금입니다."
+    ),
+    DEPOSIT_AMOUNT_MISMATCH(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_2",
+            "보증금 예약 금액이 기대한 금액과 일치하지 않습니다."
     ),
 
     // Trade / settlement

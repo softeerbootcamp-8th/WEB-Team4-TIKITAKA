@@ -1,6 +1,9 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
+import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
+import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
+import com.tikitaka.bidwinback.auction.application.AuctionListService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -9,6 +12,8 @@ import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSellerResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
+import com.tikitaka.bidwinback.global.auth.AuthConstant;
+import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,14 +21,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,12 +43,18 @@ class AuctionControllerTest {
     @Mock
     private AuctionDetailService auctionDetailService;
 
+    @Mock
+    private AuctionCreateService auctionCreateService;
+
+    @Mock
+    private AuctionListService auctionListService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuctionController(auctionDetailService))
+                .standaloneSetup(new AuctionController(auctionDetailService, auctionCreateService, auctionListService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -52,6 +68,7 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.auctionId").value(1L))
                 .andExpect(jsonPath("$.data.auctionType").value("UP"))
+                .andExpect(jsonPath("$.data.revision").value(7L))
                 .andExpect(jsonPath("$.data.currentPrice").value(240_000L))
                 .andExpect(jsonPath("$.data.buyNowPrice").value(300_000L))
                 .andExpect(jsonPath("$.data.bidCount").value(3L))
@@ -60,6 +77,7 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.data.seller.name").value("판매자"))
                 .andExpect(jsonPath("$.data.seller.verified").value(true))
                 .andExpect(jsonPath("$.data.seller.dealCount").value(12L))
+                .andExpect(jsonPath("$.data.contact").value("01012345678"))
                 .andExpect(jsonPath("$.data.startedAt").doesNotExist());
 
         verify(auctionDetailService).getDetail(1L);
@@ -73,10 +91,12 @@ class AuctionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.auctionType").value("DOWN"))
+                .andExpect(jsonPath("$.data.revision").value(3L))
                 .andExpect(jsonPath("$.data.minimumPrice").value(150_000L))
                 .andExpect(jsonPath("$.data.dropPrice").value(10_000L))
                 .andExpect(jsonPath("$.data.priceDropIntervalMs").value(600_000L))
                 .andExpect(jsonPath("$.data.serverTime").value(1_754_020_500_000L))
+                .andExpect(jsonPath("$.data.contact").value("01012345678"))
                 .andExpect(jsonPath("$.data.currentPrice").doesNotExist());
 
         verify(auctionDetailService).getDetail(2L);
@@ -93,6 +113,62 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.error.code").value("AUCTION_404_1"));
     }
 
+    @Test
+    void 목록_조회_중_예상치_못한_실패가_나면_내부_정보를_숨긴_500을_응답한다() throws Exception {
+        // given
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenThrow(new IllegalStateException("jdbc:mysql://internal-db/bidwin"));
+
+        // when
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions"));
+
+        // then
+        result
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_500_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("서버 내부 오류가 발생했습니다."));
+    }
+
+    @Test
+    void 등록_요청의_필수값이_비어_있으면_400이고_경매를_등록하지_않는다() throws Exception {
+        // given
+        String request = """
+                {
+                  "draftId": "8097514e-ae2a-4f1f-81da-d8fb25270188",
+                  "title": " ",
+                  "description": "미개봉 상품",
+                  "category": "HOUSEHOLD",
+                  "contact": "01012345678",
+                  "auctionType": "UP",
+                  "tradeType": "DELIVERY",
+                  "durationMinutes": 60,
+                  "startPrice": 200000,
+                  "buyNowPrice": 300000,
+                  "images": ["auctions/1/product.jpg"]
+                }
+                """;
+
+        // when
+        ResultActions result = mockMvc.perform(post("/api/v1/auctions")
+                        .requestAttr(
+                                AuthConstant.REQUEST_ATTRIBUTE_KEY,
+                                AuthMemberFixture.of(1L)
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request));
+
+        // then
+        result
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message").value("제목은 필수입니다."));
+
+        verifyNoInteractions(auctionCreateService);
+    }
+
     private UpAuctionDetailResponse upAuctionResponse() {
         return new UpAuctionDetailResponse(
                 1L,
@@ -101,9 +177,12 @@ class AuctionControllerTest {
                 "미개봉 상품",
                 AuctionCategory.HOUSEHOLD,
                 AuctionStatus.BID_ONGOING,
+                7L,
                 List.of("https://cdn.example.com/product.jpg"),
                 200_000L,
                 1_754_022_000_000L,
+                1_754_020_500_000L,
+                1_754_021_700_000L,
                 TradeType.DELIVERY,
                 "01012345678",
                 new AuctionSellerResponse(
@@ -127,6 +206,7 @@ class AuctionControllerTest {
                 "이사 정리",
                 AuctionCategory.HOUSEHOLD,
                 AuctionStatus.BID_ONGOING,
+                3L,
                 List.of(),
                 200_000L,
                 1_754_018_400_000L,

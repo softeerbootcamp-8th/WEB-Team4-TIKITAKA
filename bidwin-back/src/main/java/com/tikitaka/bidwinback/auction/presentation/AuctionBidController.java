@@ -6,7 +6,6 @@ import com.tikitaka.bidwinback.auction.application.BidService;
 import com.tikitaka.bidwinback.auction.presentation.dto.request.BidRequest;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidResponse;
-import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.Login;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
@@ -17,7 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,14 +30,15 @@ public class AuctionBidController {
 
     @PostMapping("/up/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidResponse>> bid(
-            @RequestAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY) AuthMember authMember,
+            @Login AuthMember authMember,
             @PathVariable Long auctionId,
             @Valid @RequestBody BidRequest request
     ) {
         BidResult result = bidService.place(
                 authMember.memberId(),
                 auctionId,
-                request.price()
+                request.price(),
+                request.bidType()
         );
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(BidResponse.from(result)));
@@ -47,13 +46,9 @@ public class AuctionBidController {
 
     @GetMapping("/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidHistoryResponse>> getBidHistory(
-            @PathVariable long auctionId,
-            @Login AuthMember authMember
+            @PathVariable long auctionId
     ) {
-        BidHistoryResponse response = bidHistoryService.getBidHistory(
-                auctionId,
-                authMember.memberId()
-        );
+        BidHistoryResponse response = bidHistoryService.getBidHistory(auctionId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

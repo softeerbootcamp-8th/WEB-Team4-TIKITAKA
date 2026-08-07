@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.domain.entity;
 
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
+import com.tikitaka.bidwinback.auction.domain.exception.TradeException;
 import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import jakarta.persistence.Column;
@@ -21,6 +22,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_TRADE_STATUS_TRANSITION;
 import static lombok.AccessLevel.PROTECTED;
 
 @Getter
@@ -74,5 +76,19 @@ public class AuctionTrade extends BaseTimeEntity {
         this.status = status == null ? TradeStatus.WAITING_CONFIRM : status;
         this.finalPrice = finalPrice;
         this.purchasedAt = purchasedAt;
+    }
+
+    public void confirmBuyer() {
+        if (status != TradeStatus.WAITING_CONFIRM) {
+            throw new TradeException(INVALID_TRADE_STATUS_TRANSITION);
+        }
+        this.status = TradeStatus.CONFIRMED;
+    }
+
+    public void confirmSeller() {
+        if (status != TradeStatus.CONFIRMED) {
+            throw new TradeException(INVALID_TRADE_STATUS_TRANSITION);
+        }
+        this.status = TradeStatus.COMPLETED;
     }
 }

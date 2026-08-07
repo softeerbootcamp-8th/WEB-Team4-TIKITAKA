@@ -38,6 +38,11 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     );
     private static final List<PathPattern> PUBLIC_GET_PATHS = List.of(
             PathPatternParser.defaultInstance.parse("/api/v1/health"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auctions"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auctions/*"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auctions/*/bids"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auctions/events"),
+            PathPatternParser.defaultInstance.parse("/api/v1/auctions/*/events"),
             PathPatternParser.defaultInstance.parse("/swagger-ui.html"),
             PathPatternParser.defaultInstance.parse("/swagger-ui/**"),
             PathPatternParser.defaultInstance.parse("/v3/api-docs"),

@@ -3,6 +3,14 @@ import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import Button from '../../../components/ui/Button'
 import { useToast } from '../../../hooks/useToast'
+import {
+  requestProfileImageReset,
+  requestProfileImageUpdate,
+} from '../../../lib/api/mypage'
+import {
+  requestProfileImagePresign,
+  uploadProfileImage,
+} from '../../../lib/api/profileImage'
 import { MY_INFO_TEXT, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_MAX_BYTES } from '../constants'
 import ProfileAvatar from './ProfileAvatar'
 
@@ -10,29 +18,24 @@ const AVATAR_CLASS = 'h-16 w-16 text-xl'
 const CAMERA_ICON_SIZE = 16
 const IMAGE_MIME_PREFIX = 'image/'
 
-/*
- * 프로필 이미지 변경. 고른 파일은 위쪽에서 미리보기 URL로 바꿔 프로필 카드까지 함께 갱신한다.
- * 파일 형식·용량은 업로드 요청을 보내기 전에 여기서 먼저 거른다.
- */
 function ProfileImageField({
   nickname,
   imageUrl,
   onChangeImage,
 }: {
   nickname: string
-  imageUrl?: string
-  /** null이면 기본 이미지로 되돌린다는 뜻 */
-  onChangeImage: (file: File | null) => void
+  imageUrl?: string | null
+  onChangeImage: (profileImageUrl: string | null) => void
 }) {
   const { showToast } = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
-    /* 같은 파일을 다시 골라도 change가 일어나도록 입력값을 비워 둔다. */
     event.target.value = ''
-    if (!file) return
+    if (!file || isSubmitting) return
 
     if (!file.type.startsWith(IMAGE_MIME_PREFIX)) {
       setError(MY_INFO_TEXT.imageNotSupported)
@@ -44,13 +47,43 @@ function ProfileImageField({
     }
 
     setError('')
-    onChangeImage(file)
+    setIsSubmitting(true)
+    const presignResult = await requestProfileImagePresign(file)
+    if (!presignResult.ok) {
+      setIsSubmitting(false)
+      setError(presignResult.message)
+      return
+    }
+
+    const uploaded = await uploadProfileImage(presignResult.data, file)
+    if (!uploaded) {
+      setIsSubmitting(false)
+      setError(MY_INFO_TEXT.imageUploadFailed)
+      return
+    }
+
+    const updateResult = await requestProfileImageUpdate(presignResult.data.objectKey)
+    setIsSubmitting(false)
+    if (!updateResult.ok) {
+      setError(updateResult.message)
+      return
+    }
+
+    onChangeImage(updateResult.data.profileImageUrl)
     showToast(MY_INFO_TEXT.imageSelected)
   }
 
-  function handleReset() {
+  async function handleReset() {
+    if (isSubmitting) return
     setError('')
-    onChangeImage(null)
+    setIsSubmitting(true)
+    const result = await requestProfileImageReset()
+    setIsSubmitting(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    onChangeImage(result.data.profileImageUrl)
     showToast(MY_INFO_TEXT.imageResetDone)
   }
 
@@ -60,12 +93,16 @@ function ProfileImageField({
 
       <div className="flex min-w-0 flex-1 flex-col gap-xs">
         <div className="flex flex-wrap gap-xs">
-          <Button variant="secondary" onClick={() => inputRef.current?.click()}>
+          <Button
+            variant="secondary"
+            onClick={() => inputRef.current?.click()}
+            disabled={isSubmitting}
+          >
             <Camera size={CAMERA_ICON_SIZE} />
-            {MY_INFO_TEXT.imageChange}
+            {isSubmitting ? '처리 중…' : MY_INFO_TEXT.imageChange}
           </Button>
           {imageUrl && (
-            <Button variant="tertiary" onClick={handleReset}>
+            <Button variant="tertiary" onClick={handleReset} disabled={isSubmitting}>
               {MY_INFO_TEXT.imageReset}
             </Button>
           )}

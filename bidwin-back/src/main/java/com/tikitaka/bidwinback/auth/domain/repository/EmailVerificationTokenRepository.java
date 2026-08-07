@@ -21,6 +21,17 @@ public interface EmailVerificationTokenRepository extends JpaRepository<EmailVer
             @Param("tokenHash") String tokenHash
     );
 
+    @Query("""
+            select count(token)
+            from EmailVerificationToken token
+            where token.member.id = :memberId
+              and token.createdAt >= :issuedSince
+            """)
+    long countIssuedSince(
+            @Param("memberId") Long memberId,
+            @Param("issuedSince") LocalDateTime issuedSince
+    );
+
     // 재전송 시 이전에 발급된 미사용·미만료 토큰을 더 이상 사용할 수 없도록 폐기한다.
     @Modifying
     @Query("""

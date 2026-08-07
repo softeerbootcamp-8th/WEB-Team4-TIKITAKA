@@ -2,6 +2,8 @@ import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Badge from '../../../components/ui/Badge'
 import { formatWon } from '../../../lib/format'
+import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
+import type { DownPricing } from '../../../lib/auctionPricing'
 import { ITEM_CARD_TEXT, ITEM_PREVIEW_LIMIT } from '../constants'
 import { ongoingFirst } from '../view'
 import type { ItemCardModel } from '../view'
@@ -40,10 +42,7 @@ function MyItemSection({
   return (
     <section className={SECTION_SURFACE_CLASS}>
       <div className="flex items-center justify-between gap-base">
-        <h2 className="text-base font-bold text-ink">
-          {title}
-          {items.length > 0 && <span className="ml-xs text-muted">{items.length}</span>}
-        </h2>
+        <h2 className="text-base font-bold text-ink">{title}</h2>
 
         <Link
           to={viewAllPath}
@@ -106,16 +105,23 @@ function MyItemCard({ item }: { item: ItemCardModel }) {
             <dt className="shrink-0 text-[11px] text-muted">
               {item.isSettled ? ITEM_CARD_TEXT.finalPriceLabel : ITEM_CARD_TEXT.currentPriceLabel}
             </dt>
-            <dd
-              className={`truncate text-base font-bold ${isDown ? 'text-down' : 'text-ink'}`}
-            >
-              {formatWon(item.price)}
+            <dd className={`truncate text-base font-bold ${isDown ? 'text-down' : 'text-ink'}`}>
+              {item.downPricing ? (
+                <DownCurrentPrice pricing={item.downPricing} />
+              ) : (
+                formatWon(item.price)
+              )}
             </dd>
           </div>
         </dl>
       </div>
     </Link>
   )
+}
+
+function DownCurrentPrice({ pricing }: { pricing: DownPricing }) {
+  const { currentPrice } = useDownAuctionClock(pricing)
+  return formatWon(currentPrice)
 }
 
 export default MyItemSection

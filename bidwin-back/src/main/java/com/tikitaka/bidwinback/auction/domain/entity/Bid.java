@@ -11,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -20,10 +21,15 @@ import lombok.NoArgsConstructor;
 
 import static lombok.AccessLevel.PROTECTED;
 
-// TODO 멤버 먼저 보증금을 빼고, Auction 처리
 @Getter
 @Entity
-@Table(name = "Bid")
+@Table(
+        name = "Bid",
+        indexes = @Index(
+                name = "idx_bid_auction_id_price",
+                columnList = "auction_id, price"
+        )
+)
 @NoArgsConstructor(access = PROTECTED)
 public class Bid extends BaseTimeEntity {
 

@@ -13,7 +13,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.dto.BidSummary;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -42,12 +42,22 @@ import static org.mockito.Mockito.when;
 class AuctionDetailServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    private static final LocalDateTime SERVER_TIME = LocalDateTime.of(
+            2026,
+            8,
+            1,
+            12,
+            35
+    );
 
     @Mock
     private AuctionRepository auctionRepository;
 
     @Mock
     private BidRepository bidRepository;
+
+    @Mock
+    private SealedBidRepository sealedBidRepository;
 
     @Mock
     private ImageRepository imageRepository;
@@ -65,6 +75,7 @@ class AuctionDetailServiceTest {
         auctionDetailService = new AuctionDetailService(
                 auctionRepository,
                 bidRepository,
+                sealedBidRepository,
                 imageRepository,
                 auctionTradeRepository,
                 imageUrlResolver
@@ -84,8 +95,9 @@ class AuctionDetailServiceTest {
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of(image));
         when(imageUrlResolver.resolve("auction-images/product.jpg"))
                 .thenReturn("https://cdn.example.com/auction-images/product.jpg");
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(240_000L, 3L));
+        when(auction.hasCurrentPrice()).thenReturn(true);
+        when(auction.getCurrentPrice()).thenReturn(240_000L);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(3L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -100,6 +112,9 @@ class AuctionDetailServiceTest {
         assertThat(response.buyNowPrice()).isEqualTo(300_000L);
         assertThat(response.bidCount()).isEqualTo(3L);
         assertThat(response.deadline()).isEqualTo(toEpochMilli(deadline));
+        assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
+        assertThat(response.sealedBidStartsAt())
+                .isEqualTo(toEpochMilli(deadline.minusMinutes(5)));
         assertThat(response.seller().verified()).isTrue();
         assertThat(response.seller().dealCount()).isEqualTo(12L);
         verify(auctionTradeRepository, never()).findFinalPriceByAuctionId(1L);
@@ -115,8 +130,8 @@ class AuctionDetailServiceTest {
         );
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(null, 0L));
+        when(bidRepository.findHighestPriceByAuctionId(1L)).thenReturn(null);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -127,7 +142,7 @@ class AuctionDetailServiceTest {
     }
 
     @Test
-    void 완료된_상승_경매만_최종_거래가를_조회한다() {
+    void 완료된_상승_경매는_최종_거래가와_밀봉입찰을_포함한_건수를_조회한다() {
         UpAuction auction = mock(UpAuction.class);
         stubCommonAuction(
                 auction,
@@ -135,18 +150,19 @@ class AuctionDetailServiceTest {
                 LocalDateTime.of(2026, 8, 1, 13, 0)
         );
         when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        when(auction.isSealedBidRevealed()).thenReturn(true);
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
         when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
                 .thenReturn(Optional.of(300_000L));
-        when(bidRepository.summarizeByAuctionId(1L))
-                .thenReturn(new BidSummary(280_000L, 5L));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(5L);
+        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(2L);
 
         UpAuctionDetailResponse response = (UpAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
 
         assertThat(response.currentPrice()).isEqualTo(300_000L);
-        assertThat(response.bidCount()).isEqualTo(5L);
+        assertThat(response.bidCount()).isEqualTo(7L);
         verify(auctionTradeRepository).findFinalPriceByAuctionId(1L);
     }
 
@@ -154,19 +170,17 @@ class AuctionDetailServiceTest {
     void 하락_경매의_DB_기준_시각과_가격_하락_정보를_조회한다() {
         DownAuction auction = mock(DownAuction.class);
         LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
-        LocalDateTime serverTime = LocalDateTime.of(2026, 8, 1, 12, 35);
         stubCommonAuction(
                 auction,
                 mockSeller(),
                 LocalDateTime.of(2026, 8, 1, 13, 0)
         );
-        when(auction.getCreatedAt()).thenReturn(startedAt);
+        when(auction.getStartedAt()).thenReturn(startedAt);
         when(auction.getMinimumPrice()).thenReturn(150_000L);
         when(auction.getDropPrice()).thenReturn(10_000L);
         when(auction.getPriceDropInterval()).thenReturn(10L);
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(auctionRepository.currentDatabaseTime()).thenReturn(serverTime);
 
         DownAuctionDetailResponse response = (DownAuctionDetailResponse)
                 auctionDetailService.getDetail(1L);
@@ -174,7 +188,7 @@ class AuctionDetailServiceTest {
         assertThat(response.auctionType().name()).isEqualTo("DOWN");
         assertThat(response.priceDropIntervalMs()).isEqualTo(600_000L);
         assertThat(response.startedAt()).isEqualTo(toEpochMilli(startedAt));
-        assertThat(response.serverTime()).isEqualTo(toEpochMilli(serverTime));
+        assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
         assertThat(response.finalPrice()).isNull();
         verify(auctionTradeRepository, never()).findFinalPriceByAuctionId(1L);
     }
@@ -183,20 +197,18 @@ class AuctionDetailServiceTest {
     void 완료된_하락_경매는_최종_거래가를_응답한다() {
         DownAuction auction = mock(DownAuction.class);
         LocalDateTime startedAt = LocalDateTime.of(2026, 8, 1, 12, 0);
-        LocalDateTime serverTime = LocalDateTime.of(2026, 8, 1, 12, 35);
         stubCommonAuction(
                 auction,
                 mockSeller(),
                 LocalDateTime.of(2026, 8, 1, 13, 0)
         );
         when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
-        when(auction.getCreatedAt()).thenReturn(startedAt);
+        when(auction.getStartedAt()).thenReturn(startedAt);
         when(auction.getMinimumPrice()).thenReturn(150_000L);
         when(auction.getDropPrice()).thenReturn(10_000L);
         when(auction.getPriceDropInterval()).thenReturn(10L);
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
         when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
-        when(auctionRepository.currentDatabaseTime()).thenReturn(serverTime);
         when(auctionTradeRepository.findFinalPriceByAuctionId(1L))
                 .thenReturn(Optional.of(170_000L));
 
@@ -247,8 +259,8 @@ class AuctionDetailServiceTest {
         when(auction.getStartPrice()).thenReturn(200_000L);
         when(auction.getEndedAt()).thenReturn(deadline);
         when(auction.getTradeType()).thenReturn(TradeType.DELIVERY);
-        when(auction.getContact()).thenReturn("01012345678");
         when(auction.getSeller()).thenReturn(seller);
+        when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {

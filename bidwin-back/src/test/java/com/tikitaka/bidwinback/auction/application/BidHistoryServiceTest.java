@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -37,15 +38,22 @@ class BidHistoryServiceTest {
     @Mock
     private BidRepository bidRepository;
 
+    @Mock
+    private SealedBidRepository sealedBidRepository;
+
     private BidHistoryService bidHistoryService;
 
     @BeforeEach
     void setUp() {
-        bidHistoryService = new BidHistoryService(auctionRepository, bidRepository);
+        bidHistoryService = new BidHistoryService(
+                auctionRepository,
+                bidRepository,
+                sealedBidRepository
+        );
     }
 
     @Test
-    void 최신_입찰순으로_본인_여부와_마스킹된_닉네임을_응답한다() {
+    void 최신_입찰순으로_마스킹된_닉네임을_응답한다() {
         UpAuction auction = mock(UpAuction.class);
         LocalDateTime latestBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
         LocalDateTime previousBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
@@ -58,21 +66,19 @@ class BidHistoryServiceTest {
                 new BidHistoryRow(10L, 10L, "김희", 180_000L, previousBidAt)
         ));
 
-        BidHistoryResponse response = bidHistoryService.getBidHistory(1L, 7L);
+        BidHistoryResponse response = bidHistoryService.getBidHistory(1L);
 
         assertThat(response.bidCount()).isEqualTo(15L);
         assertThat(response.bidLog()).satisfiesExactly(
                 bid -> {
-                    assertThat(bid.id()).isEqualTo(13L);
-                    assertThat(bid.bidder()).isEqualTo("나");
+                    assertThat(bid.entryId()).isEqualTo("BID:13");
+                    assertThat(bid.bidder()).isEqualTo("내**임");
                     assertThat(bid.amount()).isEqualTo(210_000L);
                     assertThat(bid.biddedAt()).isEqualTo(toEpochMilli(latestBidAt));
-                    assertThat(bid.isMe()).isTrue();
                 },
                 bid -> {
-                    assertThat(bid.id()).isEqualTo(12L);
+                    assertThat(bid.entryId()).isEqualTo("BID:12");
                     assertThat(bid.bidder()).isEqualTo("민**켓");
-                    assertThat(bid.isMe()).isFalse();
                 },
                 bid -> assertThat(bid.bidder()).isEqualTo("*"),
                 bid -> assertThat(bid.bidder()).isEqualTo("김*")
@@ -87,10 +93,48 @@ class BidHistoryServiceTest {
         when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of());
 
-        BidHistoryResponse response = bidHistoryService.getBidHistory(1L, 7L);
+        BidHistoryResponse response = bidHistoryService.getBidHistory(1L);
 
         assertThat(response.bidCount()).isZero();
         assertThat(response.bidLog()).isEmpty();
+    }
+
+    @Test
+    void 낙찰자_결정_상태부터_일반입찰과_밀봉입찰을_최신순으로_공개한다() {
+        UpAuction auction = mock(UpAuction.class);
+        LocalDateTime openBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
+        LocalDateTime latestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
+        LocalDateTime oldestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 0);
+        when(auction.isSealedBidRevealed()).thenReturn(true);
+        when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(1L);
+        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(2L);
+        when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(13L, 8L, "일반입찰자", 210_000L, openBidAt)
+        ));
+        when(sealedBidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(14L, 7L, "내닉네임", 250_000L, latestSealedBidAt),
+                new BidHistoryRow(12L, 9L, "밀봉입찰자", 230_000L, oldestSealedBidAt)
+        ));
+
+        BidHistoryResponse response = bidHistoryService.getBidHistory(1L);
+
+        assertThat(response.bidCount()).isEqualTo(3L);
+        assertThat(response.bidLog()).satisfiesExactly(
+                bid -> {
+                    assertThat(bid.entryId()).isEqualTo("SEALED:14");
+                    assertThat(bid.bidder()).isEqualTo("내**임");
+                    assertThat(bid.amount()).isEqualTo(250_000L);
+                },
+                bid -> {
+                    assertThat(bid.entryId()).isEqualTo("BID:13");
+                    assertThat(bid.amount()).isEqualTo(210_000L);
+                },
+                bid -> {
+                    assertThat(bid.entryId()).isEqualTo("SEALED:12");
+                    assertThat(bid.amount()).isEqualTo(230_000L);
+                }
+        );
     }
 
     @Test
@@ -98,12 +142,14 @@ class BidHistoryServiceTest {
         when(auctionRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatExceptionOfType(AuctionException.class)
-                .isThrownBy(() -> bidHistoryService.getBidHistory(999L, 7L))
+                .isThrownBy(() -> bidHistoryService.getBidHistory(999L))
                 .extracting(AuctionException::getErrorCode)
                 .isEqualTo(ErrorCode.AUCTION_NOT_FOUND);
 
         verify(bidRepository, never()).findHistoryByAuctionId(999L);
         verify(bidRepository, never()).countByAuctionId(999L);
+        verify(sealedBidRepository, never()).findHistoryByAuctionId(999L);
+        verify(sealedBidRepository, never()).countByAuctionId(999L);
     }
 
     @Test
@@ -120,12 +166,34 @@ class BidHistoryServiceTest {
                 )
         ));
 
-        BidHistoryResponse response = bidHistoryService.getBidHistory(2L, 7L);
+        BidHistoryResponse response = bidHistoryService.getBidHistory(2L);
 
         assertThat(response.bidCount()).isEqualTo(1L);
         assertThat(response.bidLog().getFirst().bidder()).isEqualTo("하***자");
         assertThat(response.bidLog().getFirst().amount()).isEqualTo(180_000L);
         verify(bidRepository).findHistoryByAuctionId(2L);
+    }
+
+    @Test
+    void 일반입찰과_밀봉입찰의_숫자_ID가_같아도_entryId는_충돌하지_않는다() {
+        UpAuction auction = mock(UpAuction.class);
+        LocalDateTime bidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
+        when(auction.isSealedBidRevealed()).thenReturn(true);
+        when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(1L);
+        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(1L);
+        when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(7L, 8L, "일반입찰자", 210_000L, bidAt)
+        ));
+        when(sealedBidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(7L, 9L, "밀봉입찰자", 230_000L, bidAt.plusMinutes(1))
+        ));
+
+        BidHistoryResponse response = bidHistoryService.getBidHistory(1L);
+
+        assertThat(response.bidLog())
+                .extracting(bid -> bid.entryId())
+                .containsExactly("SEALED:7", "BID:7");
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {

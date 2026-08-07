@@ -6,8 +6,11 @@ import com.tikitaka.bidwinback.auth.application.TokenHasher;
 import com.tikitaka.bidwinback.auth.domain.entity.PasswordResetToken;
 import com.tikitaka.bidwinback.auth.domain.repository.PasswordResetTokenRepository;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.MailRateLimitProperties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
+import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +19,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -23,9 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +40,9 @@ class PasswordResetTokenServiceTest {
 
     @Mock
     private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Mock
+    private MemberRepository memberRepository;
 
     @Mock
     private TokenGenerator tokenGenerator;
@@ -53,9 +62,15 @@ class PasswordResetTokenServiceTest {
     void setUp() {
         passwordResetTokenService = new PasswordResetTokenService(
                 passwordResetTokenRepository,
+                memberRepository,
                 tokenGenerator,
                 tokenHasher,
-                passwordHasher
+                passwordHasher,
+                new MailRateLimitProperties(
+                        Duration.ofMinutes(1),
+                        Duration.ofMinutes(15),
+                        5
+                )
         );
     }
 
@@ -64,10 +79,12 @@ class PasswordResetTokenServiceTest {
         String rawToken = "raw-password-reset-token";
         String tokenHash = "hashed-password-reset-token";
         when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
         when(tokenGenerator.generate()).thenReturn(rawToken);
         when(tokenHasher.hash(rawToken)).thenReturn(tokenHash);
 
-        String issuedToken = passwordResetTokenService.issue(member);
+        Optional<String> issuedToken = passwordResetTokenService.issue(member);
 
         ArgumentCaptor<LocalDateTime> issuedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
@@ -77,13 +94,45 @@ class PasswordResetTokenServiceTest {
         inOrder.verify(passwordResetTokenRepository).save(tokenCaptor.capture());
 
         PasswordResetToken savedToken = tokenCaptor.getValue();
-        assertThat(issuedToken).isEqualTo(rawToken);
+        assertThat(issuedToken).contains(rawToken);
         assertThat(savedToken.getMember()).isSameAs(member);
         assertThat(savedToken.getTokenHash()).isEqualTo(tokenHash);
         assertThat(savedToken.getExpiresAt())
                 .isEqualTo(issuedAtCaptor.getValue().plusMinutes(15));
         assertThat(savedToken.getUsedAt()).isNull();
         assertThat(savedToken.getRevokedAt()).isNull();
+    }
+
+    @Test
+    void 쿨다운_중에는_비밀번호_재설정_토큰을_발급하지_않는다() {
+        when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+        when(passwordResetTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(1L);
+
+        Optional<String> issuedToken = passwordResetTokenService.issue(member);
+
+        assertThat(issuedToken).isEmpty();
+        verifyNoInteractions(tokenGenerator, tokenHasher);
+        verify(passwordResetTokenRepository, never())
+                .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void 윈도우_내_최대_횟수에_도달하면_비밀번호_재설정_토큰을_발급하지_않는다() {
+        when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+        when(passwordResetTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(0L, 5L);
+
+        Optional<String> issuedToken = passwordResetTokenService.issue(member);
+
+        assertThat(issuedToken).isEmpty();
+        verifyNoInteractions(tokenGenerator, tokenHasher);
+        verify(passwordResetTokenRepository, never())
+                .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
     }
 
     @Test

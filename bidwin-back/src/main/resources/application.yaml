@@ -18,12 +18,16 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password:
-    url: jdbc:mysql://localhost:3306/bidwin?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    # 이름 기반 time zone은 MySQL time zone table이 비어 있으면 연결부터 실패한다.
+    # +09:00 세션 오프셋으로 DB 시각과 서비스의 Asia/Seoul 변환 기준을 맞춘다.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/bidwin?connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8}
+  flyway:
+    baseline-on-migrate: true
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 server:
   servlet:
@@ -36,8 +40,22 @@ server:
         path: /
 
 app:
+  auction:
+    closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
+  mail:
+    rate-limit:
+      cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
+      window: ${MAIL_RATE_LIMIT_WINDOW:15m}
+      max-count: ${MAIL_RATE_LIMIT_MAX_COUNT:5}
+  sse:
+    connection-timeout-ms: ${SSE_CONNECTION_TIMEOUT_MS:300000}
+    heartbeat-interval-ms: ${SSE_HEARTBEAT_INTERVAL_MS:15000}
+    reconnect-time-ms: ${SSE_RECONNECT_TIME_MS:3000}
+    max-channels-per-connection: ${SSE_MAX_CHANNELS_PER_CONNECTION:50}
+    max-pending-messages-per-connection: ${SSE_MAX_PENDING_MESSAGES_PER_CONNECTION:100}
+
   password-reset:
-    url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
+    url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset/confirm}
   email-verification:
     url: ${EMAIL_VERIFICATION_URL:http://localhost:5173/email-verification}
 
@@ -45,10 +63,14 @@ app:
     cloudfront:
       domain: ${AWS_CLOUDFRONT_DOMAIN:http://localhost:8080}
     s3:
-      bucket: ${AWS_S3_BUCKET}
+      bucket: ${AWS_S3_BUCKET:bidwin-local}
       region: ${AWS_REGION:ap-northeast-2}
       presign-duration: ${AWS_S3_PRESIGN_DURATION:5m}
       pending-auction-image:
         retention: ${PENDING_AUCTION_IMAGE_RETENTION:24h}
         cleanup-interval: ${PENDING_AUCTION_IMAGE_CLEANUP_INTERVAL:1h}
         cleanup-batch-size: ${PENDING_AUCTION_IMAGE_CLEANUP_BATCH_SIZE:1000}
+      pending-profile-image:
+        retention: ${PENDING_PROFILE_IMAGE_RETENTION:24h}
+        cleanup-interval: ${PENDING_PROFILE_IMAGE_CLEANUP_INTERVAL:1h}
+        cleanup-batch-size: ${PENDING_PROFILE_IMAGE_CLEANUP_BATCH_SIZE:100}

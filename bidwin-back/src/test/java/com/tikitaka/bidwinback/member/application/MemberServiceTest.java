@@ -19,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
@@ -186,6 +188,53 @@ class MemberServiceTest {
         assertThatThrownBy(this::createMember).isSameAs(exception);
     }
 
+    @Test
+    void 닉네임을_변경하고_즉시_flush한다() {
+        Member member = member("기존닉네임");
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        String result = memberService.changeNickname(1L, "새닉네임");
+
+        assertThat(result).isEqualTo("새닉네임");
+        assertThat(member.getNickname()).isEqualTo("새닉네임");
+        verify(memberRepository).flush();
+    }
+
+    @Test
+    void 같은_닉네임이면_UPDATE를_수행하지_않는다() {
+        Member member = member("기존닉네임");
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        String result = memberService.changeNickname(1L, "기존닉네임");
+
+        assertThat(result).isEqualTo("기존닉네임");
+        verify(memberRepository, never()).flush();
+    }
+
+    @Test
+    void 닉네임_변경_중_유니크_제약을_위반하면_중복_예외로_변환한다() {
+        Member member = member("기존닉네임");
+        DataIntegrityViolationException exception =
+                createConstraintViolation(Member.NICKNAME_UNIQUE_CONSTRAINT);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        org.mockito.Mockito.doThrow(exception).when(memberRepository).flush();
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.changeNickname(1L, "중복닉네임"))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
+    }
+
+    @Test
+    void 존재하지_않는_회원의_닉네임은_변경할_수_없다() {
+        when(memberRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.changeNickname(1L, "새닉네임"))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+    }
+
     private DataIntegrityViolationException createConstraintViolation(String constraintName) {
         ConstraintViolationException cause = mock(ConstraintViolationException.class);
         when(cause.getConstraintName()).thenReturn(constraintName);
@@ -200,5 +249,16 @@ class MemberServiceTest {
                 "01012345678",
                 "티키타카"
         );
+    }
+
+    private Member member(String nickname) {
+        return Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname(nickname)
+                .status(MemberStatus.ACTIVE)
+                .build();
     }
 }

@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.member.domain.entity;
 
+import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -35,7 +36,8 @@ import static lombok.AccessLevel.PROTECTED;
         }
 )
 @NoArgsConstructor(access = PROTECTED)
-public class Member {
+// 마이페이지 가입일 표시를 위해 생성 시각(created_at)을 기록한다.
+public class Member extends BaseTimeEntity {
 
     public static final String EMAIL_UNIQUE_CONSTRAINT = "uk_member_email";
     public static final String NICKNAME_UNIQUE_CONSTRAINT = "uk_member_nickname";
@@ -107,6 +109,18 @@ public class Member {
         this.password = encodedPassword;
         // 비밀번호 변경 전 발급된 모든 세션을 다음 인증 요청에서 폐기한다.
         this.authVersion++;
+    }
+
+    public void changeProfileImage(String objectKey) {
+        this.profileObjectKey = objectKey;
+    }
+
+    public void resetProfileImage() {
+        this.profileObjectKey = DEFAULT_PROFILE_OBJECT_KEY;
+    }
+
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
     }
 
     public void activate() {

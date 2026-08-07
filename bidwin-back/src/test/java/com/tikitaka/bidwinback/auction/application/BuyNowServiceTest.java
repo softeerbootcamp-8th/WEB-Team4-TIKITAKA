@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -29,6 +31,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -40,6 +43,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.IDEMPOTENCY_KEY
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -84,6 +88,9 @@ class BuyNowServiceTest {
     private InstantPurchaseRequestRepository requestRepository;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private BuyNowPriceCalculator priceCalculator;
 
     @Mock
@@ -118,7 +125,8 @@ class BuyNowServiceTest {
                 auctionDepositRepository,
                 auctionTradeRepository,
                 bidRepository,
-                requestRepository
+                requestRepository,
+                eventPublisher
         );
         buyNowService = new BuyNowService(
                 auctionRepository,
@@ -212,6 +220,7 @@ class BuyNowServiceTest {
         );
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
         verify(request).complete(persistedTrade, FINAL_PRICE);
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
     }
 
     @Test
@@ -295,6 +304,7 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -315,11 +325,13 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void 경매_CAS가_실패하면_동시구매_충돌로_처리한다() {
         stubReadyToPurchase();
+        when(auctionRepository.currentDatabaseTime()).thenReturn(PURCHASED_AT);
         when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
                 .thenReturn(1);
         when(auctionRepository.completeForBuyNow(
@@ -336,6 +348,58 @@ class BuyNowServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(CONCURRENT_TRADE_CONFLICT);
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
+        verify(auctionDepositRepository, never()).save(any());
+        verify(auctionTradeRepository, never()).save(any());
+        verify(bidRepository, never()).save(any());
+        verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void 상향_경매는_마감_5분_전부터_즉시구매할_수_없다() {
+        // given
+        stubReadyToPurchase(upAuction);
+        when(upAuction.getBuyNowPrice()).thenReturn(FINAL_PRICE);
+        when(upAuction.getEndedAt()).thenReturn(PURCHASED_AT.plusMinutes(5));
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                this::buyInTransaction
+        );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(UP_BUY_NOW_CLOSED_NEAR_DEADLINE);
+        verifyNoPurchaseMutation();
+    }
+
+    @Test
+    void 조건부_갱신_전에_마감_5분_경계를_넘으면_전용_오류를_반환한다() {
+        // given
+        LocalDateTime cutoffReachedAt = PURCHASED_AT.plusSeconds(1);
+        stubReadyToPurchase(upAuction);
+        when(upAuction.getBuyNowPrice()).thenReturn(FINAL_PRICE);
+        when(upAuction.getEndedAt())
+                .thenReturn(PURCHASED_AT.plusMinutes(5).plusSeconds(1));
+        when(memberRepository.movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE))
+                .thenReturn(1);
+        when(auctionRepository.completeForBuyNow(
+                AUCTION_ID,
+                MEMBER_ID,
+                PURCHASED_AT
+        )).thenReturn(0);
+        when(auctionRepository.currentDatabaseTime()).thenReturn(cutoffReachedAt);
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                this::buyInTransaction
+        );
+
+        // then
+        assertThat(exception.getErrorCode())
+                .isEqualTo(UP_BUY_NOW_CLOSED_NEAR_DEADLINE);
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
@@ -366,7 +430,8 @@ class BuyNowServiceTest {
                 auctionDepositRepository,
                 auctionTradeRepository,
                 bidRepository,
-                priceCalculator
+                priceCalculator,
+                eventPublisher
         );
     }
 
@@ -495,17 +560,24 @@ class BuyNowServiceTest {
     }
 
     private void stubNewRequestWithLoadedEntities(Long auctionId) {
-        stubLoadedEntities(auctionId);
+        stubNewRequestWithLoadedEntities(auctionId, auction);
+    }
+
+    private void stubNewRequestWithLoadedEntities(
+            Long auctionId,
+            Auction loadedAuction
+    ) {
+        stubLoadedEntities(auctionId, loadedAuction);
         when(requestRepository.findByIdempotencyKeyForUpdate(IDEMPOTENCY_KEY))
                 .thenReturn(Optional.of(request));
         when(request.belongsTo(MEMBER_ID, auctionId)).thenReturn(true);
         when(request.isCompleted()).thenReturn(false);
     }
 
-    private void stubLoadedEntities(Long auctionId) {
+    private void stubLoadedEntities(Long auctionId, Auction loadedAuction) {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(buyer));
         when(auctionRepository.findWithSellerById(auctionId))
-                .thenReturn(Optional.of(auction));
+                .thenReturn(Optional.of(loadedAuction));
     }
 
     private void stubActiveBuyerWithDifferentSeller() {
@@ -526,6 +598,15 @@ class BuyNowServiceTest {
         stubOpenAuctionBeforeEnd();
     }
 
+    private void stubReadyToPurchase(Auction loadedAuction) {
+        stubNewRequestWithLoadedEntities(AUCTION_ID, loadedAuction);
+        when(buyer.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(buyer.getId()).thenReturn(MEMBER_ID);
+        when(loadedAuction.getSeller()).thenReturn(seller);
+        when(seller.getId()).thenReturn(SELLER_ID);
+        when(loadedAuction.getStatus()).thenReturn(AuctionStatus.OPEN);
+    }
+
     private void stubPersistedTrade() {
         when(persistedTrade.getId()).thenReturn(7L);
         when(persistedTrade.getAuction()).thenReturn(auction);
@@ -542,5 +623,6 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 }

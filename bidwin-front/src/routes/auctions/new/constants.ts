@@ -67,13 +67,12 @@ export const TEXT = {
   submit: '경매 등록하기',
   submitting: '등록 처리 중…',
 
-  completeTitle: '경매 등록이 접수됐어요',
-  completeDescription:
-    '백엔드 경매 등록 API 연동 전까지는 임시로 접수만 처리돼요. API가 준비되면 실제 등록으로 이어집니다.',
+  completeTitle: '경매가 등록됐어요',
+  completeDescription: '등록한 경매는 경매 목록과 마이페이지에서 확인할 수 있어요.',
   goToList: '경매 목록으로 이동',
   goToHome: '홈으로',
 
-  submitSuccessToast: '경매 등록이 임시로 접수됐어요.',
+  submitSuccessToast: '경매를 등록했어요.',
 } as const
 
 export const ERROR_MESSAGE = {

@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useToast } from '../../hooks/useToast'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import Button from '../../components/ui/Button'
+import { useAuctionEvents } from '../../hooks/useAuctionEvents'
+import { requestMyPage } from '../../lib/api/mypage'
+import type { MyPageResponse } from '../../lib/api/mypage'
 import ActiveTradeBanner from './components/ActiveTradeBanner'
 import DepositCard from './components/DepositCard'
 import MyInfoDrawer from './components/MyInfoDrawer'
@@ -15,91 +18,97 @@ import {
   SELLING_SECTION_TEXT,
   historyPath,
 } from './constants'
-import {
-  MOCK_ACTIVE_TRADES,
-  MOCK_BUYING_ITEMS,
-  MOCK_DEPOSIT,
-  MOCK_PROFILE,
-  MOCK_SELLING_ITEMS,
-} from './mock'
 import { toBuyingCard, toSellingCard } from './view'
 
-/*
- * 마이페이지. 경매 목록보다 카드 폭이 좁아야 읽히는 화면이라 컨테이너를 따로 잡는다.
- * (목록 화면은 1200px 안에 카드 4열을 넣지만, 여기는 프로필·보증금처럼 짧은 카드가 대부분이다.)
- */
 const CONTENT_WIDTH_CLASS = 'max-w-[960px]'
-
 const AUCTION_LIST_PATH = '/auctions'
 const AUCTION_NEW_PATH = '/auctions/new'
-const HOME_PATH = '/'
 
 function MyPage() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const { showToast } = useToast()
-
-  /* API 연동 전이라 목 데이터를 초깃값으로 두고, 변경 사항은 화면에서만 반영한다. */
-  const [profile, setProfile] = useState(MOCK_PROFILE)
+  const [data, setData] = useState<MyPageResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
   const [isMyInfoOpen, setIsMyInfoOpen] = useState(false)
 
-  /*
-   * 고른 이미지의 미리보기 URL. 드로어가 닫혀도 프로필 카드가 계속 써야 해서
-   * 드로어가 아니라 페이지가 들고 있다가, 새 이미지로 바뀌거나 화면을 뜰 때 해제한다.
-   */
-  const previewUrlRef = useRef<string | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    setIsLoading(true)
+    setError(null)
 
-  useEffect(
-    () => () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    requestMyPage(controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      setIsLoading(false)
+      if (result.ok) {
+        setData(result.data)
+        return
+      }
+      if (result.status === 401) {
+        const next = `${location.pathname}${location.search}`
+        navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true })
+        return
+      }
+      setError(result.message)
+    })
+
+    return () => controller.abort()
+  }, [location.pathname, location.search, navigate, retryToken])
+
+  useAuctionEvents(
+    'list',
+    data?.sellingItems.map((item) => item.auctionId) ?? [],
+    {
+      onState: (state) => {
+        setData((current) => {
+          if (!current) return current
+          const sellingItems = current.sellingItems.map((item) => {
+            if (item.auctionId !== state.auctionId) return item
+            return {
+              ...item,
+              price: state.currentPrice,
+              status: state.status === 'COMPLETED'
+                ? 'SOLD' as const
+                : state.status === 'UNSOLD'
+                  ? 'FAILED' as const
+                  : 'ON_SALE' as const,
+            }
+          })
+          return { ...current, sellingItems }
+        })
+      },
     },
-    [],
   )
 
-  function handleChangeImage(file: File | null) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-    previewUrlRef.current = file ? URL.createObjectURL(file) : null
-    /* TODO: 백엔드 프로필 이미지 업로드 API 연동 (지금은 미리보기까지만 한다) */
-    setProfile((current) => ({
-      ...current,
-      profileImageUrl: previewUrlRef.current ?? undefined,
-    }))
+  if (isLoading) return <PageMessage message="마이페이지를 불러오는 중…" />
+  if (error || !data) {
+    return (
+      <PageMessage message={error ?? '마이페이지를 불러오지 못했습니다.'}>
+        <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
+          다시 시도
+        </Button>
+      </PageMessage>
+    )
   }
 
-  function handleChangeNickname(nickname: string) {
-    setProfile((current) => ({ ...current, nickname }))
-  }
-
-  function handleLeave() {
-    /* TODO: 백엔드 회원 탈퇴 API 연동 */
-    setIsMyInfoOpen(false)
-    showToast(LEAVE_MODAL_TEXT.done)
-    navigate(HOME_PATH)
-  }
-
-  /*
-   * 상대가 있는 거래나 입찰에 묶인 보증금이 남아 있으면 탈퇴시키지 않는다.
-   * 이유는 하나만 보여 주면 되므로 먼저 걸리는 쪽을 쓴다.
-   */
-  const leaveBlockReason =
-    MOCK_ACTIVE_TRADES.length > 0
-      ? LEAVE_MODAL_TEXT.blockedByTrade(MOCK_ACTIVE_TRADES.length)
-      : MOCK_DEPOSIT.inUse > 0
-        ? LEAVE_MODAL_TEXT.blockedByDeposit
-        : undefined
+  const leaveBlockReason = data.activeTrades.length > 0
+    ? LEAVE_MODAL_TEXT.blockedByTrade(data.activeTrades.length)
+    : data.deposit.inUse > 0
+      ? LEAVE_MODAL_TEXT.blockedByDeposit
+      : LEAVE_MODAL_TEXT.unavailable
 
   return (
     <main className={`mx-auto flex ${CONTENT_WIDTH_CLASS} flex-col gap-lg px-lg py-xl`}>
       <h1 className="text-2xl font-bold text-ink">{MYPAGE_TEXT.title}</h1>
 
-      <ActiveTradeBanner trades={MOCK_ACTIVE_TRADES} />
-
-      <ProfileCard profile={profile} onManage={() => setIsMyInfoOpen(true)} />
-
-      <DepositCard deposit={MOCK_DEPOSIT} />
+      <ActiveTradeBanner trades={data.activeTrades} />
+      <ProfileCard profile={data.profile} onManage={() => setIsMyInfoOpen(true)} />
+      <DepositCard deposit={data.deposit} />
 
       <MyItemSection
         title={SELLING_SECTION_TEXT.title}
-        items={MOCK_SELLING_ITEMS.map(toSellingCard)}
+        items={data.sellingItems.map(toSellingCard)}
         viewAllLabel={SELLING_SECTION_TEXT.viewAll}
         viewAllPath={historyPath(HISTORY_TAB.selling)}
         emptyMessage={SELLING_SECTION_TEXT.empty}
@@ -109,7 +118,7 @@ function MyPage() {
 
       <MyItemSection
         title={BUYING_SECTION_TEXT.title}
-        items={MOCK_BUYING_ITEMS.map(toBuyingCard)}
+        items={data.buyingItems.map(toBuyingCard)}
         viewAllLabel={BUYING_SECTION_TEXT.viewAll}
         viewAllPath={historyPath(HISTORY_TAB.purchase)}
         emptyMessage={BUYING_SECTION_TEXT.empty}
@@ -122,12 +131,28 @@ function MyPage() {
       <MyInfoDrawer
         isOpen={isMyInfoOpen}
         onClose={() => setIsMyInfoOpen(false)}
-        profile={profile}
-        onChangeNickname={handleChangeNickname}
-        onChangeImage={handleChangeImage}
-        onLeave={handleLeave}
+        profile={data.profile}
+        onChangeNickname={(nickname) => {
+          setData((current) => current
+            ? { ...current, profile: { ...current.profile, nickname } }
+            : current)
+        }}
+        onChangeImage={(profileImageUrl) => {
+          setData((current) => current
+            ? { ...current, profile: { ...current.profile, profileImageUrl } }
+            : current)
+        }}
         leaveBlockReason={leaveBlockReason}
       />
+    </main>
+  )
+}
+
+function PageMessage({ message, children }: { message: string; children?: React.ReactNode }) {
+  return (
+    <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center gap-base px-lg text-center">
+      <p className="text-base text-body">{message}</p>
+      {children}
     </main>
   )
 }

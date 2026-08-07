@@ -65,7 +65,7 @@ class AuthServiceTest {
     private EmailVerificationTokenService emailVerificationTokenService;
 
     @Mock
-    private TokenMailSender tokenMailSender;
+    private TokenMailDispatcher tokenMailDispatcher;
 
     private AuthService authService;
 
@@ -77,7 +77,7 @@ class AuthServiceTest {
                 passwordResetTokenService,
                 emailVerificationTokenService,
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                tokenMailSender
+                tokenMailDispatcher
         );
     }
 
@@ -173,11 +173,11 @@ class AuthServiceTest {
 
         authService.signup(request);
 
-        verifyNoInteractions(emailVerificationTokenService, tokenMailSender);
+        verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
     }
 
     @Test
-    void 이메일_인증_메일_발송_요청_시_토큰을_발급하고_메일을_전송한다() {
+    void 이메일_인증_메일_발송_요청_시_토큰을_발급하고_비동기_전송을_요청한다() {
         Member member = Member.builder()
                 .email("member@example.com")
                 .password("encoded-password")
@@ -188,26 +188,62 @@ class AuthServiceTest {
         when(memberRepository.findByEmail(member.getEmail()))
                 .thenReturn(Optional.of(member));
         when(emailVerificationTokenService.issue(member))
-                .thenReturn("raw-email-verification-token");
+                .thenReturn(Optional.of("raw-email-verification-token"));
 
         authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
 
         verify(emailVerificationTokenService).issue(member);
-        verify(tokenMailSender)
-                .send(MailPurpose.EMAIL_VERIFICATION, member.getEmail(), "raw-email-verification-token");
+        verify(tokenMailDispatcher).send(
+                MailPurpose.EMAIL_VERIFICATION,
+                member.getEmail(),
+                "raw-email-verification-token"
+        );
     }
 
     @Test
-    void 존재하지_않는_회원에게_인증_메일_발송을_요청하면_예외가_발생한다() {
+    void 이메일_인증_발급이_제한되면_메일을_전송하지_않는다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .build();
+        when(memberRepository.findByEmail(member.getEmail()))
+                .thenReturn(Optional.of(member));
+        when(emailVerificationTokenService.issue(member)).thenReturn(Optional.empty());
+
+        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+
+        verifyNoInteractions(tokenMailDispatcher);
+    }
+
+    @Test
+    void 존재하지_않는_회원의_인증_메일_요청은_토큰과_메일을_생성하지_않는다() {
         when(memberRepository.findByEmail("unknown@example.com"))
                 .thenReturn(Optional.empty());
 
-        assertThatExceptionOfType(AuthException.class)
-                .isThrownBy(() -> authService.sendVerificationEmail(
-                        new EmailVerificationSendRequest("unknown@example.com")))
-                .extracting(AuthException::getErrorCode)
-                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-        verifyNoInteractions(tokenMailSender);
+        authService.sendVerificationEmail(new EmailVerificationSendRequest("unknown@example.com"));
+
+        verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
+    }
+
+    @Test
+    void PENDING이_아닌_회원의_인증_메일_요청은_토큰과_메일을_생성하지_않는다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .status(MemberStatus.ACTIVE)
+                .build();
+        when(memberRepository.findByEmail(member.getEmail()))
+                .thenReturn(Optional.of(member));
+
+        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+
+        verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
     }
 
     private SignUpRequest createSignUpRequest() {
@@ -330,18 +366,35 @@ class AuthServiceTest {
     }
 
     @Test
-    void 활성_회원이_비밀번호_재설정을_요청하면_토큰을_발급하고_메일을_전송한다() {
+    void 활성_회원이_비밀번호_재설정을_요청하면_토큰을_발급하고_비동기_전송을_요청한다() {
         PasswordResetRequest request = new PasswordResetRequest("member@example.com");
         Member member = mock(Member.class);
         when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
         when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
         when(member.getEmail()).thenReturn(request.email());
-        when(passwordResetTokenService.issue(member)).thenReturn("raw-reset-token");
+        when(passwordResetTokenService.issue(member)).thenReturn(Optional.of("raw-reset-token"));
 
         authService.requestPasswordReset(request);
 
         verify(passwordResetTokenService).issue(member);
-        verify(tokenMailSender).send(MailPurpose.PASSWORD_RESET, request.email(), "raw-reset-token");
+        verify(tokenMailDispatcher).send(
+                MailPurpose.PASSWORD_RESET,
+                request.email(),
+                "raw-reset-token"
+        );
+    }
+
+    @Test
+    void 비밀번호_재설정_발급이_제한되면_메일을_전송하지_않는다() {
+        PasswordResetRequest request = new PasswordResetRequest("member@example.com");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(passwordResetTokenService.issue(member)).thenReturn(Optional.empty());
+
+        authService.requestPasswordReset(request);
+
+        verifyNoInteractions(tokenMailDispatcher);
     }
 
     @Test
@@ -351,7 +404,7 @@ class AuthServiceTest {
 
         authService.requestPasswordReset(request);
 
-        verifyNoInteractions(passwordResetTokenService, tokenMailSender);
+        verifyNoInteractions(passwordResetTokenService, tokenMailDispatcher);
     }
 
     @Test
@@ -363,7 +416,7 @@ class AuthServiceTest {
 
         authService.requestPasswordReset(request);
 
-        verifyNoInteractions(passwordResetTokenService, tokenMailSender);
+        verifyNoInteractions(passwordResetTokenService, tokenMailDispatcher);
     }
 
     @Test

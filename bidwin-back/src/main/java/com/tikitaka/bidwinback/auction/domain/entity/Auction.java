@@ -17,7 +17,13 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "Auction")
+@Table(
+        name = "Auction",
+        indexes = @Index(
+                name = "idx_auction_status_ended_at",
+                columnList = "status, ended_at"
+        )
+)
 @Inheritance(strategy = InheritanceType.JOINED)
 @DiscriminatorColumn(name = "auction_type")
 @NoArgsConstructor(access = PROTECTED)
@@ -48,6 +54,10 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "start_price", nullable = false)
     private long startPrice;
 
+    // 스키마 변경 전에 생성된 경매는 null일 수 있어 조회 시 Bid 최고가로 보정한다.
+    @Column(name = "current_price")
+    private Long currentPrice;
+
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
 
@@ -62,6 +72,13 @@ public abstract class Auction extends BaseTimeEntity {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    /**
+     * 화면에 노출되는 경매 상태가 바뀔 때 같은 트랜잭션에서 증가한다.
+     * 클라이언트는 이 값으로 중복·역순 SSE를 버린다.
+     */
+    @Column(nullable = false)
+    private long revision;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "trade_type", nullable = false)
@@ -87,8 +104,47 @@ public abstract class Auction extends BaseTimeEntity {
         this.status = status == null ? AuctionStatus.OPEN : status;
         this.category = category;
         this.startPrice = startPrice;
+        this.currentPrice = startPrice;
         this.endedAt = endedAt;
         this.tradeType = tradeType;
         this.contact = contact;
+    }
+
+    public long getCurrentPrice() {
+        return currentPrice == null ? startPrice : currentPrice;
+    }
+
+    public boolean hasCurrentPrice() {
+        return currentPrice != null;
+    }
+
+    public boolean isSealedBidRevealed() {
+        return status == AuctionStatus.WINNER_DETERMINING
+                || status == AuctionStatus.COMPLETED
+                || status == AuctionStatus.UNSOLD;
+    }
+
+    public void complete(long finalPrice, LocalDateTime completedAt) {
+        if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
+            throw new IllegalStateException("진행 중인 경매만 낙찰 처리할 수 있습니다.");
+        }
+        if (finalPrice <= 0) {
+            throw new IllegalArgumentException("낙찰가는 0보다 커야 합니다.");
+        }
+
+        this.currentPrice = finalPrice;
+        this.status = AuctionStatus.COMPLETED;
+        this.completedAt = completedAt;
+        this.revision++;
+    }
+
+    public void markUnsold(LocalDateTime completedAt) {
+        if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
+            throw new IllegalStateException("진행 중인 경매만 유찰 처리할 수 있습니다.");
+        }
+
+        this.status = AuctionStatus.UNSOLD;
+        this.completedAt = completedAt;
+        this.revision++;
     }
 }
