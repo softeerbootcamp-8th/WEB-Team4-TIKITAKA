@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, createSearchParams, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { useToast } from '../../hooks/useToast'
+import { requestLogout } from '../../lib/api/auth'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 
@@ -12,7 +14,8 @@ const NAV_LINKS = [
 ]
 
 function TopNav() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, setAuthenticated } = useAuth()
+  const { showToast } = useToast()
   const location = useLocation()
   const navigate = useNavigate()
   const currentKeyword = location.pathname === '/auctions'
@@ -20,6 +23,7 @@ function TopNav() {
     : ''
   const [keyword, setKeyword] = useState(currentKeyword)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
 
@@ -31,6 +35,23 @@ function TopNav() {
       search: normalized ? `?${createSearchParams({ q: normalized })}` : '',
     })
     setIsSearchOpen(false)
+  }
+
+  async function handleLogout() {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    const result = await requestLogout()
+    setIsLoggingOut(false)
+
+    /* 이미 만료된 세션의 401도 클라이언트에서는 로그아웃 완료 상태다. */
+    if (!result.ok && result.status !== 401) {
+      showToast(result.message, 'info')
+      return
+    }
+
+    setAuthenticated(false)
+    navigate('/', { replace: true })
+    showToast('로그아웃됐어요.')
   }
 
   const searchField = (
@@ -82,12 +103,31 @@ function TopNav() {
           >
             <Search size={18} />
           </button>
-          <Link
-            to={isAuthenticated === true ? '/mypage' : '/login'}
-            className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
-          >
-            {isAuthenticated === true ? '마이페이지' : '로그인'}
-          </Link>
+          {isAuthenticated === true ? (
+            <>
+              <Link
+                to="/mypage"
+                className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
+              >
+                마이페이지
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex h-9 items-center rounded-pill px-sm text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/login"
+              className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
+            >
+              로그인
+            </Link>
+          )}
         </div>
       </div>
 

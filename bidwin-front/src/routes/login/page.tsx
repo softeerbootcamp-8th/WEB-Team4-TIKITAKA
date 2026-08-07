@@ -31,9 +31,9 @@ const TEXT = {
 }
 
 const ROUTE = {
+  home: '/',
   passwordReset: '/password-reset',
   signup: '/signup',
-  mypage: '/mypage',
 }
 
 const ERROR_MESSAGE = {
@@ -49,13 +49,13 @@ function validateCredentials(email: string, password: string) {
 
 function safeNextPath(next: string | null) {
   if (!next?.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
-    return ROUTE.mypage
+    return ROUTE.home
   }
 
   const target = new URL(next, window.location.origin)
   return target.origin === window.location.origin
     ? `${target.pathname}${target.search}${target.hash}`
-    : ROUTE.mypage
+    : ROUTE.home
 }
 
 function LoginPage() {
