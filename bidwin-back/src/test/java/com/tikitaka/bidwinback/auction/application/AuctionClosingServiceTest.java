@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -33,6 +35,9 @@ class AuctionClosingServiceTest {
     private UpAuctionSettlementService upAuctionSettlementService;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private Auction auction;
 
     @InjectMocks
@@ -51,6 +56,19 @@ class AuctionClosingServiceTest {
         assertThat(closed).isTrue();
         verify(auction).markUnsold(DATABASE_TIME);
         verifyNoInteractions(upAuctionSettlementService);
+    }
+
+    @Test
+    void OPEN_경매가_유찰되면_최종_상태_변경_이벤트를_발행한다() {
+        // given
+        stubLockedAuction(AuctionStatus.OPEN);
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+
+        // when
+        auctionClosingService.closeIfAvailable(AUCTION_ID);
+
+        // then
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
     }
 
     @Test
