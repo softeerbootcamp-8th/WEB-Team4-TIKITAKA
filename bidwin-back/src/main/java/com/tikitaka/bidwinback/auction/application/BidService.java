@@ -129,18 +129,23 @@ public class BidService {
     }
 
     private BidResult saveSealedBid(Auction auction, Member bidder, long price) {
+        SealedBid sealedBid;
         try {
-            SealedBid sealedBid = sealedBidRepository.saveAndFlush(
+            sealedBid = sealedBidRepository.saveAndFlush(
                     SealedBid.builder()
                             .auction(auction)
                             .bidder(bidder)
                             .price(price)
                             .build()
             );
-            return BidResult.from(sealedBid);
         } catch (DataIntegrityViolationException exception) {
             throw new BidException(SEALED_BID_ALREADY_SUBMITTED);
         }
+
+        // 최초 밀봉입찰의 OPEN -> BID_ONGOING 전환만 revision을 올린다.
+        // 이후 이벤트는 같은 revision이라 연결에서 제거되어 비공개 입찰 횟수를 드러내지 않는다.
+        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
+        return BidResult.from(sealedBid);
     }
 
     private void validateBidUnit(long price) {

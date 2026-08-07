@@ -79,11 +79,14 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     );
 
     // 밀봉 구간에는 공개 현재가를 바꾸지 않고 시작가·일반·밀봉 최고가보다 높은 입찰만 허용한다.
+    // revision은 첫 밀봉입찰의 공개 상태 전환 때만 올린다. 이후 밀봉입찰마다 올리면
+    // revision만으로 비공개 입찰 횟수와 시점을 추측할 수 있다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
             UPDATE auction
-            SET status = 'BID_ONGOING',
+            SET revision = revision + CASE WHEN status = 'OPEN' THEN 1 ELSE 0 END,
+                status = 'BID_ONGOING',
                 last_modified_at = SYSDATE(6)
             WHERE id = :auctionId
               AND auction_type = 'UP'

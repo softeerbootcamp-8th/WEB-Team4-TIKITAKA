@@ -77,6 +77,55 @@ class AuctionRepositoryIntegrationTest {
     }
 
     @Test
+    void 첫_밀봉입찰로_공개_상태가_바뀌면_revision이_오른다() {
+        // given
+        Member seller = persistMember("sealed-rev-seller");
+        Member bidder = persistMember("sealed-rev-bidder");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+
+        // when
+        int updated = auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                bidder.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT
+        );
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        assertThat(revisionOf(auction.getId())).isEqualTo(1L);
+    }
+
+    @Test
+    void 진행중인_경매의_추가_밀봉입찰은_revision으로_비공개_입찰수를_노출하지_않는다() {
+        // given
+        Member seller = persistMember("sealed-private-seller");
+        Member firstBidder = persistMember("sealed-private-first");
+        Member secondBidder = persistMember("sealed-private-second");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                firstBidder.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT
+        );
+
+        // when
+        int updated = auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                secondBidder.getId(),
+                START_PRICE + (BID_UNIT * 2),
+                BID_UNIT
+        );
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        assertThat(revisionOf(auction.getId())).isEqualTo(1L);
+    }
+
+    @Test
     void 판매_물품은_최신_3건까지만_조회한다() {
         // given
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -262,6 +311,17 @@ class AuctionRepositoryIntegrationTest {
                 .setParameter("completedAt", completedAt)
                 .setParameter("auctionId", auction.getId())
                 .executeUpdate();
+    }
+
+    private void moveToSealedWindow(Long auctionId) {
+        entityManager.createNativeQuery("""
+                        update auction
+                        set ended_at = SYSDATE(6) + INTERVAL 2 MINUTE
+                        where id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .executeUpdate();
+        entityManager.clear();
     }
 
     private Member persistMember(String prefix) {
