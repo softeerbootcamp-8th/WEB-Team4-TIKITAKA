@@ -10,6 +10,7 @@ import TextInput from '../../components/ui/TextInput'
 import { useToast } from '../../hooks/useToast'
 import {
   requestEmailAvailability,
+  requestEmailVerification,
   requestNicknameAvailability,
   requestSignUp,
 } from '../../lib/api/auth'
@@ -274,24 +275,34 @@ function SignupPage() {
     setError(null)
 
     setIsSubmitting(true)
-    const result = await requestSignUp({
+    const signUpResult = await requestSignUp({
       email: trimmedEmail,
       password,
       name: identity.name,
       phoneNumber: identity.phoneNumber,
       nickname: trimmedNickname,
     })
-    setIsSubmitting(false)
 
-    if (!result.ok) {
+    if (!signUpResult.ok) {
+      setIsSubmitting(false)
       /* 중복 이메일·닉네임 등 백엔드 검증 실패는 서버 메시지를 그대로 같은 자리에 보여준다. */
-      setError(result.message)
+      setError(signUpResult.message)
       return
     }
 
+    const emailVerificationResult = await requestEmailVerification(signUpResult.data.email)
+    setIsSubmitting(false)
+
     showToast(TEXT.signUpSuccess)
     /* 신규 회원은 PENDING 상태이므로 이메일 인증 안내 화면으로 이어준다. */
-    navigate(ROUTE.emailVerification, { state: { email: result.data.email } })
+    navigate(ROUTE.emailVerification, {
+      state: {
+        email: signUpResult.data.email,
+        initialSendError: emailVerificationResult.ok
+          ? undefined
+          : emailVerificationResult.message,
+      },
+    })
   }
 
   const hasError = error !== null

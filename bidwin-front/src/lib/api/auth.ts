@@ -8,6 +8,7 @@ const AUTH_API_PATH = {
   emailAvailability: '/api/v1/auth/signups/email/verify',
   nicknameAvailability: '/api/v1/auth/signups/nickname/verify',
   emailVerificationSend: '/api/v1/auth/signups/email/send',
+  emailVerificationConfirm: '/api/v1/auth/signups/email/confirm',
   passwordReset: '/api/v1/auth/password-resets',
   passwordResetConfirm: '/api/v1/auth/password-resets/confirm',
 }
@@ -67,6 +68,10 @@ function requestEmailVerification(email: string): Promise<ApiResult<void>> {
   return postJson<void, { email: string }>(AUTH_API_PATH.emailVerificationSend, { email })
 }
 
+function requestEmailVerificationConfirm(token: string): Promise<ApiResult<void>> {
+  return postJson<void, { token: string }>(AUTH_API_PATH.emailVerificationConfirm, { token })
+}
+
 function requestPasswordReset(email: string): Promise<ApiResult<void>> {
   return postJson<void, { email: string }>(AUTH_API_PATH.passwordReset, { email })
 }
@@ -91,6 +96,7 @@ function requestSession(): Promise<ApiResult<void>> {
 export {
   requestEmailAvailability,
   requestEmailVerification,
+  requestEmailVerificationConfirm,
   requestLogin,
   requestNicknameAvailability,
   requestPasswordReset,
