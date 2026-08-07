@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
+import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -236,6 +237,18 @@ class AuctionLiveStateServiceTest {
         // when & then
         assertThatThrownBy(() -> stateService.getState(1L))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void 목록_조회에_존재하지_않는_경매가_섞이면_구독을_거부한다() {
+        // given
+        when(auctionRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(List.of(auction));
+        when(auction.getId()).thenReturn(1L);
+
+        // when & then
+        assertThatThrownBy(() -> stateService.getStates(List.of(1L, 2L)))
+                .isInstanceOf(AuctionException.class);
     }
 
     @Test

@@ -24,6 +24,7 @@ import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,6 +55,14 @@ public class AuctionLiveStateService {
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public List<AuctionLiveState> getStates(Collection<Long> auctionIds) {
         List<Auction> auctions = auctionRepository.findAllById(auctionIds);
+        // findAllById는 없는 ID를 조용히 누락하므로, 존재하지 않는 경매를 구독하면
+        // 초기 snapshot 없이 채널만 붙는다. 단건 조회와 동일하게 명시적으로 거부한다.
+        Set<Long> foundIds = auctions.stream()
+                .map(Auction::getId)
+                .collect(Collectors.toSet());
+        if (auctionIds.stream().anyMatch(id -> !foundIds.contains(id))) {
+            throw new AuctionException(AUCTION_NOT_FOUND);
+        }
         return toStates(auctions);
     }
 
