@@ -32,6 +32,31 @@ class MemberTest {
     }
 
     @Test
+    void 프로필_이미지를_변경한다() {
+        Member member = createMember();
+
+        member.changeProfileImage("profile-images/1/new.jpg");
+
+        assertThat(member.getProfileObjectKey()).isEqualTo("profile-images/1/new.jpg");
+    }
+
+    @Test
+    void 프로필_이미지를_기본값으로_되돌린다() {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .profileObjectKey("profile-images/1/old.jpg")
+                .build();
+
+        member.resetProfileImage();
+
+        assertThat(member.getProfileObjectKey()).isEqualTo("profiles/default-profile.png");
+    }
+
+    @Test
     void 닉네임을_변경한다() {
         Member member = createMember();
 

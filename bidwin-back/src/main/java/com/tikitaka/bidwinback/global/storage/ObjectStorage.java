@@ -14,5 +14,7 @@ public interface ObjectStorage {
             long contentLength
     );
 
+    boolean exists(String objectKey);
+
     ObjectDeletionResult deleteAll(List<String> objectKeys);
 }

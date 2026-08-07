@@ -29,6 +29,7 @@ public class FilterConfig {
                 "GET",
                 "POST",
                 "PATCH",
+                "DELETE",
                 "OPTIONS"
         ));
         configuration.setAllowedHeaders(List.of("Content-Type"));

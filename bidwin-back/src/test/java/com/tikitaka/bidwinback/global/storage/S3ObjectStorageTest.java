@@ -6,8 +6,11 @@ import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Error;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -19,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -88,6 +92,61 @@ class S3ObjectStorageTest {
                 () -> assertThat(result.expiresAt()).isEqualTo(expiresAt)
         );
         verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    void 객체가_존재하면_true를_반환한다() {
+        S3Client s3Client = mock(S3Client.class);
+        S3ObjectStorage storage = new S3ObjectStorage(
+                s3Client,
+                mock(S3Presigner.class),
+                PROPERTIES
+        );
+        String objectKey = "profile-images/1/image.jpg";
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().build());
+
+        boolean exists = storage.exists(objectKey);
+
+        assertThat(exists).isTrue();
+        ArgumentCaptor<HeadObjectRequest> captor =
+                ArgumentCaptor.forClass(HeadObjectRequest.class);
+        verify(s3Client).headObject(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo(BUCKET);
+        assertThat(captor.getValue().key()).isEqualTo(objectKey);
+    }
+
+    @Test
+    void 객체가_없으면_false를_반환한다() {
+        S3Client s3Client = mock(S3Client.class);
+        S3ObjectStorage storage = new S3ObjectStorage(
+                s3Client,
+                mock(S3Presigner.class),
+                PROPERTIES
+        );
+        S3Exception exception = mock(S3Exception.class);
+        when(exception.statusCode()).thenReturn(404);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(exception);
+
+        assertThat(storage.exists("profile-images/1/missing.jpg")).isFalse();
+    }
+
+    @Test
+    void 객체_조회_중_404가_아닌_오류는_전파한다() {
+        S3Client s3Client = mock(S3Client.class);
+        S3ObjectStorage storage = new S3ObjectStorage(
+                s3Client,
+                mock(S3Presigner.class),
+                PROPERTIES
+        );
+        S3Exception exception = mock(S3Exception.class);
+        when(exception.statusCode()).thenReturn(503);
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(exception);
+
+        assertThatThrownBy(() -> storage.exists("profile-images/1/image.jpg"))
+                .isSameAs(exception);
     }
 
     @Test
