@@ -1,9 +1,13 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
+import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.sse.SseHub;
+import com.tikitaka.bidwinback.global.sse.SseMessage;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -23,6 +27,7 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Validated
@@ -32,6 +37,7 @@ import java.util.List;
 public class AuctionSseController {
 
     private final AuctionLiveStateService stateService;
+    private final BidHistoryService bidHistoryService;
     private final SseHub sseHub;
 
     @GetMapping(
@@ -43,7 +49,7 @@ public class AuctionSseController {
     ) {
         SseEmitter emitter = sseHub.subscribe(
                 List.of(AuctionSseMessages.channel(auctionId)),
-                () -> List.of(AuctionSseMessages.state(stateService.getState(auctionId)))
+                () -> initialAuctionMessages(auctionId)
         );
         return streamResponse(emitter);
     }
@@ -97,5 +103,19 @@ public class AuctionSseController {
                 .header("X-Accel-Buffering", "no")
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .body(emitter);
+    }
+
+    private List<SseMessage<?>> initialAuctionMessages(long auctionId) {
+        AuctionLiveState state = stateService.getState(auctionId);
+        List<SseMessage<?>> messages = new ArrayList<>();
+        messages.add(AuctionSseMessages.state(state));
+        if (state.auctionType() == AuctionType.UP) {
+            messages.add(AuctionSseMessages.bidHistorySnapshot(
+                    auctionId,
+                    state.revision(),
+                    bidHistoryService.getBidHistory(auctionId)
+            ));
+        }
+        return messages;
     }
 }

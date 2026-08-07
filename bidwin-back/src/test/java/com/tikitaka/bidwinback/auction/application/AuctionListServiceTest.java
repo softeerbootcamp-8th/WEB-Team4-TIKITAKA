@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -37,6 +38,7 @@ class AuctionListServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime AS_OF = LocalDateTime.of(2026, 8, 1, 12, 0);
+    private static final LocalDateTime SERVER_TIME = AS_OF.plusMinutes(1);
 
     @Mock
     private AuctionRepository auctionRepository;
@@ -65,6 +67,7 @@ class AuctionListServiceTest {
                 buyNowPriceCalculator
         );
         lenient().when(imageRepository.findFirstImageByAuctionIds(anyList())).thenReturn(List.of());
+        lenient().when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
     }
 
     @Test
@@ -119,6 +122,10 @@ class AuctionListServiceTest {
         DownAuction auction = mock(DownAuction.class);
         stubCommon(auction, 1L, 200_000L);
         when(auction.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        when(auction.getStartedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        when(auction.getMinimumPrice()).thenReturn(150_000L);
+        when(auction.getDropPrice()).thenReturn(10_000L);
+        when(auction.getPriceDropInterval()).thenReturn(10L);
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 1, 12, 35);
         when(auctionRepository.findAllForList(null, asOf)).thenReturn(List.of(auction));
         when(bidRepository.summarizeByAuctionIds(anyList(), any())).thenReturn(List.of());
@@ -128,7 +135,16 @@ class AuctionListServiceTest {
                 query(null, AuctionSort.LATEST, null, 1, 16, asOf)
         );
 
-        assertThat(response.items().get(0).currentPrice()).isEqualTo(170_000L);
+        AuctionSummaryResponse summary = response.items().get(0);
+        assertThat(summary.currentPrice()).isEqualTo(170_000L);
+        assertThat(summary.downPricing().minimumPrice()).isEqualTo(150_000L);
+        assertThat(summary.downPricing().dropPrice()).isEqualTo(10_000L);
+        assertThat(summary.downPricing().priceDropIntervalMs()).isEqualTo(600_000L);
+        assertThat(summary.downPricing().startedAt())
+                .isEqualTo(LocalDateTime.of(2026, 8, 1, 9, 0)
+                        .atZone(SEOUL)
+                        .toInstant()
+                        .toEpochMilli());
     }
 
     @Test
@@ -185,7 +201,7 @@ class AuctionListServiceTest {
     }
 
     @Test
-    void asOf가_없으면_DB_시각을_새로_찍어_응답에_그대로_담는다() {
+    void 서버_시각과_목록_스냅샷_시각을_각각_응답한다() {
         when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of());
         when(auctionRepository.currentDatabaseTime()).thenReturn(AS_OF);
 
@@ -194,6 +210,20 @@ class AuctionListServiceTest {
         );
 
         assertThat(response.serverTime()).isEqualTo(AS_OF.atZone(SEOUL).toInstant().toEpochMilli());
+        assertThat(response.asOf()).isEqualTo(AS_OF.atZone(SEOUL).toInstant().toEpochMilli());
+    }
+
+    @Test
+    void 다음_페이지는_asOf를_유지하면서_최신_서버_시각을_응답한다() {
+        when(auctionRepository.findAllForList(null, AS_OF)).thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 2, 16, AS_OF)
+        );
+
+        assertThat(response.serverTime())
+                .isEqualTo(SERVER_TIME.atZone(SEOUL).toInstant().toEpochMilli());
+        assertThat(response.asOf()).isEqualTo(AS_OF.atZone(SEOUL).toInstant().toEpochMilli());
     }
 
     private AuctionListQuery query(AuctionType type, AuctionSort sort, String keyword, int page, int size) {
@@ -227,6 +257,8 @@ class AuctionListServiceTest {
         when(auction.getCategory()).thenReturn(AuctionCategory.HOUSEHOLD);
         when(auction.getStartPrice()).thenReturn(startPrice);
         when(auction.getEndedAt()).thenReturn(LocalDateTime.of(2026, 8, 1, 18, 0));
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getRevision()).thenReturn(id);
         when(auction.getSeller()).thenReturn(seller);
     }
 }

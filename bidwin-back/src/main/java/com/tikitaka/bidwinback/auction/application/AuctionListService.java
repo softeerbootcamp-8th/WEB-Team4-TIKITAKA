@@ -10,12 +10,14 @@ import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDownPricingResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
@@ -47,7 +49,8 @@ public class AuctionListService {
 
     @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
-        LocalDateTime asOf = query.asOf() != null ? query.asOf() : auctionRepository.currentDatabaseTime();
+        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
+        LocalDateTime asOf = query.asOf() != null ? query.asOf() : serverTime;
 
         List<Auction> auctions = auctionRepository.findAllForList(query.keyword(), asOf)
                 .stream()
@@ -70,6 +73,7 @@ public class AuctionListService {
 
         return new AuctionListResponse(
                 pageItems,
+                toEpochMilli(serverTime),
                 toEpochMilli(asOf),
                 currentPage,
                 totalPages,
@@ -128,7 +132,22 @@ public class AuctionListService {
                 auction.getStartPrice(),
                 bidCount,
                 toEpochMilli(auction.getEndedAt()),
-                toEpochMilli(auction.getCreatedAt())
+                toEpochMilli(auction.getCreatedAt()),
+                auction.getStatus(),
+                auction.getRevision(),
+                downPricing(auction)
+        );
+    }
+
+    private AuctionDownPricingResponse downPricing(Auction auction) {
+        if (!(auction instanceof DownAuction downAuction)) {
+            return null;
+        }
+        return new AuctionDownPricingResponse(
+                downAuction.getMinimumPrice(),
+                downAuction.getDropPrice(),
+                Duration.ofMinutes(downAuction.getPriceDropInterval()).toMillis(),
+                toEpochMilli(downAuction.getStartedAt())
         );
     }
 

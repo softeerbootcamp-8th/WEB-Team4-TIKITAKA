@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryRevealed;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -29,13 +30,18 @@ public class AuctionClosingService {
                         "선점한 마감 대상 경매를 찾을 수 없습니다."
                 ));
 
-        if (auction.getStatus() == AuctionStatus.OPEN) {
+        AuctionStatus initialStatus = auction.getStatus();
+        if (initialStatus == AuctionStatus.OPEN) {
             auction.markUnsold(auctionRepository.currentDatabaseTime());
             eventPublisher.publishEvent(new AuctionStateChanged(auctionId));
             return true;
         }
-        if (auction.getStatus() == AuctionStatus.BID_ONGOING) {
+        if (initialStatus == AuctionStatus.BID_ONGOING) {
             upAuctionSettlementService.settle(auctionId);
+            eventPublisher.publishEvent(new AuctionBidHistoryRevealed(
+                    auction.getId(),
+                    auction.getRevision()
+            ));
             return true;
         }
         return false;

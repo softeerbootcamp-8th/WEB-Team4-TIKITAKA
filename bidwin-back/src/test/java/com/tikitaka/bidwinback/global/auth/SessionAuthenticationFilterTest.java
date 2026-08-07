@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -524,14 +525,37 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
-    void 실시간_구독을_열어도_같은_경매의_다른_조회는_인증이_필요하다() {
-        // given
-        MockHttpServletRequest request = new MockHttpServletRequest(
-                HttpMethod.GET.name(),
+    void 경매_목록_상세_입찰내역은_세션_없이_조회할_수_있다()
+            throws ServletException, IOException {
+        for (String path : List.of(
+                "/api/v1/auctions",
+                "/api/v1/auctions/1",
                 "/api/v1/auctions/1/bids"
+        )) {
+            MockHttpServletRequest request = new MockHttpServletRequest(
+                    HttpMethod.GET.name(),
+                    path
+            );
+            AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+            filter.doFilter(
+                    request,
+                    new MockHttpServletResponse(),
+                    (ignoredRequest, ignoredResponse) -> filterChainInvoked.set(true)
+            );
+
+            assertThat(filterChainInvoked).isTrue();
+        }
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
+    void 공개_경매_경로라도_POST는_인증이_필요하다() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.POST.name(),
+                "/api/v1/auctions"
         );
 
-        // when & then
         assertUnauthenticated(request);
     }
 

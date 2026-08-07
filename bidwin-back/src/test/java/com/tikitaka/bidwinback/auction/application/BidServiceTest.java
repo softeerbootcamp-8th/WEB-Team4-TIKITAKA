@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -123,6 +124,7 @@ class BidServiceTest {
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
+        verify(eventPublisher).publishEvent(new AuctionBidCreated(AUCTION_ID, BID_ID));
         Bid saved = bidCaptor.getValue();
         assertAll(
                 () -> assertThat(saved.getAuction()).isSameAs(auction),

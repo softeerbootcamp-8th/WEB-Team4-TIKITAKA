@@ -1,10 +1,9 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
 public record BidHistoryItemResponse(
-        Long id,
+        String entryId,
         String bidder,
         long amount,
-        long biddedAt,
-        boolean isMe
+        long biddedAt
 ) {
 }

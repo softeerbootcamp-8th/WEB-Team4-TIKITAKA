@@ -46,13 +46,9 @@ public class AuctionBidController {
 
     @GetMapping("/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidHistoryResponse>> getBidHistory(
-            @PathVariable long auctionId,
-            @Login AuthMember authMember
+            @PathVariable long auctionId
     ) {
-        BidHistoryResponse response = bidHistoryService.getBidHistory(
-                auctionId,
-                authMember.memberId()
-        );
+        BidHistoryResponse response = bidHistoryService.getBidHistory(auctionId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

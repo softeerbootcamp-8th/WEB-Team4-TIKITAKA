@@ -39,6 +39,7 @@ public class AuctionDetailService {
 
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
     private static final long MILLIS_PER_MINUTE = Duration.ofMinutes(1).toMillis();
+    private static final long SEALED_BID_WINDOW_MINUTES = 5L;
 
     private final AuctionRepository auctionRepository;
     private final BidRepository bidRepository;
@@ -88,6 +89,7 @@ public class AuctionDetailService {
     ) {
         long currentPrice = finalPrice.orElseGet(() -> currentPriceOf(auction));
         long bidCount = bidRepository.countByAuctionId(auction.getId());
+        LocalDateTime databaseTime = auctionRepository.currentDatabaseTime();
         if (auction.isSealedBidRevealed()) {
             bidCount += sealedBidRepository.countByAuctionId(auction.getId());
         }
@@ -103,6 +105,8 @@ public class AuctionDetailService {
                 imageUrls,
                 auction.getStartPrice(),
                 toEpochMilli(auction.getEndedAt()),
+                toEpochMilli(databaseTime),
+                toEpochMilli(auction.getEndedAt().minusMinutes(SEALED_BID_WINDOW_MINUTES)),
                 auction.getTradeType(),
                 auction.getContact(),
                 seller,
@@ -141,7 +145,7 @@ public class AuctionDetailService {
                 auction.getRevision(),
                 imageUrls,
                 auction.getStartPrice(),
-                toEpochMilli(auction.getCreatedAt()),
+                toEpochMilli(auction.getStartedAt()),
                 toEpochMilli(databaseTime),
                 toEpochMilli(auction.getEndedAt()),
                 auction.getTradeType(),

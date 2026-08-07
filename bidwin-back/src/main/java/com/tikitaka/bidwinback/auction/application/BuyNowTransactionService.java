@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
@@ -113,7 +114,7 @@ public class BuyNowTransactionService {
                 .reservedAmount(command.finalPrice())
                 .build());
 
-        bidRepository.save(Bid.builder()
+        Bid purchaseBid = bidRepository.save(Bid.builder()
                 .auction(auction)
                 .bidder(buyer)
                 .price(command.finalPrice())
@@ -132,6 +133,12 @@ public class BuyNowTransactionService {
         );
         request.complete(trade, command.finalPrice());
         eventPublisher.publishEvent(new AuctionStateChanged(command.auctionId()));
+        if (auction instanceof UpAuction) {
+            eventPublisher.publishEvent(new AuctionBidCreated(
+                    command.auctionId(),
+                    purchaseBid.getId()
+            ));
+        }
 
         return BuyNowResult.from(trade);
     }

@@ -18,6 +18,8 @@ public record UpAuctionDetailResponse(
         List<String> images,
         long startPrice,
         long deadline,
+        long serverTime,
+        long sealedBidStartsAt,
         TradeType tradeType,
         String contact,
         AuctionSellerResponse seller,

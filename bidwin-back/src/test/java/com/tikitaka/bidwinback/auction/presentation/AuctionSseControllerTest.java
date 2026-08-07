@@ -1,10 +1,12 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
+import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.global.sse.SseChannel;
 import com.tikitaka.bidwinback.global.sse.SseHub;
 import com.tikitaka.bidwinback.global.sse.SseMessage;
@@ -33,6 +35,8 @@ class AuctionSseControllerTest {
     @Mock
     private AuctionLiveStateService stateService;
     @Mock
+    private BidHistoryService bidHistoryService;
+    @Mock
     private SseHub sseHub;
     @Mock
     private SseEmitter emitter;
@@ -41,7 +45,7 @@ class AuctionSseControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AuctionSseController(stateService, sseHub);
+        controller = new AuctionSseController(stateService, bidHistoryService, sseHub);
     }
 
     @Test
@@ -68,7 +72,9 @@ class AuctionSseControllerTest {
     void 상세_SSE는_경매_하나짜리_최신_snapshot_공급자를_등록한다() {
         // given
         AuctionLiveState state = state(1L);
+        BidHistoryResponse history = new BidHistoryResponse(3L, List.of());
         when(stateService.getState(1L)).thenReturn(state);
+        when(bidHistoryService.getBidHistory(1L)).thenReturn(history);
         when(sseHub.subscribe(
                 eq(List.of(AuctionSseMessages.channel(1L))),
                 any()
@@ -76,8 +82,10 @@ class AuctionSseControllerTest {
                 .thenAnswer(invocation -> {
                     Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
                             invocation.getArgument(1);
-                    assertThat(initialMessages.get())
-                            .isEqualTo(List.of(AuctionSseMessages.state(state)));
+                    assertThat(initialMessages.get()).isEqualTo(List.of(
+                            AuctionSseMessages.state(state),
+                            AuctionSseMessages.bidHistorySnapshot(1L, state.revision(), history)
+                    ));
                     return emitter;
                 });
 
@@ -87,6 +95,7 @@ class AuctionSseControllerTest {
         // then
         assertThat(response.getBody()).isSameAs(emitter);
         verify(stateService).getState(1L);
+        verify(bidHistoryService).getBidHistory(1L);
     }
 
     @Test

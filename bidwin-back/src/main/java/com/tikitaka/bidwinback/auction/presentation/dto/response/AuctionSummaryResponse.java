@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 
 public record AuctionSummaryResponse(
@@ -16,6 +17,10 @@ public record AuctionSummaryResponse(
         long startPrice,
         long bidCount,
         long deadline,
-        long listedAt
+        long listedAt,
+        AuctionStatus status,
+        long revision,
+        // 상향 경매는 null. 하향 경매는 클라이언트가 시간에 따른 가격을 계산한다.
+        AuctionDownPricingResponse downPricing
 ) {
 }

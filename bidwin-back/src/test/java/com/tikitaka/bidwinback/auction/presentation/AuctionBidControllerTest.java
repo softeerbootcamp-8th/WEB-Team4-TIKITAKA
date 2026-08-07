@@ -278,52 +278,46 @@ class AuctionBidControllerTest {
 
     @Test
     void 입찰_내역을_조회하면_200과_최신순_목록을_응답한다() throws Exception {
-        when(bidHistoryService.getBidHistory(1L, 7L)).thenReturn(
+        when(bidHistoryService.getBidHistory(1L)).thenReturn(
                 new BidHistoryResponse(
                         2L,
                         List.of(
                                 new BidHistoryItemResponse(
-                                        13L,
-                                        "나",
+                                        "BID:13",
+                                        "내**임",
                                         210_000L,
-                                        1_754_122_920_000L,
-                                        true
+                                        1_754_122_920_000L
                                 ),
                                 new BidHistoryItemResponse(
-                                        12L,
+                                        "BID:12",
                                         "민**켓",
                                         200_000L,
-                                        1_754_122_860_000L,
-                                        false
+                                        1_754_122_860_000L
                                 )
                         )
                 )
         );
 
-        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 1L)
-                        .session(authenticatedSession(7L)))
+        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.bidCount").value(2L))
-                .andExpect(jsonPath("$.data.bidLog[0].id").value(13L))
-                .andExpect(jsonPath("$.data.bidLog[0].bidder").value("나"))
+                .andExpect(jsonPath("$.data.bidLog[0].entryId").value("BID:13"))
+                .andExpect(jsonPath("$.data.bidLog[0].bidder").value("내**임"))
                 .andExpect(jsonPath("$.data.bidLog[0].amount").value(210_000L))
                 .andExpect(jsonPath("$.data.bidLog[0].biddedAt")
                         .value(1_754_122_920_000L))
-                .andExpect(jsonPath("$.data.bidLog[0].isMe").value(true))
-                .andExpect(jsonPath("$.data.bidLog[1].bidder").value("민**켓"))
-                .andExpect(jsonPath("$.data.bidLog[1].isMe").value(false));
+                .andExpect(jsonPath("$.data.bidLog[1].bidder").value("민**켓"));
 
-        verify(bidHistoryService).getBidHistory(1L, 7L);
+        verify(bidHistoryService).getBidHistory(1L);
     }
 
     @Test
     void 입찰_내역이_없으면_빈_목록을_응답한다() throws Exception {
-        when(bidHistoryService.getBidHistory(2L, 7L))
+        when(bidHistoryService.getBidHistory(2L))
                 .thenReturn(new BidHistoryResponse(0L, List.of()));
 
-        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 2L)
-                        .session(authenticatedSession(7L)))
+        mockMvc.perform(get("/api/v1/auctions/{auctionId}/bids", 2L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.bidCount").value(0L))
                 .andExpect(jsonPath("$.data.bidLog").isEmpty());

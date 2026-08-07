@@ -58,6 +58,22 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
         """)
     List<BidHistoryRow> findHistoryByAuctionId(@Param("auctionId") long auctionId);
 
+    @Query("""
+        select bid.id,
+               bidder.id,
+               bidder.nickname,
+               bid.price,
+               bid.createdAt
+        from Bid bid
+        join bid.bidder bidder
+        where bid.id = :bidId
+          and bid.auction.id = :auctionId
+        """)
+    Optional<BidHistoryRow> findHistoryByIdAndAuctionId(
+            @Param("bidId") long bidId,
+            @Param("auctionId") long auctionId
+    );
+
 
     // 일반·밀봉입찰을 모두 포함하되 같은 경매 참여는 한 번만 센다.
     @Query(value = """

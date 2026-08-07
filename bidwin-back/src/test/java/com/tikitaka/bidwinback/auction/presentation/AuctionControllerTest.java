@@ -77,6 +77,7 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.data.seller.name").value("판매자"))
                 .andExpect(jsonPath("$.data.seller.verified").value(true))
                 .andExpect(jsonPath("$.data.seller.dealCount").value(12L))
+                .andExpect(jsonPath("$.data.contact").value("01012345678"))
                 .andExpect(jsonPath("$.data.startedAt").doesNotExist());
 
         verify(auctionDetailService).getDetail(1L);
@@ -95,6 +96,7 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.data.dropPrice").value(10_000L))
                 .andExpect(jsonPath("$.data.priceDropIntervalMs").value(600_000L))
                 .andExpect(jsonPath("$.data.serverTime").value(1_754_020_500_000L))
+                .andExpect(jsonPath("$.data.contact").value("01012345678"))
                 .andExpect(jsonPath("$.data.currentPrice").doesNotExist());
 
         verify(auctionDetailService).getDetail(2L);
@@ -179,6 +181,8 @@ class AuctionControllerTest {
                 List.of("https://cdn.example.com/product.jpg"),
                 200_000L,
                 1_754_022_000_000L,
+                1_754_020_500_000L,
+                1_754_021_700_000L,
                 TradeType.DELIVERY,
                 "01012345678",
                 new AuctionSellerResponse(

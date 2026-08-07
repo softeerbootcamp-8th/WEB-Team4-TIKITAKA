@@ -1,7 +1,9 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryRevealed;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,9 @@ class AuctionClosingServiceTest {
     @Mock
     private Auction auction;
 
+    @Mock
+    private UpAuction upAuction;
+
     @InjectMocks
     private AuctionClosingService auctionClosingService;
 
@@ -55,6 +60,7 @@ class AuctionClosingServiceTest {
         // then
         assertThat(closed).isTrue();
         verify(auction).markUnsold(DATABASE_TIME);
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
         verifyNoInteractions(upAuctionSettlementService);
     }
 
@@ -74,7 +80,9 @@ class AuctionClosingServiceTest {
     @Test
     void 마감된_BID_ONGOING_경매는_낙찰자를_판정한다() {
         // given
-        stubLockedAuction(AuctionStatus.BID_ONGOING);
+        stubLockedAuction(upAuction, AuctionStatus.BID_ONGOING);
+        when(upAuction.getId()).thenReturn(AUCTION_ID);
+        when(upAuction.getRevision()).thenReturn(8L);
 
         // when
         boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
@@ -82,7 +90,8 @@ class AuctionClosingServiceTest {
         // then
         assertThat(closed).isTrue();
         verify(upAuctionSettlementService).settle(AUCTION_ID);
-        verify(auction, never()).markUnsold(any());
+        verify(upAuction, never()).markUnsold(any());
+        verify(eventPublisher).publishEvent(new AuctionBidHistoryRevealed(AUCTION_ID, 8L));
     }
 
     @Test
@@ -97,13 +106,17 @@ class AuctionClosingServiceTest {
         // then
         assertThat(closed).isFalse();
         verify(auctionRepository, never()).findById(AUCTION_ID);
-        verifyNoInteractions(auction, upAuctionSettlementService);
+        verifyNoInteractions(auction, upAuction, upAuctionSettlementService, eventPublisher);
     }
 
     private void stubLockedAuction(AuctionStatus status) {
+        stubLockedAuction(auction, status);
+    }
+
+    private void stubLockedAuction(Auction lockedAuction, AuctionStatus status) {
         when(auctionRepository.findClosingCandidateIdForUpdateSkipLocked(AUCTION_ID))
                 .thenReturn(Optional.of(AUCTION_ID));
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
-        when(auction.getStatus()).thenReturn(status);
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(lockedAuction));
+        when(lockedAuction.getStatus()).thenReturn(status);
     }
 }

@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
@@ -125,6 +126,7 @@ public class BidService {
                 .build());
 
         eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
+        eventPublisher.publishEvent(new AuctionBidCreated(auction.getId(), bid.getId()));
         return BidResult.from(bid);
     }
 
