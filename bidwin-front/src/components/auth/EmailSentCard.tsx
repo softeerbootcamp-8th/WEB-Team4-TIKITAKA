@@ -18,6 +18,8 @@ interface EmailSentCardProps {
   onResend: () => Promise<string | null>
   resendLabel?: string
   resendToastMessage?: string
+  initialError?: string
+  startWithCooldown?: boolean
   footer?: ReactNode
 }
 
@@ -27,12 +29,16 @@ function EmailSentCard({
   onResend,
   resendLabel = '메일 재전송',
   resendToastMessage = '메일을 다시 보냈어요.',
+  initialError,
+  startWithCooldown = true,
   footer,
 }: EmailSentCardProps) {
   const { showToast } = useToast()
-  const [cooldownDeadline, setCooldownDeadline] = useState(makeCooldownDeadline)
+  const [cooldownDeadline, setCooldownDeadline] = useState(() =>
+    startWithCooldown ? makeCooldownDeadline() : Date.now(),
+  )
   const [isResending, setIsResending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError ?? null)
   const { remaining, isEnded } = useCountdown(cooldownDeadline)
 
   const handleResend = async () => {
@@ -69,7 +75,11 @@ function EmailSentCard({
         >
           {isResending ? '전송 중…' : isEnded ? resendLabel : `재전송까지 ${remaining}초`}
         </Button>
-        {error && <p className="text-sm text-down">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-down">
+            {error}
+          </p>
+        )}
         {footer}
       </div>
     </Card>
