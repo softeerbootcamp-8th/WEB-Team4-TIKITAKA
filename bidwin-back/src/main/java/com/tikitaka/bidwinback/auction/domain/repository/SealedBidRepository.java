@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.MyBidAggregate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +19,22 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
             where sealedBid.auction.id = :auctionId
             """)
     Long findHighestPriceByAuctionId(@Param("auctionId") long auctionId);
+
+    long countByAuctionId(long auctionId);
+
+    @Query("""
+            select sealedBid.id,
+                   bidder.id,
+                   bidder.nickname,
+                   sealedBid.price,
+                   sealedBid.submittedAt
+            from SealedBid sealedBid
+            join sealedBid.bidder bidder
+            where sealedBid.auction.id = :auctionId
+            order by sealedBid.submittedAt desc, sealedBid.id desc
+            limit 10
+            """)
+    List<BidHistoryRow> findHistoryByAuctionId(@Param("auctionId") long auctionId);
 
     // 마이페이지 입찰 내역용. BidRepository.summarizeMyBidsByMemberId와 같은 모양으로,
     // 밀봉 구간에 내가 넣은 밀봉입찰의 경매별 최고가·마지막 제출 시각을 뽑는다.

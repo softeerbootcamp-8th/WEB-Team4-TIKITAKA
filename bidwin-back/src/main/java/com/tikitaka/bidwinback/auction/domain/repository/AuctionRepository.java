@@ -22,6 +22,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
     // 단일 조건부 UPDATE로 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
     // current_price가 없는 기존 경매만 Bid 최고가, 입찰도 없으면 시작가를 기준으로 한다.
+    // 락 대기 중 흐른 시간까지 반영하도록 statement 시작 시각이 아닌 SYSDATE(6)를 사용한다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """

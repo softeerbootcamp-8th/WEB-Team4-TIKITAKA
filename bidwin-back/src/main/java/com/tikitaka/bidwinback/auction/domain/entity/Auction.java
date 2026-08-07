@@ -105,6 +105,12 @@ public abstract class Auction extends BaseTimeEntity {
         return currentPrice != null;
     }
 
+    public boolean isSealedBidRevealed() {
+        return status == AuctionStatus.WINNER_DETERMINING
+                || status == AuctionStatus.COMPLETED
+                || status == AuctionStatus.UNSOLD;
+    }
+
     public void complete(long finalPrice, LocalDateTime completedAt) {
         if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
             throw new IllegalStateException("진행 중인 경매만 낙찰 처리할 수 있습니다.");

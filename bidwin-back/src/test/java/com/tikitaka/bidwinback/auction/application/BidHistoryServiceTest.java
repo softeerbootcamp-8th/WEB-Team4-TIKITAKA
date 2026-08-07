@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
@@ -37,11 +38,18 @@ class BidHistoryServiceTest {
     @Mock
     private BidRepository bidRepository;
 
+    @Mock
+    private SealedBidRepository sealedBidRepository;
+
     private BidHistoryService bidHistoryService;
 
     @BeforeEach
     void setUp() {
-        bidHistoryService = new BidHistoryService(auctionRepository, bidRepository);
+        bidHistoryService = new BidHistoryService(
+                auctionRepository,
+                bidRepository,
+                sealedBidRepository
+        );
     }
 
     @Test
@@ -94,6 +102,44 @@ class BidHistoryServiceTest {
     }
 
     @Test
+    void 낙찰자_결정_상태부터_일반입찰과_밀봉입찰을_최신순으로_공개한다() {
+        UpAuction auction = mock(UpAuction.class);
+        LocalDateTime openBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
+        LocalDateTime latestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
+        LocalDateTime oldestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 0);
+        when(auction.isSealedBidRevealed()).thenReturn(true);
+        when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
+        when(bidRepository.countByAuctionId(1L)).thenReturn(1L);
+        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(2L);
+        when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(13L, 8L, "일반입찰자", 210_000L, openBidAt)
+        ));
+        when(sealedBidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
+                new BidHistoryRow(14L, 7L, "내닉네임", 250_000L, latestSealedBidAt),
+                new BidHistoryRow(12L, 9L, "밀봉입찰자", 230_000L, oldestSealedBidAt)
+        ));
+
+        BidHistoryResponse response = bidHistoryService.getBidHistory(1L, 7L);
+
+        assertThat(response.bidCount()).isEqualTo(3L);
+        assertThat(response.bidLog()).satisfiesExactly(
+                bid -> {
+                    assertThat(bid.id()).isEqualTo(14L);
+                    assertThat(bid.bidder()).isEqualTo("나");
+                    assertThat(bid.amount()).isEqualTo(250_000L);
+                },
+                bid -> {
+                    assertThat(bid.id()).isEqualTo(13L);
+                    assertThat(bid.amount()).isEqualTo(210_000L);
+                },
+                bid -> {
+                    assertThat(bid.id()).isEqualTo(12L);
+                    assertThat(bid.amount()).isEqualTo(230_000L);
+                }
+        );
+    }
+
+    @Test
     void 존재하지_않는_경매는_404_예외가_발생한다() {
         when(auctionRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -104,6 +150,8 @@ class BidHistoryServiceTest {
 
         verify(bidRepository, never()).findHistoryByAuctionId(999L);
         verify(bidRepository, never()).countByAuctionId(999L);
+        verify(sealedBidRepository, never()).findHistoryByAuctionId(999L);
+        verify(sealedBidRepository, never()).countByAuctionId(999L);
     }
 
     @Test
