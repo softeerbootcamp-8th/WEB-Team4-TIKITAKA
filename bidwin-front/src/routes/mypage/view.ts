@@ -1,5 +1,6 @@
 import type { BadgeTone } from '../../components/ui/Badge'
 import type { AuctionType } from '../auctions/types'
+import type { DownPricing } from '../../lib/auctionPricing'
 import {
   BUYING_STATUS_LABEL,
   BUYING_STATUS_TONE,
@@ -25,6 +26,7 @@ export interface ItemCardModel {
   isSettled: boolean
   /** 아직 손이 가야 하는 건인지. 미리보기에서 이런 물품을 앞으로 당긴다. */
   isOngoing: boolean
+  downPricing?: DownPricing
 }
 
 /** 진행 중인 물품을 앞으로 당긴다. 같은 무리 안에서는 받은 순서를 그대로 둔다. */
@@ -44,6 +46,7 @@ export function toSellingCard(item: SellingItem): ItemCardModel {
     statusTone: SELLING_STATUS_TONE[item.status],
     isSettled: item.status !== 'ON_SALE',
     isOngoing: item.status === 'ON_SALE',
+    downPricing: item.status === 'ON_SALE' ? item.downPricing ?? undefined : undefined,
   }
 }
 

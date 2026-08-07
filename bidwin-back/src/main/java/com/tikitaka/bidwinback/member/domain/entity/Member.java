@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.member.domain.entity;
 
+import com.tikitaka.bidwinback.global.common.entity.BaseTimeEntity;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -35,7 +36,8 @@ import static lombok.AccessLevel.PROTECTED;
         }
 )
 @NoArgsConstructor(access = PROTECTED)
-public class Member {
+// 마이페이지 가입일 표시를 위해 생성 시각(created_at)을 기록한다.
+public class Member extends BaseTimeEntity {
 
     public static final String EMAIL_UNIQUE_CONSTRAINT = "uk_member_email";
     public static final String NICKNAME_UNIQUE_CONSTRAINT = "uk_member_nickname";
