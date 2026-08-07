@@ -111,6 +111,14 @@ public class Member extends BaseTimeEntity {
         this.authVersion++;
     }
 
+    public void changeProfileImage(String objectKey) {
+        this.profileObjectKey = objectKey;
+    }
+
+    public void resetProfileImage() {
+        this.profileObjectKey = DEFAULT_PROFILE_OBJECT_KEY;
+    }
+
     public void changeNickname(String nickname) {
         this.nickname = nickname;
     }
