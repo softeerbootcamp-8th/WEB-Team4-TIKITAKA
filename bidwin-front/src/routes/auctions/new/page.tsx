@@ -14,6 +14,8 @@ import {
   uploadImageToPresignedUrl,
 } from '../../../lib/api/auctionImage'
 import type { AuctionImagePresignResponse } from '../../../lib/api/auctionImage'
+import { requestAuctionCreate } from '../../../lib/api/auctions'
+import type { AuctionCategory } from '../../../lib/api/auctions'
 import ImageUploader from './ImageUploader'
 import type { AuctionImageItem } from './ImageUploader'
 import {
@@ -220,11 +222,35 @@ function AuctionRegisterPage() {
     setError(null)
 
     setIsSubmitting(true)
-    /*
-     * TODO: 경매 등록 API가 백엔드에 아직 없어(POST /api/v1/auctions 등 미구현) 임시로 접수만 처리한다.
-     * API가 추가되면 여기서 fields + images[].objectKey를 실제 요청으로 보낸다.
-     */
+    const imageKeys = images.flatMap((image) => image.objectKey ? [image.objectKey] : [])
+    if (draftId === null || imageKeys.length !== images.length) {
+      setIsSubmitting(false)
+      setError(ERROR_MESSAGE.imageUploadFailed)
+      return
+    }
+
+    const result = await requestAuctionCreate({
+      draftId,
+      title: fields.title,
+      description: fields.description,
+      category: fields.category as AuctionCategory,
+      contact: fields.contact,
+      auctionType,
+      tradeType,
+      durationMinutes: Number(durationMinutes),
+      startPrice: Number(startPrice),
+      buyNowPrice: auctionType === 'UP' && buyNowPrice ? Number(buyNowPrice) : null,
+      minimumPrice: auctionType === 'DOWN' ? Number(minimumPrice) : null,
+      dropPrice: auctionType === 'DOWN' ? Number(dropPrice) : null,
+      priceDropInterval: auctionType === 'DOWN' ? Number(priceDropInterval) : null,
+      images: imageKeys,
+    })
     setIsSubmitting(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+
     showToast(TEXT.submitSuccessToast)
     setIsSubmitted(true)
   }

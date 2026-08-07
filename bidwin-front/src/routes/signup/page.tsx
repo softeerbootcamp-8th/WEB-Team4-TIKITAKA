@@ -1,14 +1,18 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ShieldCheck } from 'lucide-react'
+import { Check, UserRound } from 'lucide-react'
 import AuthFormError from '../../components/auth/AuthFormError'
 import AuthSplitLayout from '../../components/auth/AuthSplitLayout'
 import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
 import Button from '../../components/ui/Button'
 import TextInput from '../../components/ui/TextInput'
 import { useToast } from '../../hooks/useToast'
-import { requestSignUp } from '../../lib/api/auth'
+import {
+  requestEmailAvailability,
+  requestNicknameAvailability,
+  requestSignUp,
+} from '../../lib/api/auth'
 import {
   AUTH_ERROR_MESSAGE,
   EMAIL_MAX_LENGTH,
@@ -21,30 +25,37 @@ import {
   validateNickname,
 } from '../../lib/auth/validation'
 import { formatPhoneNumber } from '../../lib/format'
-import PassVerificationModal from './PassVerificationModal'
-import type { VerifiedIdentity } from './PassVerificationModal'
+import MemberInfoModal from './MemberInfoModal'
+import type { SignupIdentity } from './MemberInfoModal'
 
 const TEXT = {
   title: '회원가입',
   subtitle: '급처마켓 계정을 만들고 경매에 참여해보세요.',
   emailLabel: '이메일',
   emailPlaceholder: '이메일 주소를 입력하세요',
+  availabilityCheck: '중복 확인',
+  availabilityChecking: '확인 중…',
+  availabilityChecked: '확인 완료',
+  emailAvailable: '사용 가능한 이메일입니다.',
+  emailUnavailable: '이미 사용 중인 이메일입니다.',
   passwordLabel: '비밀번호',
   passwordPlaceholder: `${PASSWORD_MIN_LENGTH}자 이상, 특수문자를 포함해주세요`,
   passwordConfirmLabel: '비밀번호 확인',
   passwordConfirmPlaceholder: '비밀번호를 다시 입력하세요',
   nicknameLabel: '닉네임',
   nicknamePlaceholder: `${NICKNAME_MIN_LENGTH}~${NICKNAME_MAX_LENGTH}자로 입력하세요`,
-  identityLabel: '본인인증',
-  passVerify: 'PASS로 본인인증',
-  passVerified: '본인인증 완료',
+  nicknameAvailable: '사용 가능한 닉네임입니다.',
+  nicknameUnavailable: '이미 사용 중인 닉네임입니다.',
+  identityLabel: '본인 정보',
+  memberInfoInput: '이름·전화번호 입력',
+  memberInfoComplete: '본인 정보 입력 완료',
   submit: '회원가입',
   submitting: '가입 처리 중…',
   loginPrompt: '이미 계정이 있으신가요?',
   login: '로그인',
   imagePlaceholder: '이미지 영역 2',
   signUpSuccess: '회원가입이 완료됐어요. 이메일 인증을 진행해주세요.',
-  passVerifiedToast: '본인인증이 완료됐어요.',
+  memberInfoCompleteToast: '본인 정보를 입력했어요.',
 }
 
 const ROUTE = {
@@ -54,11 +65,29 @@ const ROUTE = {
 
 const ERROR_MESSAGE = {
   emptyField: '이메일, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.',
-  identityRequired: 'PASS 본인인증을 완료해주세요.',
+  emailAvailabilityRequired: '이메일 중복 확인을 완료해주세요.',
+  nicknameAvailabilityRequired: '닉네임 중복 확인을 완료해주세요.',
+  identityRequired: '본인 정보를 입력해주세요.',
 }
 
 const FORM_ERROR_ID = 'signup-form-error'
-const PASS_BUTTON_ICON_SIZE = 18
+const EMAIL_AVAILABILITY_ID = 'signup-email-availability'
+const NICKNAME_AVAILABILITY_ID = 'signup-nickname-availability'
+const MEMBER_INFO_ICON_SIZE = 18
+
+type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'error'
+
+interface AvailabilityCheck {
+  status: AvailabilityStatus
+  value: string
+  message: string | null
+}
+
+const INITIAL_AVAILABILITY_CHECK: AvailabilityCheck = {
+  status: 'idle',
+  value: '',
+  message: null,
+}
 
 interface SignUpFields {
   email: string
@@ -93,15 +122,29 @@ function SignupPage() {
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [nickname, setNickname] = useState('')
-  /* PASS 인증으로 받은 이름·전화번호. 성공 이후에는 다시 인증할 수 없다. */
-  const [identity, setIdentity] = useState<VerifiedIdentity | null>(null)
-  const [isPassModalOpen, setIsPassModalOpen] = useState(false)
+  const [emailAvailability, setEmailAvailability] = useState(INITIAL_AVAILABILITY_CHECK)
+  const [nicknameAvailability, setNicknameAvailability] = useState(INITIAL_AVAILABILITY_CHECK)
+  const emailAvailabilityRequestId = useRef(0)
+  const nicknameAvailabilityRequestId = useRef(0)
+  /* 회원가입 API에 전달할 이름·전화번호. 입력 이후에는 다시 열지 않는다. */
+  const [identity, setIdentity] = useState<SignupIdentity | null>(null)
+  const [isMemberInfoModalOpen, setIsMemberInfoModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { showToast } = useToast()
   const navigate = useNavigate()
 
-  const isIdentityVerified = identity !== null
+  const isMemberInfoComplete = identity !== null
+  const trimmedEmail = email.trim()
+  const trimmedNickname = nickname.trim()
+  const isEmailAvailable = emailAvailability.status === 'available'
+    && emailAvailability.value === trimmedEmail
+  const isNicknameAvailable = nicknameAvailability.status === 'available'
+    && nicknameAvailability.value === trimmedNickname
+  const showEmailAvailability = emailAvailability.value === trimmedEmail
+    && emailAvailability.message !== null
+  const showNicknameAvailability = nicknameAvailability.value === trimmedNickname
+    && nicknameAvailability.message !== null
 
   const handleFieldChange =
     (setField: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -109,25 +152,102 @@ function SignupPage() {
       setError(null)
     }
 
-  const handleOpenPassModal = () => {
-    /* 한 번 인증에 성공하면 버튼을 막는다. */
-    if (isIdentityVerified) return
-    setIsPassModalOpen(true)
+  const handleEmailChange = (event: ChangeEvent<HTMLInputElement>) => {
+    emailAvailabilityRequestId.current += 1
+    setEmail(event.target.value)
+    setEmailAvailability(INITIAL_AVAILABILITY_CHECK)
+    setError(null)
   }
 
-  const handlePassVerified = (verified: VerifiedIdentity) => {
-    setIdentity(verified)
-    setIsPassModalOpen(false)
+  const handleNicknameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    nicknameAvailabilityRequestId.current += 1
+    setNickname(event.target.value)
+    setNicknameAvailability(INITIAL_AVAILABILITY_CHECK)
     setError(null)
-    showToast(TEXT.passVerifiedToast)
+  }
+
+  const handleCheckEmailAvailability = async () => {
+    setError(null)
+    const validationError = validateEmail(trimmedEmail)
+    if (validationError) {
+      setEmailAvailability({
+        status: 'error',
+        value: trimmedEmail,
+        message: validationError,
+      })
+      return
+    }
+
+    const requestId = ++emailAvailabilityRequestId.current
+    setEmailAvailability({ status: 'checking', value: trimmedEmail, message: null })
+    const result = await requestEmailAvailability(trimmedEmail)
+    if (requestId !== emailAvailabilityRequestId.current) return
+
+    if (!result.ok || !result.data.available) {
+      setEmailAvailability({
+        status: 'error',
+        value: trimmedEmail,
+        message: result.ok ? TEXT.emailUnavailable : result.message,
+      })
+      return
+    }
+
+    setEmailAvailability({
+      status: 'available',
+      value: trimmedEmail,
+      message: TEXT.emailAvailable,
+    })
+  }
+
+  const handleCheckNicknameAvailability = async () => {
+    setError(null)
+    const validationError = validateNickname(trimmedNickname)
+    if (validationError) {
+      setNicknameAvailability({
+        status: 'error',
+        value: trimmedNickname,
+        message: validationError,
+      })
+      return
+    }
+
+    const requestId = ++nicknameAvailabilityRequestId.current
+    setNicknameAvailability({ status: 'checking', value: trimmedNickname, message: null })
+    const result = await requestNicknameAvailability(trimmedNickname)
+    if (requestId !== nicknameAvailabilityRequestId.current) return
+
+    if (!result.ok || !result.data.available) {
+      setNicknameAvailability({
+        status: 'error',
+        value: trimmedNickname,
+        message: result.ok ? TEXT.nicknameUnavailable : result.message,
+      })
+      return
+    }
+
+    setNicknameAvailability({
+      status: 'available',
+      value: trimmedNickname,
+      message: TEXT.nicknameAvailable,
+    })
+  }
+
+  const handleOpenMemberInfoModal = () => {
+    /* 한 번 입력을 마치면 버튼을 막는다. */
+    if (isMemberInfoComplete) return
+    setIsMemberInfoModalOpen(true)
+  }
+
+  const handleMemberInfoComplete = (memberInfo: SignupIdentity) => {
+    setIdentity(memberInfo)
+    setIsMemberInfoModalOpen(false)
+    setError(null)
+    showToast(TEXT.memberInfoCompleteToast)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isSubmitting) return
-
-    const trimmedEmail = email.trim()
-    const trimmedNickname = nickname.trim()
 
     const fieldError = validateSignUpFields({
       email: trimmedEmail,
@@ -137,6 +257,14 @@ function SignupPage() {
     })
     if (fieldError) {
       setError(fieldError)
+      return
+    }
+    if (!isEmailAvailable) {
+      setError(ERROR_MESSAGE.emailAvailabilityRequired)
+      return
+    }
+    if (!isNicknameAvailable) {
+      setError(ERROR_MESSAGE.nicknameAvailabilityRequired)
       return
     }
     if (identity === null) {
@@ -185,16 +313,52 @@ function SignupPage() {
         </div>
 
         <div className="flex flex-col gap-base">
-          <TextInput
-            label={TEXT.emailLabel}
-            type="email"
-            value={email}
-            onChange={handleFieldChange(setEmail)}
-            placeholder={TEXT.emailPlaceholder}
-            autoComplete="email"
-            maxLength={EMAIL_MAX_LENGTH}
-            {...errorProps}
-          />
+          <div className="flex flex-col gap-xs">
+            <div className="flex items-end gap-xs">
+              <div className="min-w-0 flex-1">
+                <TextInput
+                  label={TEXT.emailLabel}
+                  type="email"
+                  value={email}
+                  onChange={handleEmailChange}
+                  placeholder={TEXT.emailPlaceholder}
+                  autoComplete="email"
+                  maxLength={EMAIL_MAX_LENGTH}
+                  {...errorProps}
+                  aria-invalid={hasError || emailAvailability.status === 'error'}
+                  aria-describedby={[
+                    showEmailAvailability ? EMAIL_AVAILABILITY_ID : null,
+                    errorProps['aria-describedby'],
+                  ].filter(Boolean).join(' ') || undefined}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                onClick={handleCheckEmailAvailability}
+                disabled={
+                  isSubmitting
+                  || emailAvailability.status === 'checking'
+                  || isEmailAvailable
+                }
+                className="shrink-0 whitespace-nowrap px-base text-sm"
+              >
+                {emailAvailability.status === 'checking'
+                  ? TEXT.availabilityChecking
+                  : isEmailAvailable
+                    ? TEXT.availabilityChecked
+                    : TEXT.availabilityCheck}
+              </Button>
+            </div>
+            {showEmailAvailability && (
+              <p
+                id={EMAIL_AVAILABILITY_ID}
+                role={emailAvailability.status === 'error' ? 'alert' : 'status'}
+                className={`text-sm ${emailAvailability.status === 'available' ? 'text-up' : 'text-down'}`}
+              >
+                {emailAvailability.message}
+              </p>
+            )}
+          </div>
           <TextInput
             label={TEXT.passwordLabel}
             type="password"
@@ -215,36 +379,72 @@ function SignupPage() {
             maxLength={PASSWORD_MAX_LENGTH}
             {...errorProps}
           />
-          <TextInput
-            label={TEXT.nicknameLabel}
-            value={nickname}
-            onChange={handleFieldChange(setNickname)}
-            placeholder={TEXT.nicknamePlaceholder}
-            autoComplete="nickname"
-            maxLength={NICKNAME_MAX_LENGTH}
-            {...errorProps}
-          />
+          <div className="flex flex-col gap-xs">
+            <div className="flex items-end gap-xs">
+              <div className="min-w-0 flex-1">
+                <TextInput
+                  label={TEXT.nicknameLabel}
+                  value={nickname}
+                  onChange={handleNicknameChange}
+                  placeholder={TEXT.nicknamePlaceholder}
+                  autoComplete="nickname"
+                  maxLength={NICKNAME_MAX_LENGTH}
+                  {...errorProps}
+                  aria-invalid={hasError || nicknameAvailability.status === 'error'}
+                  aria-describedby={[
+                    showNicknameAvailability ? NICKNAME_AVAILABILITY_ID : null,
+                    errorProps['aria-describedby'],
+                  ].filter(Boolean).join(' ') || undefined}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                onClick={handleCheckNicknameAvailability}
+                disabled={
+                  isSubmitting
+                  || nicknameAvailability.status === 'checking'
+                  || isNicknameAvailable
+                }
+                className="shrink-0 whitespace-nowrap px-base text-sm"
+              >
+                {nicknameAvailability.status === 'checking'
+                  ? TEXT.availabilityChecking
+                  : isNicknameAvailable
+                    ? TEXT.availabilityChecked
+                    : TEXT.availabilityCheck}
+              </Button>
+            </div>
+            {showNicknameAvailability && (
+              <p
+                id={NICKNAME_AVAILABILITY_ID}
+                role={nicknameAvailability.status === 'error' ? 'alert' : 'status'}
+                className={`text-sm ${nicknameAvailability.status === 'available' ? 'text-up' : 'text-down'}`}
+              >
+                {nicknameAvailability.message}
+              </p>
+            )}
+          </div>
 
-          {/* 본인인증: 인증 전에는 PASS 모달을 열고, 성공하면 버튼이 막힌다. */}
+          {/* 회원가입 API가 요구하는 이름과 전화번호를 별도 모달에서 입력한다. */}
           <div className="flex flex-col gap-xs">
             <span className="text-sm font-semibold text-body">
               {TEXT.identityLabel}
             </span>
             <Button
               variant="secondary"
-              onClick={handleOpenPassModal}
-              disabled={isIdentityVerified}
+              onClick={handleOpenMemberInfoModal}
+              disabled={isMemberInfoComplete}
               className="w-full"
             >
-              {isIdentityVerified ? (
+              {isMemberInfoComplete ? (
                 <>
-                  <Check size={PASS_BUTTON_ICON_SIZE} className="text-up" />
-                  {TEXT.passVerified}
+                  <Check size={MEMBER_INFO_ICON_SIZE} className="text-up" />
+                  {TEXT.memberInfoComplete}
                 </>
               ) : (
                 <>
-                  <ShieldCheck size={PASS_BUTTON_ICON_SIZE} />
-                  {TEXT.passVerify}
+                  <UserRound size={MEMBER_INFO_ICON_SIZE} />
+                  {TEXT.memberInfoInput}
                 </>
               )}
             </Button>
@@ -275,10 +475,10 @@ function SignupPage() {
         </div>
       </form>
 
-      <PassVerificationModal
-        isOpen={isPassModalOpen}
-        onClose={() => setIsPassModalOpen(false)}
-        onVerified={handlePassVerified}
+      <MemberInfoModal
+        isOpen={isMemberInfoModalOpen}
+        onClose={() => setIsMemberInfoModalOpen(false)}
+        onComplete={handleMemberInfoComplete}
       />
     </AuthSplitLayout>
   )

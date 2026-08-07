@@ -30,8 +30,7 @@ interface MyInfoDrawerProps {
   onClose: () => void
   profile: MyProfile
   onChangeNickname: (nickname: string) => void
-  onChangeImage: (file: File | null) => void
-  onLeave: () => void
+  onChangeImage: (profileImageUrl: string | null) => void
   /** 값이 있으면 탈퇴를 막고 그 이유를 보여준다. */
   leaveBlockReason?: string
 }
@@ -42,7 +41,6 @@ function MyInfoDrawer({
   profile,
   onChangeNickname,
   onChangeImage,
-  onLeave,
   leaveBlockReason,
 }: MyInfoDrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -132,11 +130,6 @@ function MyInfoDrawer({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isRendered, isLeaveModalOpen, onClose])
 
-  function handleLeave() {
-    setIsLeaveModalOpen(false)
-    onLeave()
-  }
-
   if (!isRendered) return null
 
   return (
@@ -217,7 +210,7 @@ function MyInfoDrawer({
       <LeaveAccountModal
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
-        onConfirm={handleLeave}
+        onConfirm={() => setIsLeaveModalOpen(false)}
         blockReason={leaveBlockReason}
       />
     </>

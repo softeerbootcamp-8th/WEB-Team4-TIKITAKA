@@ -1,21 +1,39 @@
 import { Clock, Gavel, PackageCheck, ShieldCheck, Store, Trophy } from 'lucide-react'
-import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Badge from '../../../components/ui/Badge'
 import type { BadgeTone } from '../../../components/ui/Badge'
+import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
+import Pagination from '../../auctions/components/Pagination'
 import { useCountdown } from '../../../hooks/useCountdown'
+import {
+  requestMyBidRecords,
+  requestMyDepositRecords,
+  requestMyPage,
+  requestMySaleRecords,
+  requestMyTradeRecords,
+} from '../../../lib/api/mypage'
+import type {
+  DepositStatus,
+  HistorySort,
+  MyBidRecord,
+  MyDepositRecord,
+  MySaleRecord,
+  MyTradeRecord,
+  PageResponse,
+  TradeRoute,
+  TradeStatus,
+} from '../../../lib/api/mypage'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
+import ItemThumbnail from '../components/ItemThumbnail'
 import { DEFAULT_HISTORY_TAB, HISTORY_TAB, HISTORY_TAB_PARAM } from '../constants'
 import type { HistoryTabKey } from '../constants'
 
-/*
- * 마이페이지 내역 API가 아직 없어서 임시 데이터를 쓴다.
- * 실제 연동 시 아래 MOCK_* 배열을 fetch 결과로 바꾸면 된다.
- *
- * 어떤 탭을 볼지는 쿼리 스트링(?tab=)에 담는다. 마이페이지에서 "구매 내역"처럼
- * 특정 탭으로 바로 들어올 수 있고, 뒤로 가기로 이전 탭에 돌아올 수 있다.
- */
+const PAGE_SIZE = 10
+const FIRST_PAGE = 1
+const THUMBNAIL_CLASS = 'h-20 w-20'
+
 const RECORD_TABS = [
   { key: HISTORY_TAB.bidding, label: '입찰 내역', icon: Gavel },
   { key: HISTORY_TAB.won, label: '낙찰 내역', icon: Trophy },
@@ -24,204 +42,263 @@ const RECORD_TABS = [
   { key: HISTORY_TAB.deposit, label: '보증금 내역', icon: ShieldCheck },
 ] as const
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: { key: HistorySort; label: string }[] = [
   { key: 'latest', label: '최신순' },
   { key: 'oldest', label: '오래된순' },
-] as const
+]
 
-type SortKey = (typeof SORT_OPTIONS)[number]['key']
+interface FilterOption {
+  label: string
+  value: string
+}
 
-const ALL_FILTER = '전체'
+const ALL_FILTER: FilterOption = { label: '전체', value: '' }
+const STATUS_FILTERS: Record<HistoryTabKey, FilterOption[]> = {
+  bidding: [
+    ALL_FILTER,
+    { label: '최고가 입찰 중', value: 'WINNING' },
+    { label: '다른 사람이 더 높음', value: 'LOSING' },
+  ],
+  won: [
+    ALL_FILTER,
+    { label: '결제 대기', value: 'WAITING_CONFIRM' },
+    { label: '거래 중', value: 'CONFIRMED' },
+    { label: '거래 완료', value: 'COMPLETED' },
+    { label: '구매자 미확정', value: 'BUYER_FAILED' },
+    { label: '판매자 미확정', value: 'SELLER_FAILED' },
+  ],
+  purchase: [ALL_FILTER],
+  selling: [
+    ALL_FILTER,
+    { label: '진행중', value: 'ON_SALE' },
+    { label: '낙찰 완료', value: 'SOLD' },
+    { label: '유찰', value: 'FAILED' },
+  ],
+  deposit: [
+    ALL_FILTER,
+    { label: '보유중', value: 'HELD' },
+    { label: '환불 완료', value: 'REFUNDED' },
+    { label: '몰수', value: 'FORFEITED' },
+    { label: '사용 완료', value: 'USED' },
+  ],
+}
 
-const STATUS_FILTERS: Record<HistoryTabKey, readonly string[]> = {
-  bidding: [ALL_FILTER, '최고가 입찰 중', '다른 사람이 더 높음'],
-  won: [ALL_FILTER, '결제 대기', '거래 중', '거래 완료'],
-  purchase: [ALL_FILTER, '낙찰', '즉시 구매'],
-  selling: [ALL_FILTER, '진행중', '낙찰 완료', '유찰'],
-  deposit: [ALL_FILTER, '보유중', '환불 완료', '몰수'],
+const TRADE_STATUS_LABEL: Record<TradeStatus, string> = {
+  WAITING_CONFIRM: '결제 대기',
+  CONFIRMED: '거래 중',
+  COMPLETED: '거래 완료',
+  BUYER_FAILED: '구매자 미확정',
+  SELLER_FAILED: '판매자 미확정',
+}
+
+const TRADE_STATUS_TONE: Record<TradeStatus, BadgeTone> = {
+  WAITING_CONFIRM: 'primary',
+  CONFIRMED: 'neutral',
+  COMPLETED: 'success',
+  BUYER_FAILED: 'danger',
+  SELLER_FAILED: 'danger',
+}
+
+const TRADE_ROUTE_LABEL: Record<TradeRoute, string> = {
+  WON: '낙찰',
+  BUY_NOW: '즉시 구매',
+}
+
+const TRADE_ROUTE_TONE: Record<TradeRoute, BadgeTone> = {
+  WON: 'neutral',
+  BUY_NOW: 'primary',
+}
+
+const DEPOSIT_STATUS_LABEL: Record<DepositStatus, string> = {
+  HELD: '보유중',
+  REFUNDED: '환불 완료',
+  FORFEITED: '몰수',
+  USED: '사용 완료',
+}
+
+const DEPOSIT_STATUS_TONE: Record<DepositStatus, BadgeTone> = {
+  HELD: 'primary',
+  REFUNDED: 'success',
+  FORFEITED: 'danger',
+  USED: 'neutral',
+}
+
+type HistoryResult =
+  | { kind: 'bidding'; data: PageResponse<MyBidRecord> }
+  | { kind: 'won'; data: PageResponse<MyTradeRecord> }
+  | { kind: 'purchase'; data: PageResponse<MyTradeRecord> }
+  | { kind: 'selling'; data: PageResponse<MySaleRecord> }
+  | { kind: 'deposit'; data: PageResponse<MyDepositRecord> }
+
+interface HistorySummary {
+  bidding: number
+  won: number
+  purchase: number
+  selling: number
+  deposit: number
+  sellingOnSale: number
+  heldDeposit: number
 }
 
 function isHistoryTabKey(value: string | null): value is HistoryTabKey {
   return RECORD_TABS.some((tab) => tab.key === value)
 }
 
-interface BiddingRecord {
-  auctionId: number
-  title: string
-  myBidAmount: number
-  deadline: number
-  isWinning: boolean
-  biddedAt: number
-}
-
-interface WonRecord {
-  auctionId: number
-  title: string
-  finalPrice: number
-  wonAt: number
-  tradeStatus: '결제 대기' | '거래 중' | '거래 완료'
-}
-
-/** 결제까지 끝난 구매 건. 상향 경매는 낙찰로, 하향 경매는 즉시 구매로 들어온다. */
-interface PurchaseRecord {
-  auctionId: number
-  title: string
-  paidPrice: number
-  purchasedAt: number
-  route: '낙찰' | '즉시 구매'
-}
-
-interface SellingRecord {
-  auctionId: number
-  title: string
-  price: number
-  status: '진행중' | '낙찰 완료' | '유찰'
-  listedAt: number
-}
-
-interface DepositRecord {
-  depositId: number
-  auctionTitle: string
-  amount: number
-  status: '보유중' | '환불 완료' | '몰수'
-  changedAt: number
-}
-
-const MOCK_BIDDING: BiddingRecord[] = [
-  { auctionId: 101, title: '소니 WH-1000XM5 노이즈캔슬링 헤드폰', myBidAmount: 220000, deadline: Date.now() + 6 * 60 * 1000, isWinning: true, biddedAt: Date.now() - 2 * 60 * 1000 },
-  { auctionId: 102, title: '다이슨 에어랩 컴플리트', myBidAmount: 300000, deadline: Date.now() + 90 * 1000, isWinning: false, biddedAt: Date.now() - 10 * 60 * 1000 },
-  { auctionId: 103, title: '아이패드 프로 11 (M4)', myBidAmount: 850000, deadline: Date.now() + 40 * 60 * 1000, isWinning: true, biddedAt: Date.now() - 60 * 60 * 1000 },
-]
-
-const MOCK_WON: WonRecord[] = [
-  { auctionId: 90, title: '닌텐도 스위치 OLED', finalPrice: 265000, wonAt: Date.now() - 2 * 86400000, tradeStatus: '거래 완료' },
-  { auctionId: 91, title: '캠핑 4인용 텐트 세트', finalPrice: 98000, wonAt: Date.now() - 1 * 86400000, tradeStatus: '거래 중' },
-  { auctionId: 92, title: '르크루제 무쇠 냄비 세트', finalPrice: 150000, wonAt: Date.now() - 3 * 60 * 60 * 1000, tradeStatus: '결제 대기' },
-]
-
-const MOCK_PURCHASE: PurchaseRecord[] = [
-  { auctionId: 90, title: '닌텐도 스위치 OLED', paidPrice: 265000, purchasedAt: Date.now() - 2 * 86400000, route: '낙찰' },
-  { auctionId: 93, title: '소니 WH-1000XM5 노이즈캔슬링 헤드폰', paidPrice: 232000, purchasedAt: Date.now() - 9 * 86400000, route: '낙찰' },
-  { auctionId: 94, title: '허먼밀러 에어론 리마스터드', paidPrice: 520000, purchasedAt: Date.now() - 21 * 86400000, route: '즉시 구매' },
-]
-
-const MOCK_SELLING: SellingRecord[] = [
-  { auctionId: 70, title: '갤럭시 버즈2 프로', price: 95000, status: '진행중', listedAt: Date.now() - 1 * 86400000 },
-  { auctionId: 71, title: '애플워치 SE', price: 180000, status: '낙찰 완료', listedAt: Date.now() - 5 * 86400000 },
-  { auctionId: 72, title: '무선 청소기', price: 60000, status: '유찰', listedAt: Date.now() - 7 * 86400000 },
-]
-
-const MOCK_DEPOSIT: DepositRecord[] = [
-  { depositId: 1, auctionTitle: '소니 WH-1000XM5 노이즈캔슬링 헤드폰', amount: 30000, status: '보유중', changedAt: Date.now() - 2 * 60 * 1000 },
-  { depositId: 2, auctionTitle: '다이슨 에어랩 컴플리트', amount: 40000, status: '보유중', changedAt: Date.now() - 10 * 60 * 1000 },
-  { depositId: 3, auctionTitle: '닌텐도 스위치 OLED', amount: 25000, status: '환불 완료', changedAt: Date.now() - 2 * 86400000 },
-  { depositId: 4, auctionTitle: '캠핑 4인용 텐트 세트', amount: 15000, status: '몰수', changedAt: Date.now() - 1 * 86400000 },
-]
-
-const WON_STATUS_TONE: Record<WonRecord['tradeStatus'], BadgeTone> = {
-  '결제 대기': 'primary',
-  '거래 중': 'neutral',
-  '거래 완료': 'success',
-}
-
-const PURCHASE_ROUTE_TONE: Record<PurchaseRecord['route'], BadgeTone> = {
-  낙찰: 'neutral',
-  '즉시 구매': 'primary',
-}
-
-const SELLING_STATUS_TONE: Record<SellingRecord['status'], BadgeTone> = {
-  진행중: 'dark',
-  '낙찰 완료': 'success',
-  유찰: 'muted',
-}
-
-const DEPOSIT_STATUS_TONE: Record<DepositRecord['status'], BadgeTone> = {
-  보유중: 'primary',
-  '환불 완료': 'success',
-  몰수: 'danger',
-}
-
 function formatRecordDate(timestamp: number) {
   const date = new Date(timestamp)
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${m}.${d} ${formatTimeOfDay(date)}`
-}
-
-function sortByTime<T>(items: T[], sort: SortKey, getTime: (item: T) => number): T[] {
-  return [...items].sort((a, b) =>
-    sort === 'latest' ? getTime(b) - getTime(a) : getTime(a) - getTime(b),
-  )
-}
-
-function biddingStatusLabel(record: BiddingRecord) {
-  return record.isWinning ? '최고가 입찰 중' : '다른 사람이 더 높음'
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${month}.${day} ${formatTimeOfDay(date)}`
 }
 
 function MyRecordsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [sort, setSort] = useState<SortKey>('latest')
-  const [selectedFilter, setSelectedFilter] = useState<string>(ALL_FILTER)
+  const [sort, setSort] = useState<HistorySort>('latest')
+  const [selectedFilter, setSelectedFilter] = useState('')
+  const [pagination, setPagination] = useState({ key: '', page: FIRST_PAGE })
+  const [result, setResult] = useState<HistoryResult | null>(null)
+  const [summary, setSummary] = useState<HistorySummary | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
 
   const tabParam = searchParams.get(HISTORY_TAB_PARAM)
   const activeTab: HistoryTabKey = isHistoryTabKey(tabParam) ? tabParam : DEFAULT_HISTORY_TAB
   const availableFilters = STATUS_FILTERS[activeTab]
+  const statusFilter = availableFilters.some((filter) => filter.value === selectedFilter)
+    ? selectedFilter
+    : ''
+  const queryKey = `${activeTab}\u0000${statusFilter}\u0000${sort}`
+  const page = pagination.key === queryKey ? pagination.page : FIRST_PAGE
 
-  /*
-   * 탭마다 고를 수 있는 상태가 달라서, 지금 탭에 없는 필터는 '전체'로 본다.
-   * 값에서 바로 계산하므로 뒤로 가기로 탭이 바뀌는 경우도 함께 처리된다.
-   */
-  const statusFilter = availableFilters.includes(selectedFilter) ? selectedFilter : ALL_FILTER
+  const redirectToLogin = useCallback(() => {
+    const next = `${location.pathname}${location.search}`
+    navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true })
+  }, [location.pathname, location.search, navigate])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const summaryQuery = { page: FIRST_PAGE, size: 1, sort: 'latest' as const }
+
+    Promise.all([
+      requestMyBidRecords(summaryQuery, controller.signal),
+      requestMyTradeRecords(summaryQuery, controller.signal),
+      requestMyTradeRecords({ ...summaryQuery, status: 'COMPLETED' }, controller.signal),
+      requestMySaleRecords(summaryQuery, controller.signal),
+      requestMyDepositRecords(summaryQuery, controller.signal),
+      requestMySaleRecords({ ...summaryQuery, status: 'ON_SALE' }, controller.signal),
+      requestMyPage(controller.signal),
+    ]).then(([bids, won, purchase, sales, deposits, onSale, myPage]) => {
+      if (controller.signal.aborted) return
+      const responses = [bids, won, purchase, sales, deposits, onSale, myPage]
+      if (responses.some((response) => !response.ok && response.status === 401)) {
+        redirectToLogin()
+        return
+      }
+      if (
+        bids.ok && won.ok && purchase.ok && sales.ok
+        && deposits.ok && onSale.ok && myPage.ok
+      ) {
+        setSummary({
+          bidding: bids.data.totalCount,
+          won: won.data.totalCount,
+          purchase: purchase.data.totalCount,
+          selling: sales.data.totalCount,
+          deposit: deposits.data.totalCount,
+          sellingOnSale: onSale.data.totalCount,
+          heldDeposit: myPage.data.deposit.inUse,
+        })
+      }
+    })
+
+    return () => controller.abort()
+  }, [redirectToLogin, retryToken])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const query = {
+      page,
+      size: PAGE_SIZE,
+      sort,
+      status: activeTab === 'purchase' ? 'COMPLETED' : statusFilter || undefined,
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setResult(null)
+
+    async function load() {
+      if (activeTab === 'bidding') {
+        const response = await requestMyBidRecords(query, controller.signal)
+        return response.ok
+          ? { ok: true as const, value: { kind: 'bidding' as const, data: response.data } }
+          : response
+      }
+      if (activeTab === 'won' || activeTab === 'purchase') {
+        const response = await requestMyTradeRecords(query, controller.signal)
+        return response.ok
+          ? { ok: true as const, value: { kind: activeTab, data: response.data } as HistoryResult }
+          : response
+      }
+      if (activeTab === 'selling') {
+        const response = await requestMySaleRecords(query, controller.signal)
+        return response.ok
+          ? { ok: true as const, value: { kind: 'selling' as const, data: response.data } }
+          : response
+      }
+      const response = await requestMyDepositRecords(query, controller.signal)
+      return response.ok
+        ? { ok: true as const, value: { kind: 'deposit' as const, data: response.data } }
+        : response
+    }
+
+    load().then((response) => {
+      if (controller.signal.aborted) return
+      setIsLoading(false)
+      if (response.ok && 'value' in response) {
+        setResult(response.value)
+        return
+      }
+      if (!response.ok && response.status === 401) {
+        redirectToLogin()
+        return
+      }
+      if (!response.ok) setError(response.message)
+    })
+
+    return () => controller.abort()
+  }, [activeTab, page, queryKey, redirectToLogin, retryToken, sort, statusFilter])
 
   function handleTabChange(tab: HistoryTabKey) {
-    setSelectedFilter(ALL_FILTER)
+    setSelectedFilter('')
     setSearchParams({ [HISTORY_TAB_PARAM]: tab })
   }
 
-  const biddingRecords = sortByTime(MOCK_BIDDING, sort, (r) => r.biddedAt).filter(
-    (r) => statusFilter === ALL_FILTER || biddingStatusLabel(r) === statusFilter,
-  )
-  const wonRecords = sortByTime(MOCK_WON, sort, (r) => r.wonAt).filter(
-    (r) => statusFilter === ALL_FILTER || r.tradeStatus === statusFilter,
-  )
-  const purchaseRecords = sortByTime(MOCK_PURCHASE, sort, (r) => r.purchasedAt).filter(
-    (r) => statusFilter === ALL_FILTER || r.route === statusFilter,
-  )
-  const sellingRecords = sortByTime(MOCK_SELLING, sort, (r) => r.listedAt).filter(
-    (r) => statusFilter === ALL_FILTER || r.status === statusFilter,
-  )
-  const depositRecords = sortByTime(MOCK_DEPOSIT, sort, (r) => r.changedAt).filter(
-    (r) => statusFilter === ALL_FILTER || r.status === statusFilter,
-  )
-
-  const heldDeposit = MOCK_DEPOSIT.filter((d) => d.status === '보유중').reduce(
-    (sum, d) => sum + d.amount,
-    0,
-  )
-  const sellingOnSaleCount = MOCK_SELLING.filter((r) => r.status === '진행중').length
-
-  const tabCounts: Record<HistoryTabKey, number> = {
-    bidding: MOCK_BIDDING.length,
-    won: MOCK_WON.length,
-    purchase: MOCK_PURCHASE.length,
-    selling: MOCK_SELLING.length,
-    deposit: MOCK_DEPOSIT.length,
+  const activeData = result?.kind === activeTab ? result.data : null
+  const tabCounts: Record<HistoryTabKey, number | null> = {
+    bidding: summary?.bidding ?? null,
+    won: summary?.won ?? null,
+    purchase: summary?.purchase ?? null,
+    selling: summary?.selling ?? null,
+    deposit: summary?.deposit ?? null,
   }
 
   return (
     <main className="mx-auto max-w-[1200px] px-lg py-xl">
       <h1 className="text-3xl font-bold text-ink">내 활동 기록</h1>
       <p className="mt-xs text-base text-body">
-        입찰·낙찰·구매·판매·보증금 내역을 한눈에 확인하세요.
+        입찰, 낙찰, 구매, 판매 및 보증금 내역을 한눈에 확인하세요.
       </p>
 
       <div className="mt-xl grid grid-cols-1 gap-xl lg:grid-cols-[280px_1fr]">
         <aside className="flex flex-col gap-base">
           <div className="grid grid-cols-2 gap-sm">
-            <SummaryStat label="입찰 중" value={`${MOCK_BIDDING.length}건`} />
-            <SummaryStat label="낙찰" value={`${MOCK_WON.length}건`} />
-            <SummaryStat label="판매 중" value={`${sellingOnSaleCount}건`} />
-            <SummaryStat label="보유 보증금" value={formatWon(heldDeposit)} />
+            <SummaryStat label="입찰 중" value={summary ? `${summary.bidding}건` : '—'} />
+            <SummaryStat label="낙찰" value={summary ? `${summary.won}건` : '—'} />
+            <SummaryStat label="판매 중" value={summary ? `${summary.sellingOnSale}건` : '—'} />
+            <SummaryStat label="보유 보증금" value={summary ? formatWon(summary.heldDeposit) : '—'} />
           </div>
 
           <nav className="flex flex-col gap-1 rounded-xl border border-hairline-soft bg-canvas p-sm">
@@ -233,14 +310,12 @@ function MyRecordsPage() {
                   key={tab.key}
                   type="button"
                   onClick={() => handleTabChange(tab.key)}
-                  className={`flex items-center gap-sm rounded-md px-base py-sm text-sm font-semibold transition-colors ${
-                    isActive ? 'bg-primary-tint text-primary' : 'text-body hover:bg-surface-soft'
-                  }`}
+                  className={`flex items-center gap-sm rounded-md px-base py-sm text-sm font-semibold transition-colors ${isActive ? 'bg-primary-tint text-primary' : 'text-body hover:bg-surface-soft'}`}
                 >
                   <Icon size={16} />
                   <span className="flex-1 text-left">{tab.label}</span>
                   <span className={isActive ? 'text-primary' : 'text-muted'}>
-                    {tabCounts[tab.key]}
+                    {tabCounts[tab.key] ?? '—'}
                   </span>
                 </button>
               )
@@ -253,16 +328,12 @@ function MyRecordsPage() {
             <div className="flex flex-wrap gap-xs">
               {availableFilters.map((filter) => (
                 <button
-                  key={filter}
+                  key={filter.value || 'all'}
                   type="button"
-                  onClick={() => setSelectedFilter(filter)}
-                  className={`rounded-pill px-base py-1.5 text-xs font-semibold transition-colors ${
-                    statusFilter === filter
-                      ? 'bg-ink text-on-dark'
-                      : 'bg-surface-strong text-body hover:bg-hairline'
-                  }`}
+                  onClick={() => setSelectedFilter(filter.value)}
+                  className={`rounded-pill px-base py-1.5 text-xs font-semibold transition-colors ${statusFilter === filter.value ? 'bg-ink text-on-dark' : 'bg-surface-strong text-body hover:bg-hairline'}`}
                 >
-                  {filter}
+                  {filter.label}
                 </button>
               ))}
             </div>
@@ -273,9 +344,7 @@ function MyRecordsPage() {
                   key={option.key}
                   type="button"
                   onClick={() => setSort(option.key)}
-                  className={`text-xs font-semibold ${
-                    sort === option.key ? 'text-ink underline underline-offset-4' : 'text-muted'
-                  }`}
+                  className={`text-xs font-semibold ${sort === option.key ? 'text-ink underline underline-offset-4' : 'text-muted'}`}
                 >
                   {option.label}
                 </button>
@@ -284,60 +353,57 @@ function MyRecordsPage() {
           </div>
 
           <div className="mt-base grid grid-cols-1 gap-base md:grid-cols-2">
-            {activeTab === HISTORY_TAB.bidding &&
-              (biddingRecords.length > 0 ? (
-                biddingRecords.map((record) => (
-                  <BiddingCard key={record.auctionId} record={record} />
-                ))
-              ) : (
-                <EmptyState message="조건에 맞는 입찰 내역이 없어요." />
-              ))}
-
-            {activeTab === HISTORY_TAB.won &&
-              (wonRecords.length > 0 ? (
-                wonRecords.map((record) => <WonCard key={record.auctionId} record={record} />)
-              ) : (
-                <EmptyState message="조건에 맞는 낙찰 내역이 없어요." />
-              ))}
-
-            {activeTab === HISTORY_TAB.purchase &&
-              (purchaseRecords.length > 0 ? (
-                purchaseRecords.map((record) => (
-                  <PurchaseCard key={record.auctionId} record={record} />
-                ))
-              ) : (
-                <EmptyState message="조건에 맞는 구매 내역이 없어요." />
-              ))}
-
-            {activeTab === HISTORY_TAB.selling &&
-              (sellingRecords.length > 0 ? (
-                sellingRecords.map((record) => (
-                  <SellingCard key={record.auctionId} record={record} />
-                ))
-              ) : (
-                <EmptyState message="조건에 맞는 판매 내역이 없어요." />
-              ))}
-
-            {activeTab === HISTORY_TAB.deposit &&
-              (depositRecords.length > 0 ? (
-                depositRecords.map((record) => (
-                  <DepositCard key={record.depositId} record={record} />
-                ))
-              ) : (
-                <EmptyState message="조건에 맞는 보증금 내역이 없어요." />
-              ))}
+            {isLoading ? (
+              <EmptyState message="내역을 불러오는 중…" />
+            ) : error ? (
+              <div className="flex flex-col items-center gap-sm py-xl md:col-span-2">
+                <p className="text-sm text-down">{error}</p>
+                <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
+                  다시 시도
+                </Button>
+              </div>
+            ) : (
+              <HistoryCards result={result} activeTab={activeTab} />
+            )}
           </div>
+
+          {activeData && activeData.totalPages > 1 && (
+            <div className="mt-lg border-t border-hairline-soft pt-base">
+              <Pagination
+                currentPage={activeData.page}
+                totalPages={activeData.totalPages}
+                onChange={(nextPage) => setPagination({ key: queryKey, page: nextPage })}
+              />
+            </div>
+          )}
         </section>
       </div>
     </main>
   )
 }
 
+function HistoryCards({ result, activeTab }: { result: HistoryResult | null; activeTab: HistoryTabKey }) {
+  if (!result || result.kind !== activeTab || result.data.items.length === 0) {
+    return <EmptyState message="조건에 맞는 내역이 없어요." />
+  }
+  switch (result.kind) {
+    case 'bidding':
+      return result.data.items.map((record) => <BiddingCard key={record.auctionId} record={record} />)
+    case 'won':
+      return result.data.items.map((record) => <WonCard key={record.auctionId} record={record} />)
+    case 'purchase':
+      return result.data.items.map((record) => <PurchaseCard key={record.auctionId} record={record} />)
+    case 'selling':
+      return result.data.items.map((record) => <SellingCard key={record.auctionId} record={record} />)
+    case 'deposit':
+      return result.data.items.map((record) => <DepositRecordCard key={record.depositId} record={record} />)
+  }
+}
+
 function SummaryStat({ label, value }: { label: string; value: string }) {
   return (
     <Card className="flex flex-col gap-1 p-base">
       <span className="text-xs text-muted">{label}</span>
-      {/* 금액은 "70,000 / 원"처럼 단위만 다음 줄로 떨어지지 않게 한 줄에 붙여 둔다. */}
       <span className="whitespace-nowrap text-lg font-bold text-ink">{value}</span>
     </Card>
   )
@@ -347,100 +413,66 @@ function EmptyState({ message }: { message: string }) {
   return <p className="py-xl text-center text-sm text-muted md:col-span-2">{message}</p>
 }
 
-function BiddingCard({ record }: { record: BiddingRecord }) {
+function BiddingCard({ record }: { record: MyBidRecord }) {
   const { remaining, isUrgent } = useCountdown(record.deadline)
-
   return (
-    <Link to={`/auctions/${record.auctionId}`}>
-      <Card className="flex gap-base p-base hover:shadow-soft">
-        <div className="h-20 w-20 shrink-0 rounded-lg bg-surface-soft" />
-        <div className="flex min-w-0 flex-1 flex-col justify-between gap-sm">
-          <div>
-            <p className="line-clamp-1 text-base font-semibold text-ink">{record.title}</p>
-            <p className="mt-1 text-sm text-muted">내 입찰가 {formatWon(record.myBidAmount)}</p>
-          </div>
-          <div className="flex items-center justify-between gap-sm">
-            <Badge tone={record.isWinning ? 'success' : 'danger'}>
-              {biddingStatusLabel(record)}
-            </Badge>
-            <span
-              className={`flex shrink-0 items-center gap-1 text-xs font-semibold ${
-                isUrgent ? 'text-down' : 'text-muted'
-              }`}
-            >
-              <Clock size={12} />
-              {formatClock(remaining)} 남음
-            </span>
-          </div>
-        </div>
-      </Card>
-    </Link>
+    <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
+      <p className="mt-1 text-sm text-muted">내 입찰가 {formatWon(record.myBidAmount)}</p>
+      <div className="mt-auto flex items-center justify-between gap-sm pt-sm">
+        <Badge tone={record.isWinning ? 'success' : 'danger'}>
+          {record.isSealedPhase ? '밀봉입찰중' : record.isWinning ? '최고가 입찰 중' : '다른 사람이 더 높음'}
+        </Badge>
+        <span className={`flex shrink-0 items-center gap-1 text-xs font-semibold ${isUrgent ? 'text-down' : 'text-muted'}`}>
+          <Clock size={12} />
+          {formatClock(remaining)} 남음
+        </span>
+      </div>
+    </RecordLink>
   )
 }
 
-function WonCard({ record }: { record: WonRecord }) {
+function WonCard({ record }: { record: MyTradeRecord }) {
   return (
-    <Link to={`/auctions/${record.auctionId}`}>
-      <Card className="flex gap-base p-base hover:shadow-soft">
-        <div className="h-20 w-20 shrink-0 rounded-lg bg-surface-soft" />
-        <div className="flex min-w-0 flex-1 flex-col justify-between gap-sm">
-          <div>
-            <p className="line-clamp-1 text-base font-semibold text-ink">{record.title}</p>
-            <p className="mt-1 text-sm text-muted">{formatRecordDate(record.wonAt)} 낙찰</p>
-          </div>
-          <div className="flex items-center justify-between gap-sm">
-            <Badge tone={WON_STATUS_TONE[record.tradeStatus]}>{record.tradeStatus}</Badge>
-            <span className="text-base font-bold text-ink">{formatWon(record.finalPrice)}</span>
-          </div>
-        </div>
-      </Card>
-    </Link>
+    <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
+      <p className="mt-1 text-sm text-muted">{formatRecordDate(record.purchasedAt)} 낙찰</p>
+      <div className="mt-auto flex items-center justify-between gap-sm pt-sm">
+        <Badge tone={TRADE_STATUS_TONE[record.status]}>{TRADE_STATUS_LABEL[record.status]}</Badge>
+        <span className="text-base font-bold text-ink">{formatWon(record.finalPrice)}</span>
+      </div>
+    </RecordLink>
   )
 }
 
-function PurchaseCard({ record }: { record: PurchaseRecord }) {
+function PurchaseCard({ record }: { record: MyTradeRecord }) {
   return (
-    <Link to={`/auctions/${record.auctionId}`}>
-      <Card className="flex gap-base p-base hover:shadow-soft">
-        <div className="h-20 w-20 shrink-0 rounded-lg bg-surface-soft" />
-        <div className="flex min-w-0 flex-1 flex-col justify-between gap-sm">
-          <div>
-            <p className="line-clamp-1 text-base font-semibold text-ink">{record.title}</p>
-            <p className="mt-1 text-sm text-muted">
-              {formatRecordDate(record.purchasedAt)} 구매
-            </p>
-          </div>
-          <div className="flex items-center justify-between gap-sm">
-            <Badge tone={PURCHASE_ROUTE_TONE[record.route]}>{record.route}</Badge>
-            <span className="text-base font-bold text-ink">{formatWon(record.paidPrice)}</span>
-          </div>
-        </div>
-      </Card>
-    </Link>
+    <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
+      <p className="mt-1 text-sm text-muted">{formatRecordDate(record.purchasedAt)} 구매</p>
+      <div className="mt-auto flex items-center justify-between gap-sm pt-sm">
+        <Badge tone={TRADE_ROUTE_TONE[record.route]}>{TRADE_ROUTE_LABEL[record.route]}</Badge>
+        <span className="text-base font-bold text-ink">{formatWon(record.finalPrice)}</span>
+      </div>
+    </RecordLink>
   )
 }
 
-function SellingCard({ record }: { record: SellingRecord }) {
+function SellingCard({ record }: { record: MySaleRecord }) {
+  const status = record.status === 'COMPLETED'
+    ? { label: '낙찰 완료', tone: 'success' as const }
+    : record.status === 'UNSOLD'
+      ? { label: '유찰', tone: 'muted' as const }
+      : { label: '진행중', tone: 'dark' as const }
   return (
-    <Link to={`/auctions/${record.auctionId}`}>
-      <Card className="flex gap-base p-base hover:shadow-soft">
-        <div className="h-20 w-20 shrink-0 rounded-lg bg-surface-soft" />
-        <div className="flex min-w-0 flex-1 flex-col justify-between gap-sm">
-          <div>
-            <p className="line-clamp-1 text-base font-semibold text-ink">{record.title}</p>
-            <p className="mt-1 text-sm text-muted">{formatRecordDate(record.listedAt)} 등록</p>
-          </div>
-          <div className="flex items-center justify-between gap-sm">
-            <Badge tone={SELLING_STATUS_TONE[record.status]}>{record.status}</Badge>
-            <span className="text-base font-bold text-ink">{formatWon(record.price)}</span>
-          </div>
-        </div>
-      </Card>
-    </Link>
+    <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
+      <p className="mt-1 text-sm text-muted">{formatRecordDate(record.listedAt)} 등록</p>
+      <div className="mt-auto flex items-center justify-between gap-sm pt-sm">
+        <Badge tone={status.tone}>{status.label}</Badge>
+        <span className="text-base font-bold text-ink">{formatWon(record.price)}</span>
+      </div>
+    </RecordLink>
   )
 }
 
-function DepositCard({ record }: { record: DepositRecord }) {
+function DepositRecordCard({ record }: { record: MyDepositRecord }) {
   return (
     <Card className="flex gap-base p-base">
       <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-surface-soft text-muted">
@@ -452,11 +484,35 @@ function DepositCard({ record }: { record: DepositRecord }) {
           <p className="mt-1 text-sm text-muted">{formatRecordDate(record.changedAt)}</p>
         </div>
         <div className="flex items-center justify-between gap-sm">
-          <Badge tone={DEPOSIT_STATUS_TONE[record.status]}>{record.status}</Badge>
+          <Badge tone={DEPOSIT_STATUS_TONE[record.status]}>{DEPOSIT_STATUS_LABEL[record.status]}</Badge>
           <span className="text-base font-bold text-ink">{formatWon(record.amount)}</span>
         </div>
       </div>
     </Card>
+  )
+}
+
+function RecordLink({
+  auctionId,
+  thumbnailUrl,
+  title,
+  children,
+}: {
+  auctionId: number
+  thumbnailUrl: string | null
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <Link to={`/auctions/${auctionId}`}>
+      <Card className="flex h-full gap-base p-base hover:shadow-soft">
+        <ItemThumbnail thumbnailUrl={thumbnailUrl} className={THUMBNAIL_CLASS} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <p className="line-clamp-1 text-base font-semibold text-ink">{title}</p>
+          {children}
+        </div>
+      </Card>
+    </Link>
   )
 }
 

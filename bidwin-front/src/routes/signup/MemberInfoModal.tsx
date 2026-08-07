@@ -5,79 +5,64 @@ import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import TextInput from '../../components/ui/TextInput'
 import {
-  BIRTH_DATE_LENGTH,
   NAME_MAX_LENGTH,
   PHONE_NUMBER_DIGIT_MAX_LENGTH,
   PHONE_NUMBER_INPUT_MAX_LENGTH,
   normalizePhoneNumber,
-  validateBirthDate,
   validateName,
   validatePhoneNumber,
 } from '../../lib/auth/validation'
 import { formatPartialPhoneNumber } from '../../lib/format'
 
 const TEXT = {
-  title: 'PASS 본인인증',
-  description: '통신사 본인인증을 위해 아래 정보를 입력해주세요.',
+  title: '본인 정보 입력',
+  description: '회원가입에 필요한 정보를 입력해주세요.',
   nameLabel: '이름',
   namePlaceholder: '실명을 입력하세요',
   phoneNumberLabel: '전화번호',
   phoneNumberPlaceholder: '010-1234-5678',
-  birthDateLabel: '생년월일',
-  birthDatePlaceholder: 'YYYYMMDD',
-  notice: 'PASS 앱 연동은 준비 중이라, 입력한 정보로 인증을 대신합니다.',
   cancel: '취소',
-  confirm: '확인',
+  confirm: '입력 완료',
 }
 
 const ERROR_MESSAGE = {
-  emptyField: '이름, 전화번호, 생년월일을 모두 입력해주세요.',
+  emptyField: '이름과 전화번호를 모두 입력해주세요.',
 }
 
-const FORM_ERROR_ID = 'pass-verification-form-error'
+const FORM_ERROR_ID = 'member-info-form-error'
 
-/* 인증이 끝나면 회원가입 API로 그대로 넘길 값들 */
-interface VerifiedIdentity {
+/* 회원가입 API로 그대로 넘길 값들 */
+interface SignupIdentity {
   name: string
   /* 하이픈을 뺀 숫자만 */
   phoneNumber: string
-  /* YYYYMMDD. 현재 회원가입 API에는 보내지 않고 인증 화면에서만 쓴다. */
-  birthDate: string
 }
 
-interface PassVerificationModalProps {
+interface MemberInfoModalProps {
   isOpen: boolean
   onClose: () => void
-  onVerified: (identity: VerifiedIdentity) => void
+  onComplete: (identity: SignupIdentity) => void
 }
 
-function validateIdentity(name: string, phoneNumber: string, birthDate: string) {
-  if (!name || !phoneNumber || !birthDate) return ERROR_MESSAGE.emptyField
-  return (
-    validateName(name) ?? validatePhoneNumber(phoneNumber) ?? validateBirthDate(birthDate)
-  )
+function validateIdentity(name: string, phoneNumber: string) {
+  if (!name || !phoneNumber) return ERROR_MESSAGE.emptyField
+  return validateName(name) ?? validatePhoneNumber(phoneNumber)
 }
 
-/*
- * PASS 본인인증 모달.
- * 실제 PASS 연동은 아직 할 수 없으므로, 입력값 검증을 통과하면 인증 성공으로 처리한다.
- * TODO: 실제 PASS 인증 연동 시 이 모달의 확인 처리를 인증 결과 콜백으로 교체한다.
- */
-function PassVerificationModal({
+/* 백엔드 회원가입 요청에 필요한 이름과 전화번호를 입력받는다. */
+function MemberInfoModal({
   isOpen,
   onClose,
-  onVerified,
-}: PassVerificationModalProps) {
+  onComplete,
+}: MemberInfoModalProps) {
   const [name, setName] = useState('')
   /* 화면에는 하이픈을 넣어 보여주되, 상태에는 숫자만 담는다. */
   const [phoneNumberDigits, setPhoneNumberDigits] = useState('')
-  const [birthDate, setBirthDate] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const resetForm = () => {
     setName('')
     setPhoneNumberDigits('')
-    setBirthDate('')
     setError(null)
   }
 
@@ -99,29 +84,17 @@ function PassVerificationModal({
     setError(null)
   }
 
-  const handleBirthDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setBirthDate(event.target.value)
-    setError(null)
-  }
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     const trimmedName = name.trim()
-    const trimmedBirthDate = birthDate.trim()
-
-    const nextError = validateIdentity(
-      trimmedName,
-      phoneNumberDigits,
-      trimmedBirthDate,
-    )
+    const nextError = validateIdentity(trimmedName, phoneNumberDigits)
     setError(nextError)
     if (nextError) return
 
-    onVerified({
+    onComplete({
       name: trimmedName,
       phoneNumber: phoneNumberDigits,
-      birthDate: trimmedBirthDate,
     })
     resetForm()
   }
@@ -159,23 +132,10 @@ function PassVerificationModal({
             aria-invalid={hasError}
             aria-describedby={hasError ? FORM_ERROR_ID : undefined}
           />
-          <TextInput
-            label={TEXT.birthDateLabel}
-            inputMode="numeric"
-            value={birthDate}
-            onChange={handleBirthDateChange}
-            placeholder={TEXT.birthDatePlaceholder}
-            autoComplete="bday"
-            maxLength={BIRTH_DATE_LENGTH}
-            aria-invalid={hasError}
-            aria-describedby={hasError ? FORM_ERROR_ID : undefined}
-          />
         </div>
 
         {/* 오류 문구 자리와 형식은 로그인·회원가입 화면과 같다. */}
         {hasError && <AuthFormError id={FORM_ERROR_ID} message={error} />}
-
-        <p className="text-sm text-muted">{TEXT.notice}</p>
 
         <div className="flex gap-sm">
           <Button variant="secondary" onClick={handleClose} className="flex-1">
@@ -190,5 +150,5 @@ function PassVerificationModal({
   )
 }
 
-export default PassVerificationModal
-export type { PassVerificationModalProps, VerifiedIdentity }
+export default MemberInfoModal
+export type { MemberInfoModalProps, SignupIdentity }
