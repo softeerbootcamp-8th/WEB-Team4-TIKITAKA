@@ -39,8 +39,10 @@ public class MemberProfileImageService {
         }
 
         validatePendingImage(memberId, objectKey);
+        String previousObjectKey = member.getProfileObjectKey();
         member.changeProfileImage(objectKey);
         pendingProfileImageStore.deleteByObjectKeyIn(List.of(objectKey));
+        enqueueUnusedImage(memberId, previousObjectKey, objectKey);
 
         return resolveResponse(objectKey);
     }
@@ -49,14 +51,20 @@ public class MemberProfileImageService {
     public ProfileImageUpdateResponse reset(long memberId) {
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new MemberException(ErrorCode.MEMBER_NOT_FOUND));
+        String previousObjectKey = member.getProfileObjectKey();
         member.resetProfileImage();
+        enqueueUnusedImage(
+                memberId,
+                previousObjectKey,
+                member.getProfileObjectKey()
+        );
 
         return resolveResponse(member.getProfileObjectKey());
     }
 
     private void validatePendingImage(long memberId, String objectKey) {
         if (pendingProfileImageStore
-                .findByMemberIdAndObjectKey(memberId, objectKey)
+                .findByMemberIdAndObjectKeyForUpdate(memberId, objectKey)
                 .isEmpty()
                 || !objectStorage.exists(objectKey)) {
             throw new UploadException(ErrorCode.INVALID_IMAGE_REFERENCE);
@@ -65,5 +73,17 @@ public class MemberProfileImageService {
 
     private ProfileImageUpdateResponse resolveResponse(String objectKey) {
         return new ProfileImageUpdateResponse(imageUrlResolver.resolve(objectKey));
+    }
+
+    private void enqueueUnusedImage(
+            long memberId,
+            String previousObjectKey,
+            String currentObjectKey
+    ) {
+        // 이전 사용자 이미지를 보관 기간 이후 정리할 수 있도록 다시 대기열에 넣는다.
+        if (!previousObjectKey.equals(currentObjectKey)
+                && objectKeyGenerator.belongsTo(memberId, previousObjectKey)) {
+            pendingProfileImageStore.save(memberId, previousObjectKey);
+        }
     }
 }

@@ -67,3 +67,7 @@ app:
         retention: ${PENDING_AUCTION_IMAGE_RETENTION:24h}
         cleanup-interval: ${PENDING_AUCTION_IMAGE_CLEANUP_INTERVAL:1h}
         cleanup-batch-size: ${PENDING_AUCTION_IMAGE_CLEANUP_BATCH_SIZE:1000}
+      pending-profile-image:
+        retention: ${PENDING_PROFILE_IMAGE_RETENTION:24h}
+        cleanup-interval: ${PENDING_PROFILE_IMAGE_CLEANUP_INTERVAL:1h}
+        cleanup-batch-size: ${PENDING_PROFILE_IMAGE_CLEANUP_BATCH_SIZE:100}

@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 @EnableConfigurationProperties({
         S3Properties.class,
         PendingAuctionImageProperties.class,
+        PendingProfileImageProperties.class,
         CloudFrontProperties.class
 })
 public class S3Config {
