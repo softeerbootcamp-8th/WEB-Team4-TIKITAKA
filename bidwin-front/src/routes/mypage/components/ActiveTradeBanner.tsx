@@ -1,8 +1,7 @@
 import { AlertCircle, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { formatRemainingDuration, formatWon } from '../../../lib/format'
+import { formatWon } from '../../../lib/format'
 import {
-  ACTIVE_TRADE_PREVIEW_LIMIT,
   ACTIVE_TRADE_TEXT,
   HISTORY_TAB,
   TRADE_MY_TURN_ROLES,
@@ -25,11 +24,6 @@ const CARD_WIDTH_CLASS = 'w-[240px]'
 
 function ActiveTradeBanner({ trades }: { trades: ActiveTrade[] }) {
   if (trades.length === 0) return null
-
-  /* 기한이 급한 것부터 보여준다. 뒤에 밀린 건은 "전체 보기"로 넘긴다. */
-  const visibleTrades = [...trades]
-    .sort((a, b) => a.dueAt - b.dueAt)
-    .slice(0, ACTIVE_TRADE_PREVIEW_LIMIT)
 
   return (
     <section className="rounded-xl bg-down-tint p-lg">
@@ -54,7 +48,7 @@ function ActiveTradeBanner({ trades }: { trades: ActiveTrade[] }) {
 
         {/* 카드가 넘치면 가로로 스크롤한다. 세로로 쌓으면 배너가 화면을 다 먹는다. */}
         <ul className="-mx-1 flex snap-x gap-sm overflow-x-auto px-1 pb-xs lg:flex-1">
-          {visibleTrades.map((trade) => (
+          {trades.map((trade) => (
             <li key={trade.tradeId} className={`${CARD_WIDTH_CLASS} shrink-0 snap-start`}>
               <ActiveTradeCard trade={trade} />
             </li>
@@ -66,7 +60,6 @@ function ActiveTradeBanner({ trades }: { trades: ActiveTrade[] }) {
 }
 
 function ActiveTradeCard({ trade }: { trade: ActiveTrade }) {
-  const remaining = formatRemainingDuration(trade.dueAt - Date.now())
   const isMyTurn = TRADE_MY_TURN_ROLES[trade.status].includes(trade.role)
 
   return (
@@ -87,12 +80,9 @@ function ActiveTradeCard({ trade }: { trade: ActiveTrade }) {
         </div>
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-xs border-t border-hairline-soft pt-xs">
+      <div className="mt-auto border-t border-hairline-soft pt-xs">
         <span className={`text-xs font-semibold ${isMyTurn ? 'text-down' : 'text-muted'}`}>
           {TRADE_NEXT_ACTION_LABEL[trade.status][trade.role]}
-        </span>
-        <span className="shrink-0 text-xs text-muted">
-          {remaining ? `${remaining} ${ACTIVE_TRADE_TEXT.dueSuffix}` : ACTIVE_TRADE_TEXT.overdue}
         </span>
       </div>
     </Link>
