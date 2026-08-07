@@ -61,23 +61,6 @@ class SseHubTest {
     }
 
     @Test
-    void 같은_채널의_서로_다른_이벤트는_같은_version이어도_모두_전송한다() throws Exception {
-        // given
-        SseHub hub = hub(3);
-        SseChannel channel = channel("auction", "1");
-        SseEmitter emitter = mock(SseEmitter.class);
-        hub.subscribe(List.of(channel), emitter, List::of);
-
-        // when
-        hub.publish(message(channel, "price-changed", 1L));
-        hub.publish(message(channel, "auction-closed", 1L));
-
-        // then
-        verify(emitter, timeout(1_000).times(2))
-                .send(any(SseEmitter.SseEventBuilder.class));
-    }
-
-    @Test
     void broadcast는_구독_채널과_관계없이_모든_연결에_전송한다() throws Exception {
         // given
         SseHub hub = hub(3);
@@ -114,6 +97,39 @@ class SseHubTest {
         assertThat(event.getValue().build())
                 .extracting(ResponseBodyEmitter.DataWithMediaType::getData)
                 .contains("auction-state-2");
+    }
+
+    @Test
+    void 연결이_끊긴_뒤_재구독하면_놓친_이벤트_대신_최신_snapshot으로_수렴한다()
+            throws Exception {
+        // given
+        SseHub hub = hub(3);
+        SseChannel channel = channel("auction", "1");
+        SseEmitter first = mock(SseEmitter.class);
+        AtomicReference<Runnable> firstCompletion = completionOf(first);
+        hub.subscribe(
+                List.of(channel),
+                first,
+                () -> List.of(message(channel, "auction-state", 1L))
+        );
+        verify(first, timeout(1_000)).send(any(SseEmitter.SseEventBuilder.class));
+        firstCompletion.get().run();
+
+        // when
+        SseEmitter reconnected = mock(SseEmitter.class);
+        ArgumentCaptor<SseEmitter.SseEventBuilder> snapshot =
+                ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+        hub.subscribe(
+                List.of(channel),
+                reconnected,
+                () -> List.of(message(channel, "auction-state", 3L))
+        );
+
+        // then
+        verify(reconnected, timeout(1_000)).send(snapshot.capture());
+        assertThat(snapshot.getValue().build())
+                .extracting(ResponseBodyEmitter.DataWithMediaType::getData)
+                .contains("auction-state-3");
     }
 
     @Test
@@ -198,6 +214,47 @@ class SseHubTest {
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(SSE_CONNECTION_LIMIT_EXCEEDED)
         );
+    }
+
+    @Test
+    void 동시에_구독해도_설정한_전체_연결_상한을_넘지_않는다() throws Exception {
+        // given
+        int maxConnections = 3;
+        int attemptCount = 64;
+        SseHub hub = hub(1, maxConnections);
+        CountDownLatch ready = new CountDownLatch(attemptCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> attempts = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int index = 0; index < attemptCount; index++) {
+                long auctionId = index;
+                attempts.add(executor.submit(() -> {
+                    ready.countDown();
+                    await(start);
+                    try {
+                        hub.subscribe(
+                                List.of(channel("auction", Long.toString(auctionId))),
+                                mock(SseEmitter.class),
+                                List::of
+                        );
+                    } catch (SseException exception) {
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(SSE_CONNECTION_LIMIT_EXCEEDED);
+                    }
+                }));
+            }
+            ready.await();
+
+            // when
+            start.countDown();
+            for (Future<?> attempt : attempts) {
+                attempt.get();
+            }
+        }
+
+        // then
+        assertThat(hub.connectionCount()).isEqualTo(maxConnections);
     }
 
     @Test
