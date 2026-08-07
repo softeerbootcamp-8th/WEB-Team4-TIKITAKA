@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -70,5 +71,17 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     List<AuctionBidSummary> summarizeByAuctionIds(
             @Param("auctionIds") List<Long> auctionIds,
             @Param("asOf") LocalDateTime asOf
+    );
+
+    // 실시간 상태 스냅샷용 일괄 집계. 목록 SSE 구독 때 경매마다 개별 조회하던 걸 한 번에 모은다.
+    // 상세 조회와 값을 맞추기 위해 asOf·상태 필터 없이 현재 시점의 최고가·입찰 수를 그대로 센다.
+    @Query("""
+            select bid.auction.id, max(bid.price), count(bid.id)
+            from Bid bid
+            where bid.auction.id in :auctionIds
+            group by bid.auction.id
+            """)
+    List<AuctionBidSummary> summarizeAllByAuctionIds(
+            @Param("auctionIds") Collection<Long> auctionIds
     );
 }
