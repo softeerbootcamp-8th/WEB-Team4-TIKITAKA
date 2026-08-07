@@ -15,6 +15,7 @@ export const pageRoutes: RouteObject[] = [
   { path: 'mypage', lazy: () => import('../routes/mypage/page') },
   { path: 'mypage/password', lazy: () => import('../routes/mypage/password/page') },
   { path: 'mypage/history', lazy: () => import('../routes/mypage/history/page') },
+  { path: 'trades/:tradeId', lazy: () => import('../routes/trades/detail/page') },
   { path: 'email-verification', lazy: () => import('../routes/email-verification/page') },
   { path: 'password-reset', lazy: () => import('../routes/password-reset/page') },
   {
