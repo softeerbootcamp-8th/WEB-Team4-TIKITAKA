@@ -117,6 +117,45 @@ class AuctionSseControllerTest {
         verify(stateService).getStates(auctionIds);
     }
 
+    @Test
+    void 목록_SSE는_중복_ID를_제거한_뒤_채널과_snapshot을_같은_목록으로_조회한다() {
+        // given
+        List<Long> requested = List.of(1L, 1L, 2L, 2L, 1L);
+        List<Long> distinct = List.of(1L, 2L);
+        List<AuctionLiveState> states = List.of(state(1L), state(2L));
+        when(stateService.getStates(distinct)).thenReturn(states);
+        List<SseChannel> channels = distinct.stream()
+                .map(AuctionSseMessages::channel)
+                .toList();
+        when(sseHub.subscribe(eq(channels), any()))
+                .thenAnswer(invocation -> {
+                    Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
+                            invocation.getArgument(1);
+                    assertThat(initialMessages.get()).isEqualTo(List.of(
+                            AuctionSseMessages.state(states.get(0)),
+                            AuctionSseMessages.state(states.get(1))
+                    ));
+                    return emitter;
+                });
+
+        // when
+        ResponseEntity<SseEmitter> response = controller.subscribeAuctionList(requested);
+
+        // then
+        assertThat(response.getBody()).isSameAs(emitter);
+        verify(stateService).getStates(distinct);
+    }
+
+    @Test
+    void 잘못된_요청_예외는_협상_실패를_막도록_빈_본문의_400으로_바꾼다() {
+        // when
+        ResponseEntity<Void> response = controller.handleInvalidRequest();
+
+        // then
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).isNull();
+    }
+
     private AuctionLiveState state(long auctionId) {
         return new AuctionLiveState(
                 auctionId,
