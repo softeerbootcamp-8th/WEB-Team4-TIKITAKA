@@ -124,7 +124,7 @@ public class BidService {
                 .status(BidStatus.UP)
                 .build());
 
-        eventPublisher.publishEvent(new AuctionStateChanged(auctionId));
+        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         return BidResult.from(bid);
     }
 
