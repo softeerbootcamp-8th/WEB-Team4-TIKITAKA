@@ -16,7 +16,7 @@ import type { BuyingItem, SellingItem } from './types'
 export interface ItemCardModel {
   auctionId: number
   title: string
-  thumbnailUrl?: string
+  thumbnailUrl?: string | null
   auctionType: AuctionType
   startPrice: number
   price: number

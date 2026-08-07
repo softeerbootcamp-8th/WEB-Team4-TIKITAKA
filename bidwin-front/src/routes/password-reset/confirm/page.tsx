@@ -5,6 +5,7 @@ import { CheckCircle2, KeyRound, ShieldAlert } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import TextInput from '../../../components/ui/TextInput'
+import { requestPasswordResetConfirm } from '../../../lib/api/auth'
 import { getPasswordError } from '../../../lib/validation'
 
 function PasswordResetConfirmPage() {
@@ -16,9 +17,11 @@ function PasswordResetConfirmPage() {
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [error, setError] = useState('')
   const [isComplete, setIsComplete] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
+    if (isSubmitting || !token) return
     const passwordError = getPasswordError(password)
     if (passwordError) {
       setError(passwordError)
@@ -29,7 +32,17 @@ function PasswordResetConfirmPage() {
       return
     }
     setError('')
-    // TODO: 실제 백엔드 API 연동 시 token과 새 비밀번호로 재설정 요청으로 교체
+    setIsSubmitting(true)
+    const result = await requestPasswordResetConfirm({
+      token,
+      newPassword: password,
+      newPasswordConfirm: passwordConfirm,
+    })
+    setIsSubmitting(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
     setIsComplete(true)
   }
 
@@ -111,8 +124,8 @@ function PasswordResetConfirmPage() {
               error={error}
             />
           </div>
-          <Button type="submit" size="lg" className="w-full">
-            비밀번호 변경
+          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? '변경 중…' : '비밀번호 변경'}
           </Button>
         </form>
       </Card>

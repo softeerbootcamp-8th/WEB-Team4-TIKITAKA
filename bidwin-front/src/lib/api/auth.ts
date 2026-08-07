@@ -7,6 +7,9 @@ const AUTH_API_PATH = {
   signUp: '/api/v1/auth/signups',
   emailAvailability: '/api/v1/auth/signups/email/verify',
   nicknameAvailability: '/api/v1/auth/signups/nickname/verify',
+  emailVerificationSend: '/api/v1/auth/signups/email/send',
+  passwordReset: '/api/v1/auth/password-resets',
+  passwordResetConfirm: '/api/v1/auth/password-resets/confirm',
 }
 
 interface LoginRequest {
@@ -34,6 +37,12 @@ interface AvailabilityResponse {
   available: boolean
 }
 
+interface PasswordResetConfirmRequest {
+  token: string
+  newPassword: string
+  newPasswordConfirm: string
+}
+
 function requestEmailAvailability(email: string): Promise<ApiResult<AvailabilityResponse>> {
   return postJson<AvailabilityResponse, { email: string }>(
     AUTH_API_PATH.emailAvailability,
@@ -54,6 +63,23 @@ function requestSignUp(request: SignUpRequest): Promise<ApiResult<SignUpResponse
   return postJson<SignUpResponse, SignUpRequest>(AUTH_API_PATH.signUp, request)
 }
 
+function requestEmailVerification(email: string): Promise<ApiResult<void>> {
+  return postJson<void, { email: string }>(AUTH_API_PATH.emailVerificationSend, { email })
+}
+
+function requestPasswordReset(email: string): Promise<ApiResult<void>> {
+  return postJson<void, { email: string }>(AUTH_API_PATH.passwordReset, { email })
+}
+
+function requestPasswordResetConfirm(
+  request: PasswordResetConfirmRequest,
+): Promise<ApiResult<void>> {
+  return postJson<void, PasswordResetConfirmRequest>(
+    AUTH_API_PATH.passwordResetConfirm,
+    request,
+  )
+}
+
 function requestLogin(request: LoginRequest): Promise<ApiResult<void>> {
   return postJson<void, LoginRequest>(AUTH_API_PATH.login, request)
 }
@@ -64,9 +90,18 @@ function requestSession(): Promise<ApiResult<void>> {
 
 export {
   requestEmailAvailability,
+  requestEmailVerification,
   requestLogin,
   requestNicknameAvailability,
+  requestPasswordReset,
+  requestPasswordResetConfirm,
   requestSession,
   requestSignUp,
 }
-export type { AvailabilityResponse, LoginRequest, SignUpRequest, SignUpResponse }
+export type {
+  AvailabilityResponse,
+  LoginRequest,
+  PasswordResetConfirmRequest,
+  SignUpRequest,
+  SignUpResponse,
+}

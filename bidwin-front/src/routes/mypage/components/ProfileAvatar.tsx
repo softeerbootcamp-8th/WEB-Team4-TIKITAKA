@@ -15,7 +15,7 @@ function ProfileAvatar({
   className,
 }: {
   nickname: string
-  imageUrl?: string
+  imageUrl?: string | null
   /** 크기와 글자 크기를 함께 넘긴다 (예: 'h-20 w-20 text-2xl') */
   className: string
 }) {

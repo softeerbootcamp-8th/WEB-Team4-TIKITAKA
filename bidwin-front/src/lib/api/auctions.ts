@@ -137,7 +137,34 @@ export interface AuctionListQuery {
   asOf?: number
 }
 
+export interface AuctionCreateRequest {
+  draftId: string
+  title: string
+  description: string
+  category: AuctionCategory
+  contact: string
+  auctionType: AuctionType
+  tradeType: TradeType
+  durationMinutes: number
+  startPrice: number
+  buyNowPrice: number | null
+  minimumPrice: number | null
+  dropPrice: number | null
+  priceDropInterval: number | null
+  images: string[]
+}
+
+export interface AuctionCreateResponse {
+  auctionId: number
+}
+
 const API_PATH = '/api/v1/auctions'
+
+export function requestAuctionCreate(
+  request: AuctionCreateRequest,
+): Promise<ApiResult<AuctionCreateResponse>> {
+  return postJson<AuctionCreateResponse, AuctionCreateRequest>(API_PATH, request)
+}
 
 export function requestAuctionList(
   query: AuctionListQuery,

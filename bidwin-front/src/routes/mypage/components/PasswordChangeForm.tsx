@@ -8,6 +8,7 @@ import {
   validateNewPassword,
 } from '../../../lib/auth/validation'
 import { useToast } from '../../../hooks/useToast'
+import { requestPasswordUpdate } from '../../../lib/api/mypage'
 import { MY_INFO_TEXT } from '../constants'
 
 /*
@@ -27,6 +28,7 @@ function PasswordChangeForm() {
   const [newPassword, setNewPassword] = useState('')
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
   const [error, setError] = useState<PasswordError | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const isFilled =
     currentPassword.length > 0 && newPassword.length > 0 && newPasswordConfirm.length > 0
@@ -35,8 +37,9 @@ function PasswordChangeForm() {
     return error?.field === field ? error.message : undefined
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (isSubmitting) return
 
     if (!currentPassword) {
       setError({ field: 'current', message: MY_INFO_TEXT.currentPasswordRequired })
@@ -58,7 +61,18 @@ function PasswordChangeForm() {
     }
 
     setError(null)
-    /* TODO: 백엔드 비밀번호 변경 API 연동 (현재 비밀번호 확인 포함) */
+    setIsSubmitting(true)
+    const result = await requestPasswordUpdate({
+      currentPassword,
+      newPassword,
+      newPasswordConfirm,
+    })
+    setIsSubmitting(false)
+    if (!result.ok) {
+      setError({ field: 'current', message: result.message })
+      return
+    }
+
     setCurrentPassword('')
     setNewPassword('')
     setNewPasswordConfirm('')
@@ -103,8 +117,8 @@ function PasswordChangeForm() {
         onChange={changeWith(setNewPasswordConfirm)}
         error={errorOf('confirm')}
       />
-      <Button type="submit" variant="secondary" disabled={!isFilled}>
-        {MY_INFO_TEXT.passwordSubmit}
+      <Button type="submit" variant="secondary" disabled={!isFilled || isSubmitting}>
+        {isSubmitting ? '변경 중…' : MY_INFO_TEXT.passwordSubmit}
       </Button>
     </form>
   )

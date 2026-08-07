@@ -15,7 +15,7 @@ function makeCooldownDeadline() {
 interface EmailSentCardProps {
   title: string
   description: ReactNode
-  onResend: () => void
+  onResend: () => Promise<string | null>
   resendLabel?: string
   resendToastMessage?: string
   footer?: ReactNode
@@ -31,12 +31,21 @@ function EmailSentCard({
 }: EmailSentCardProps) {
   const { showToast } = useToast()
   const [cooldownDeadline, setCooldownDeadline] = useState(makeCooldownDeadline)
+  const [isResending, setIsResending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { remaining, isEnded } = useCountdown(cooldownDeadline)
 
-  const handleResend = () => {
-    if (!isEnded) return
+  const handleResend = async () => {
+    if (!isEnded || isResending) return
+    setIsResending(true)
+    setError(null)
+    const nextError = await onResend()
+    setIsResending(false)
+    if (nextError) {
+      setError(nextError)
+      return
+    }
     setCooldownDeadline(makeCooldownDeadline())
-    onResend()
     showToast(resendToastMessage)
   }
 
@@ -55,11 +64,12 @@ function EmailSentCard({
         <Button
           variant="secondary"
           onClick={handleResend}
-          disabled={!isEnded}
+          disabled={!isEnded || isResending}
           className="min-w-[220px]"
         >
-          {isEnded ? resendLabel : `재전송까지 ${remaining}초`}
+          {isResending ? '전송 중…' : isEnded ? resendLabel : `재전송까지 ${remaining}초`}
         </Button>
+        {error && <p className="text-sm text-down">{error}</p>}
         {footer}
       </div>
     </Card>

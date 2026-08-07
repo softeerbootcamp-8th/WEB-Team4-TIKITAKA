@@ -66,7 +66,6 @@ export const TRADE_NEXT_ACTION_LABEL: Record<
 > = {
   PAYMENT_PENDING: { BUYER: '결제하기', SELLER: '결제 기다리는 중' },
   IN_PROGRESS: { BUYER: '거래 일정 조율', SELLER: '거래 일정 조율' },
-  SHIPPING: { BUYER: '수령 확인하기', SELLER: '배송 중' },
 }
 
 /*
@@ -76,7 +75,6 @@ export const TRADE_NEXT_ACTION_LABEL: Record<
 export const TRADE_MY_TURN_ROLES: Record<ActiveTrade['status'], readonly TradeRole[]> = {
   PAYMENT_PENDING: ['BUYER'],
   IN_PROGRESS: ['BUYER', 'SELLER'],
-  SHIPPING: ['BUYER'],
 }
 
 export const PROFILE_TEXT = {
@@ -133,14 +131,12 @@ export const SELLING_STATUS_TONE: Record<SellingStatus, BadgeTone> = {
 export const BUYING_STATUS_LABEL: Record<BuyingStatus, string> = {
   PAYMENT_PENDING: '결제 대기',
   IN_PROGRESS: '거래 중',
-  SHIPPING: '배송 중',
   DONE: '거래 완료',
 }
 
 export const BUYING_STATUS_TONE: Record<BuyingStatus, BadgeTone> = {
   PAYMENT_PENDING: 'primary',
   IN_PROGRESS: 'neutral',
-  SHIPPING: 'neutral',
   DONE: 'success',
 }
 
@@ -163,6 +159,7 @@ export const MY_INFO_TEXT = {
   imageHint: `JPG·PNG 등 이미지 파일, ${PROFILE_IMAGE_MAX_MB}MB 이하`,
   imageTooLarge: `이미지는 ${PROFILE_IMAGE_MAX_MB}MB 이하만 올릴 수 있어요.`,
   imageNotSupported: '이미지 파일만 올릴 수 있어요.',
+  imageUploadFailed: '프로필 이미지 업로드에 실패했어요. 다시 시도해주세요.',
   imageSelected: '프로필 이미지를 바꿨어요.',
   imageResetDone: '기본 이미지로 되돌렸어요.',
 
@@ -197,8 +194,8 @@ export const LEAVE_MODAL_TEXT = {
   confirmLabel: '위 내용을 모두 확인했어요.',
   cancel: '취소',
   submit: '탈퇴하기',
-  done: '탈퇴가 완료됐어요. 그동안 이용해주셔서 고맙습니다.',
   /* 거래가 남아 있으면 탈퇴를 막는다. 상대방이 있는 거래를 일방적으로 끊을 수 없다. */
   blockedByTrade: (count: number) => `진행 중인 거래 ${count}건을 먼저 마쳐야 탈퇴할 수 있어요.`,
   blockedByDeposit: '입찰에 묶인 보증금이 풀린 뒤에 탈퇴할 수 있어요.',
+  unavailable: '회원 탈퇴 API가 준비되지 않아 현재 탈퇴할 수 없어요.',
 } as const

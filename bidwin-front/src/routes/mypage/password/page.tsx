@@ -5,6 +5,7 @@ import { CheckCircle2, KeyRound } from 'lucide-react'
 import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import TextInput from '../../../components/ui/TextInput'
+import { requestPasswordUpdate } from '../../../lib/api/mypage'
 import { getPasswordError } from '../../../lib/validation'
 
 function MyPagePasswordResetPage() {
@@ -15,9 +16,11 @@ function MyPagePasswordResetPage() {
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [error, setError] = useState('')
   const [isComplete, setIsComplete] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
+    if (isSubmitting) return
     if (!currentPassword) {
       setError('현재 비밀번호를 입력해주세요.')
       return
@@ -32,7 +35,17 @@ function MyPagePasswordResetPage() {
       return
     }
     setError('')
-    // TODO: 실제 백엔드 API 연동 시 현재 비밀번호 확인 및 비밀번호 변경 요청으로 교체
+    setIsSubmitting(true)
+    const result = await requestPasswordUpdate({
+      currentPassword,
+      newPassword: password,
+      newPasswordConfirm: passwordConfirm,
+    })
+    setIsSubmitting(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
     setIsComplete(true)
   }
 
@@ -95,8 +108,8 @@ function MyPagePasswordResetPage() {
               error={error}
             />
           </div>
-          <Button type="submit" size="lg" className="w-full">
-            비밀번호 변경
+          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? '변경 중…' : '비밀번호 변경'}
           </Button>
         </form>
       </Card>
