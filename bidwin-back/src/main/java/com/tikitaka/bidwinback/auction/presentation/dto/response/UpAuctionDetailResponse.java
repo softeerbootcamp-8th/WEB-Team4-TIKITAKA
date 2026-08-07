@@ -21,7 +21,6 @@ public record UpAuctionDetailResponse(
         long serverTime,
         long sealedBidStartsAt,
         TradeType tradeType,
-        String contact,
         AuctionSellerResponse seller,
         Long buyNowPrice,
         long currentPrice,
