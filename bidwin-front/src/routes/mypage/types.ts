@@ -1,4 +1,5 @@
 import type { AuctionType } from '../auctions/types'
+import type { DownPricing } from '../../lib/auctionPricing'
 
 /** 거래에서 내가 맡은 쪽. 같은 카드를 사는 쪽·파는 쪽 양쪽에서 재사용한다. */
 export type TradeRole = 'BUYER' | 'SELLER'
@@ -23,7 +24,7 @@ export interface MyProfile {
 }
 
 export interface DepositAccount {
-  /** 계정에 들어 있는 보증금 총액 */
+  /** 현재 사용할 수 있는 보증금 */
   balance: number
   /** 진행 중인 입찰·거래에 묶여 있어 지금은 쓸 수 없는 금액 */
   inUse: number
@@ -41,8 +42,6 @@ export interface ActiveTrade {
   role: TradeRole
   status: Exclude<TradeStatus, 'DONE'>
   price: number
-  /** 이번 단계를 끝내야 하는 기한 (epoch ms) */
-  dueAt: number
 }
 
 /** 판매 물품·구매 물품 카드가 함께 쓰는 껍데기. status의 종류만 역할에 따라 갈린다. */
@@ -59,6 +58,8 @@ interface MyItemBase {
 
 export interface SellingItem extends MyItemBase {
   status: SellingStatus
+  /** 진행 중인 하향 경매의 현재가 계산 정보 */
+  downPricing?: DownPricing | null
 }
 
 export interface BuyingItem extends MyItemBase {

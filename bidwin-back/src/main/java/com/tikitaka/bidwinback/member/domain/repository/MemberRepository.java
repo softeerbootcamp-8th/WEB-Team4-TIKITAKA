@@ -34,7 +34,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Query(value = """
             UPDATE member
             SET total_point = total_point - :amount,
-                locked_point = locked_point + :amount
+                locked_point = locked_point + :amount,
+                last_modified_at = SYSDATE(6)
             WHERE id = :memberId
               AND status = 'ACTIVE'
               AND total_point >= :amount
@@ -50,7 +51,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Query(value = """
             UPDATE member
             SET total_point = total_point + :amount,
-                locked_point = locked_point - :amount
+                locked_point = locked_point - :amount,
+                last_modified_at = SYSDATE(6)
             WHERE id = :memberId
               AND locked_point >= :amount
             """, nativeQuery = true)
@@ -63,7 +65,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Modifying
     @Query(value = """
             UPDATE member
-            SET locked_point = locked_point - :amount
+            SET locked_point = locked_point - :amount,
+                last_modified_at = SYSDATE(6)
             WHERE id = :memberId
               AND locked_point >= :amount
             """, nativeQuery = true)
@@ -76,7 +79,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Modifying
     @Query(value = """
             UPDATE member
-            SET total_point = total_point + :amount
+            SET total_point = total_point + :amount,
+                last_modified_at = SYSDATE(6)
             WHERE id = :memberId
             """, nativeQuery = true)
     int creditPoint(

@@ -57,6 +57,22 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
         """)
     List<BidHistoryRow> findHistoryByAuctionId(@Param("auctionId") long auctionId);
 
+
+    // 일반·밀봉입찰을 모두 포함하되 같은 경매 참여는 한 번만 센다.
+    @Query(value = """
+            select count(*)
+            from (
+                select bid.auction_id
+                from bid
+                where bid.bidder_id = :memberId
+                union
+                select sealed_bid.auction_id
+                from sealed_bid
+                where sealed_bid.bidder_id = :memberId
+            ) participated_auction
+            """, nativeQuery = true)
+    long countDistinctAuctionByBidderId(@Param("memberId") long memberId);
+           
     // 목록 조회용 일괄 집계. asOf 이후에 들어온 입찰은 스냅샷 이후 값이라 제외한다
     // (페이지를 넘기는 동안 상향 경매 순위가 흔들리지 않도록).
     @Query("""

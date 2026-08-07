@@ -8,7 +8,6 @@ import type { ActiveTrade, BuyingItem, DepositAccount, MyProfile, SellingItem } 
 const NOW = Date.now()
 const MINUTE_MS = 60 * 1000
 const HOUR_MS = 60 * MINUTE_MS
-const DAY_MS = 24 * HOUR_MS
 
 /** 프로필의 가입일. 화면에 "2026년 7월 19일 가입"으로 나온다. */
 const JOINED_AT = new Date(2026, 6, 19).getTime()
@@ -37,7 +36,6 @@ export const MOCK_ACTIVE_TRADES: ActiveTrade[] = [
     role: 'BUYER',
     status: 'PAYMENT_PENDING',
     price: 265000,
-    dueAt: NOW + 3 * HOUR_MS,
   },
   {
     tradeId: 2,
@@ -46,7 +44,6 @@ export const MOCK_ACTIVE_TRADES: ActiveTrade[] = [
     role: 'SELLER',
     status: 'PAYMENT_PENDING',
     price: 180000,
-    dueAt: NOW + 12 * HOUR_MS,
   },
   {
     tradeId: 3,
@@ -55,7 +52,6 @@ export const MOCK_ACTIVE_TRADES: ActiveTrade[] = [
     role: 'BUYER',
     status: 'SHIPPING',
     price: 98000,
-    dueAt: NOW + 2 * DAY_MS,
   },
   {
     tradeId: 4,
@@ -64,7 +60,6 @@ export const MOCK_ACTIVE_TRADES: ActiveTrade[] = [
     role: 'SELLER',
     status: 'IN_PROGRESS',
     price: 150000,
-    dueAt: NOW + 4 * DAY_MS,
   },
 ]
 
@@ -74,16 +69,30 @@ export const MOCK_SELLING_ITEMS: SellingItem[] = [
     title: '침대 급처합니다. 퀸 사이즈 프레임 + 매트리스',
     auctionType: 'DOWN',
     startPrice: 100000,
-    price: 45000,
+    price: 100000,
     status: 'ON_SALE',
+    downPricing: {
+      startPrice: 100000,
+      minimumPrice: 30000,
+      dropPrice: 5000,
+      priceDropIntervalMs: HOUR_MS,
+      startedAt: NOW - 11 * HOUR_MS,
+    },
   },
   {
     auctionId: 202,
     title: '책상 급처합니다. 1400x700 원목',
     auctionType: 'DOWN',
     startPrice: 50000,
-    price: 30000,
+    price: 50000,
     status: 'ON_SALE',
+    downPricing: {
+      startPrice: 50000,
+      minimumPrice: 20000,
+      dropPrice: 5000,
+      priceDropIntervalMs: HOUR_MS,
+      startedAt: NOW - 4 * HOUR_MS,
+    },
   },
   {
     auctionId: 71,

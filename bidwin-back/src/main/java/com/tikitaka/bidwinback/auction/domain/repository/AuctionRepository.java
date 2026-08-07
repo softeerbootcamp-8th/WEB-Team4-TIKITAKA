@@ -179,4 +179,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             List<AuctionStatus> statuses,
             Pageable pageable
     );
+
+    // 마이페이지 판매 물품: 내가 올린 경매를 최신순으로. 유형(UP/DOWN)은 서비스에서 구체 타입으로 매핑한다.
+    List<Auction> findTop3BySellerIdOrderByIdDesc(long sellerId);
 }
