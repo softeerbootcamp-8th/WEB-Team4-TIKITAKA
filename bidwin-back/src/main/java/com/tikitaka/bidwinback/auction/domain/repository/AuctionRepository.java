@@ -116,11 +116,11 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     );
 
     // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
+    // 정산에서 사용하지 않는 판매자까지 잠그지 않도록 fetch join은 하지 않는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select auction
             from Auction auction
-            join fetch auction.seller
             where auction.id = :auctionId
             """)
     Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);
