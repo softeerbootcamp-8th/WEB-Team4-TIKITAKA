@@ -26,6 +26,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             UPDATE auction
             SET current_price = :price,
                 status = 'BID_ONGOING',
+                revision = revision + 1,
                 last_modified_at = SYSDATE(6) -- Native UPDATE는 @LastModifiedDate가 적용되지 않아 직접 갱신한다.
             WHERE id = :auctionId
               AND auction_type = 'UP'
@@ -115,6 +116,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             UPDATE auction
             SET status = 'COMPLETED',
                 completed_at = :completedAt,
+                revision = revision + 1,
                 last_modified_at = :completedAt
             WHERE id = :auctionId
               AND status = 'OPEN'

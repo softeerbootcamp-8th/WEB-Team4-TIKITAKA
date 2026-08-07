@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,8 +53,9 @@ public class BidService {
     private final AuctionRepository auctionRepository;
     private final AuctionDepositRepository auctionDepositRepository;
     private final BidRepository bidRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final SealedBidRepository sealedBidRepository;
-
+  
     @Transactional
     public BidResult place(
             Long memberId,
@@ -121,6 +124,7 @@ public class BidService {
                 .status(BidStatus.UP)
                 .build());
 
+        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         return BidResult.from(bid);
     }
 

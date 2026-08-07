@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.SSE_CONNECTION_LIMIT_EXCEEDED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -182,6 +183,43 @@ class SseHubTest {
     }
 
     @Test
+    void 전체_동시_연결_상한을_넘으면_거부한다() {
+        // given
+        SseHub hub = hub(3, 1);
+        hub.subscribe(List.of(channel("auction", "1")), mock(SseEmitter.class), List::of);
+
+        // when & then
+        assertThatThrownBy(() -> hub.subscribe(
+                List.of(channel("auction", "2")),
+                mock(SseEmitter.class),
+                List::of
+        )).isInstanceOfSatisfying(
+                SseException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(SSE_CONNECTION_LIMIT_EXCEEDED)
+        );
+    }
+
+    @Test
+    void 연결이_끊기면_전체_연결_수도_회복된다() {
+        // given
+        SseHub hub = hub(3, 1);
+        SseEmitter emitter = mock(SseEmitter.class);
+        AtomicReference<Runnable> completion = completionOf(emitter);
+        hub.subscribe(List.of(channel("auction", "1")), emitter, List::of);
+
+        // when
+        completion.get().run();
+
+        // then: 상한이 1이어도 이전 연결이 정리됐으므로 새 연결이 다시 붙을 수 있다.
+        assertThatCode(() -> hub.subscribe(
+                List.of(channel("auction", "2")),
+                mock(SseEmitter.class),
+                List::of
+        )).doesNotThrowAnyException();
+    }
+
+    @Test
     void 완료된_연결은_모든_채널_색인에서_제거한다() {
         // given
         SseHub hub = hub(3);
@@ -313,11 +351,16 @@ class SseHubTest {
     }
 
     private SseHub hub(int maxChannelsPerConnection) {
+        return hub(maxChannelsPerConnection, 1_000);
+    }
+
+    private SseHub hub(int maxChannelsPerConnection, int maxConnections) {
         SseHub hub = new SseHub(
                 300_000L,
                 3_000L,
                 maxChannelsPerConnection,
-                100
+                100,
+                maxConnections
         );
         hubs.add(hub);
         return hub;

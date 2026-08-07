@@ -14,6 +14,7 @@ public record UpAuctionDetailResponse(
         String description,
         AuctionCategory category,
         AuctionStatus status,
+        long revision,
         List<String> images,
         long startPrice,
         long deadline,

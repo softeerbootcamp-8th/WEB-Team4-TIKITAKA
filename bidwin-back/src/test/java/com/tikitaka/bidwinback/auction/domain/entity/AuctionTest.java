@@ -23,6 +23,26 @@ class AuctionTest {
         assertThat(auction(AuctionStatus.UNSOLD).isSealedBidRevealed()).isTrue();
     }
 
+    @Test
+    void 낙찰_처리는_revision을_올려_완료_상태를_SSE로_전파하게_한다() {
+        UpAuction auction = auction(AuctionStatus.BID_ONGOING);
+        long before = auction.getRevision();
+
+        auction.complete(200_000L, LocalDateTime.of(2026, 8, 6, 13, 0));
+
+        assertThat(auction.getRevision()).isEqualTo(before + 1);
+    }
+
+    @Test
+    void 유찰_처리는_revision을_올려_유찰_상태를_SSE로_전파하게_한다() {
+        UpAuction auction = auction(AuctionStatus.OPEN);
+        long before = auction.getRevision();
+
+        auction.markUnsold(LocalDateTime.of(2026, 8, 6, 13, 0));
+
+        assertThat(auction.getRevision()).isEqualTo(before + 1);
+    }
+
     private UpAuction auction(AuctionStatus status) {
         return UpAuction.builder()
                 .seller(mock(Member.class))

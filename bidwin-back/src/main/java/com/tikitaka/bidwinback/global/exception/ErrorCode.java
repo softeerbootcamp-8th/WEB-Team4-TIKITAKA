@@ -25,6 +25,11 @@ public enum ErrorCode {
             "COMMON_500_1",
             "서버 내부 오류가 발생했습니다."
     ),
+    SSE_CONNECTION_LIMIT_EXCEEDED(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "COMMON_503_1",
+            "실시간 연결이 많아 잠시 후 다시 시도해주세요."
+    ),
 
     // Member / authentication
     INVALID_CREDENTIALS(
