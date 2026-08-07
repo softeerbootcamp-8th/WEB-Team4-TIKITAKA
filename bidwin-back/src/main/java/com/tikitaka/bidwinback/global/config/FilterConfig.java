@@ -25,7 +25,12 @@ public class FilterConfig {
     public FilterRegistrationBean<CorsFilter> corsFilter() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of("https://bidwin.site"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PATCH",
+                "OPTIONS"
+        ));
         configuration.setAllowedHeaders(List.of("Content-Type"));
         configuration.setAllowCredentials(true);
 

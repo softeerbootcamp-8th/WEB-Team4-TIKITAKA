@@ -25,6 +25,11 @@ public enum ErrorCode {
             "COMMON_500_1",
             "서버 내부 오류가 발생했습니다."
     ),
+    SSE_CONNECTION_LIMIT_EXCEEDED(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "COMMON_503_1",
+            "실시간 연결이 많아 잠시 후 다시 시도해주세요."
+    ),
 
     // Member / authentication
     INVALID_CREDENTIALS(
@@ -71,6 +76,16 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST,
             "MEMBER_400_5",
             "유효하지 않은 이메일 인증 토큰입니다."
+    ),
+    CURRENT_PASSWORD_MISMATCH(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_6",
+            "현재 비밀번호가 일치하지 않습니다."
+    ),
+    NEW_PASSWORD_SAME_AS_CURRENT(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_7",
+            "새 비밀번호는 현재 비밀번호와 달라야 합니다."
     ),
     EXPIRED_EMAIL_VERIFICATION_TOKEN(
             HttpStatus.GONE,

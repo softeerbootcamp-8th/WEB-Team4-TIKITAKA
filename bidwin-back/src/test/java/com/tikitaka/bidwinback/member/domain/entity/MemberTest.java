@@ -31,6 +31,15 @@ class MemberTest {
         assertThat(member.getAuthVersion()).isEqualTo(2L);
     }
 
+    @Test
+    void 닉네임을_변경한다() {
+        Member member = createMember();
+
+        member.changeNickname("새닉네임");
+
+        assertThat(member.getNickname()).isEqualTo("새닉네임");
+    }
+
     private Member createMember() {
         return Member.builder()
                 .email("member@example.com")

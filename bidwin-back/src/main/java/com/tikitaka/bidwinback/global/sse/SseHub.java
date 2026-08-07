@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.SSE_CONNECTION_LIMIT_EXCEEDED;
 
 /** 도메인과 무관하게 채널별 SSE 연결을 색인하고 메시지를 전파한다. */
 @Component
@@ -24,6 +25,7 @@ public class SseHub {
     private final long reconnectTimeMs;
     private final int maxChannelsPerConnection;
     private final int maxPendingMessagesPerConnection;
+    private final int maxConnections;
 
     public SseHub(
             @Value("${app.sse.connection-timeout-ms:300000}") long timeoutMs,
@@ -31,15 +33,21 @@ public class SseHub {
             @Value("${app.sse.max-channels-per-connection:50}")
             int maxChannelsPerConnection,
             @Value("${app.sse.max-pending-messages-per-connection:100}")
-            int maxPendingMessagesPerConnection
+            int maxPendingMessagesPerConnection,
+            @Value("${app.sse.max-connections:1000}")
+            int maxConnections
     ) {
         if (maxPendingMessagesPerConnection <= 0) {
             throw new IllegalArgumentException("SSE 대기열 상한은 양수여야 합니다.");
+        }
+        if (maxConnections <= 0) {
+            throw new IllegalArgumentException("SSE 연결 상한은 양수여야 합니다.");
         }
         this.timeoutMs = timeoutMs;
         this.reconnectTimeMs = reconnectTimeMs;
         this.maxChannelsPerConnection = maxChannelsPerConnection;
         this.maxPendingMessagesPerConnection = maxPendingMessagesPerConnection;
+        this.maxConnections = maxConnections;
     }
 
     public SseEmitter subscribe(
@@ -56,6 +64,8 @@ public class SseHub {
     ) {
         Set<SseChannel> subscriptions = new LinkedHashSet<>(channels);
         validateSubscriptions(subscriptions);
+        // 인증이 없는 공개 경로라, 연결이 붙기 전에 전체 동시 연결 수를 막는다.
+        validateConnectionLimit();
         SseConnection connection = new SseConnection(
                 emitter,
                 reconnectTimeMs,
@@ -139,6 +149,16 @@ public class SseHub {
                     INVALID_INPUT_VALUE,
                     "한 연결에서 구독할 채널은 1개 이상 "
                             + maxChannelsPerConnection + "개 이하여야 합니다."
+            );
+        }
+    }
+
+    // 초과분은 gateway가 아닌 애플리케이션에서도 막아, 반복 재연결이 서버 자원을 고갈시키지 못하게 한다.
+    private void validateConnectionLimit() {
+        if (connections.size() >= maxConnections) {
+            throw new SseException(
+                    SSE_CONNECTION_LIMIT_EXCEEDED,
+                    "전체 SSE 연결 상한(" + maxConnections + ")을 초과했습니다."
             );
         }
     }

@@ -2,10 +2,13 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionFinalPrice;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,6 +26,17 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
             Pageable pageable
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select trade
+            from AuctionTrade trade
+            join fetch trade.buyer
+            join fetch trade.auction auction
+            join fetch auction.seller
+            where trade.id = :tradeId
+            """)
+    Optional<AuctionTrade> findByIdForUpdate(@Param("tradeId") Long tradeId);
+
     @Query("""
             select trade
             from AuctionTrade trade
@@ -37,6 +51,16 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
             where trade.auction.id = :auctionId
             """)
     Optional<Long> findFinalPriceByAuctionId(@Param("auctionId") long auctionId);
+
+    // 실시간 상태 스냅샷용 일괄 조회. 완료된 경매의 확정 거래가를 목록 SSE에서 한 번에 모은다.
+    @Query("""
+            select trade.auction.id, trade.finalPrice
+            from AuctionTrade trade
+            where trade.auction.id in :auctionIds
+            """)
+    List<AuctionFinalPrice> findFinalPricesByAuctionIds(
+            @Param("auctionIds") Collection<Long> auctionIds
+    );
 
     long countByAuctionSellerIdAndStatus(long sellerId, TradeStatus status);
 

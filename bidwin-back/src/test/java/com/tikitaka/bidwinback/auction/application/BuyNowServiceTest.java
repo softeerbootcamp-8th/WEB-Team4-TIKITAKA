@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
@@ -30,6 +31,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -86,6 +88,9 @@ class BuyNowServiceTest {
     private InstantPurchaseRequestRepository requestRepository;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private BuyNowPriceCalculator priceCalculator;
 
     @Mock
@@ -120,7 +125,8 @@ class BuyNowServiceTest {
                 auctionDepositRepository,
                 auctionTradeRepository,
                 bidRepository,
-                requestRepository
+                requestRepository,
+                eventPublisher
         );
         buyNowService = new BuyNowService(
                 auctionRepository,
@@ -214,6 +220,7 @@ class BuyNowServiceTest {
         );
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
         verify(request).complete(persistedTrade, FINAL_PRICE);
+        verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
     }
 
     @Test
@@ -297,6 +304,7 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -317,6 +325,7 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -343,6 +352,7 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -420,7 +430,8 @@ class BuyNowServiceTest {
                 auctionDepositRepository,
                 auctionTradeRepository,
                 bidRepository,
-                priceCalculator
+                priceCalculator,
+                eventPublisher
         );
     }
 
@@ -612,5 +623,6 @@ class BuyNowServiceTest {
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
         verify(request, never()).complete(any(), anyLong());
+        verifyNoInteractions(eventPublisher);
     }
 }
