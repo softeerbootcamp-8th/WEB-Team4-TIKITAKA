@@ -3,17 +3,29 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, Long> {
 
     boolean existsByMemberIdAndAuctionId(Long memberId, Long auctionId);
+
+    // 마이페이지 보증금 내역용. auction은 제목 표시에만 필요해 fetch join으로 N+1을 피한다.
+    @EntityGraph(attributePaths = "auction")
+    Page<AuctionDeposit> findByMemberIdAndStatusIn(
+            Long memberId,
+            List<DepositStatus> statuses,
+            Pageable pageable
+    );
 
     // 정산 재시도도 기존 행을 잠근 뒤 상태를 판별할 수 있도록 상태 조건 없이 조회한다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

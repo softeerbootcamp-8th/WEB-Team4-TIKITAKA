@@ -1,8 +1,11 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -195,6 +198,13 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     // 하락 경매의 계산 기준이 애플리케이션 서버마다 달라지지 않도록 DB 시각을 사용한다.
     @Query(value = "select current_timestamp(6)", nativeQuery = true)
     LocalDateTime currentDatabaseTime();
+
+    // 마이페이지 판매 내역용. 정렬 기준(등록 시각)이 실제 컬럼이라 Pageable의 정렬·페이징을 그대로 쓴다.
+    Page<Auction> findBySellerIdAndStatusIn(
+            Long sellerId,
+            List<AuctionStatus> statuses,
+            Pageable pageable
+    );
 
     // 마이페이지 판매 물품: 내가 올린 경매를 최신순으로. 유형(UP/DOWN)은 서비스에서 구체 타입으로 매핑한다.
     List<Auction> findTop3BySellerIdOrderByIdDesc(long sellerId);
