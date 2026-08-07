@@ -7,8 +7,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -51,6 +53,22 @@ public class S3ObjectStorage implements ObjectStorage {
                 presignedRequest.signedHeaders(),
                 presignedRequest.expiration()
         );
+    }
+
+    @Override
+    public boolean exists(String objectKey) {
+        try {
+            s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(objectKey)
+                    .build());
+            return true;
+        } catch (S3Exception exception) {
+            if (exception.statusCode() == 404) {
+                return false;
+            }
+            throw exception;
+        }
     }
 
     @Override
