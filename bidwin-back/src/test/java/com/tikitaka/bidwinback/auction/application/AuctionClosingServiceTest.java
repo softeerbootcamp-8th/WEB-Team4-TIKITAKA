@@ -1,0 +1,91 @@
+package com.tikitaka.bidwinback.auction.application;
+
+import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class AuctionClosingServiceTest {
+
+    private static final long AUCTION_ID = 42L;
+    private static final LocalDateTime DATABASE_TIME =
+            LocalDateTime.of(2026, 8, 7, 12, 0);
+
+    @Mock
+    private AuctionRepository auctionRepository;
+
+    @Mock
+    private UpAuctionSettlementService upAuctionSettlementService;
+
+    @Mock
+    private Auction auction;
+
+    @InjectMocks
+    private AuctionClosingService auctionClosingService;
+
+    @Test
+    void 마감된_OPEN_경매는_유찰한다() {
+        // given
+        stubLockedAuction(AuctionStatus.OPEN);
+        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
+
+        // when
+        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+
+        // then
+        assertThat(closed).isTrue();
+        verify(auction).markUnsold(DATABASE_TIME);
+        verifyNoInteractions(upAuctionSettlementService);
+    }
+
+    @Test
+    void 마감된_BID_ONGOING_경매는_낙찰자를_판정한다() {
+        // given
+        stubLockedAuction(AuctionStatus.BID_ONGOING);
+
+        // when
+        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+
+        // then
+        assertThat(closed).isTrue();
+        verify(upAuctionSettlementService).settle(AUCTION_ID);
+        verify(auction, never()).markUnsold(any());
+    }
+
+    @Test
+    void 다른_작업이_경매를_선점했다면_상태를_바꾸지_않는다() {
+        // given
+        when(auctionRepository.findClosingCandidateIdForUpdateSkipLocked(AUCTION_ID))
+                .thenReturn(Optional.empty());
+
+        // when
+        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+
+        // then
+        assertThat(closed).isFalse();
+        verify(auctionRepository, never()).findById(AUCTION_ID);
+        verifyNoInteractions(auction, upAuctionSettlementService);
+    }
+
+    private void stubLockedAuction(AuctionStatus status) {
+        when(auctionRepository.findClosingCandidateIdForUpdateSkipLocked(AUCTION_ID))
+                .thenReturn(Optional.of(AUCTION_ID));
+        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(status);
+    }
+}
