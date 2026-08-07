@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.TradeStatusChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -42,6 +44,9 @@ class TradeConfirmationServiceTest {
     private DepositSettlementService depositSettlementService;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private Auction auction;
 
     @Mock
@@ -56,7 +61,8 @@ class TradeConfirmationServiceTest {
     void setUp() {
         tradeConfirmationService = new TradeConfirmationService(
                 auctionTradeRepository,
-                depositSettlementService
+                depositSettlementService,
+                eventPublisher
         );
     }
 
@@ -82,6 +88,7 @@ class TradeConfirmationServiceTest {
                 BUYER_ID,
                 FINAL_PRICE
         );
+        verify(eventPublisher).publishEvent(new TradeStatusChanged(TRADE_ID));
     }
 
     @Test
@@ -104,6 +111,7 @@ class TradeConfirmationServiceTest {
                 SELLER_ID,
                 FINAL_PRICE
         );
+        verify(eventPublisher).publishEvent(new TradeStatusChanged(TRADE_ID));
     }
 
     @Test
@@ -117,7 +125,7 @@ class TradeConfirmationServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(TRADE_ACCESS_DENIED);
-        verifyNoInteractions(depositSettlementService);
+        verifyNoInteractions(depositSettlementService, eventPublisher);
     }
 
     @Test
@@ -133,7 +141,7 @@ class TradeConfirmationServiceTest {
 
         assertThat(exception.getErrorCode())
                 .isEqualTo(INVALID_TRADE_STATUS_TRANSITION);
-        verifyNoInteractions(depositSettlementService);
+        verifyNoInteractions(depositSettlementService, eventPublisher);
     }
 
     @Test
@@ -147,7 +155,7 @@ class TradeConfirmationServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(TRADE_NOT_FOUND);
-        verifyNoInteractions(depositSettlementService);
+        verifyNoInteractions(depositSettlementService, eventPublisher);
     }
 
     private AuctionTrade trade(TradeStatus status) {
