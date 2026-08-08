@@ -171,10 +171,10 @@ class AuctionRepositoryIntegrationTest {
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
 
         UpAuction visible = persistAuction("asOf 이전 등록", asOf.plusDays(1));
-        overrideStartedAt(visible, asOf);
+        overrideCreatedAt(visible, asOf);
 
         UpAuction createdLater = persistAuction("asOf 이후 등록", asOf.plusDays(1));
-        overrideStartedAt(createdLater, asOf.plusMinutes(1));
+        overrideCreatedAt(createdLater, asOf.plusMinutes(1));
 
         entityManager.clear();
 
@@ -190,10 +190,10 @@ class AuctionRepositoryIntegrationTest {
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
 
         UpAuction stillOpen = persistAuction("아직 진행중", asOf.plusDays(1));
-        overrideStartedAt(stillOpen, asOf.minusDays(1));
+        overrideCreatedAt(stillOpen, asOf.minusDays(1));
 
         UpAuction alreadyEnded = persistAuction("이미 마감", asOf.minusMinutes(1));
-        overrideStartedAt(alreadyEnded, asOf.minusDays(1));
+        overrideCreatedAt(alreadyEnded, asOf.minusDays(1));
 
         entityManager.clear();
 
@@ -209,10 +209,10 @@ class AuctionRepositoryIntegrationTest {
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
 
         UpAuction notCompleted = persistAuction("미완료", asOf.plusDays(1));
-        overrideStartedAt(notCompleted, asOf.minusDays(1));
+        overrideCreatedAt(notCompleted, asOf.minusDays(1));
 
         UpAuction completed = persistAuction("낙찰 완료", asOf.plusDays(1));
-        overrideStartedAt(completed, asOf.minusDays(1));
+        overrideCreatedAt(completed, asOf.minusDays(1));
         overrideCompletedAt(completed, asOf.minusMinutes(1));
 
         entityManager.clear();
@@ -229,7 +229,7 @@ class AuctionRepositoryIntegrationTest {
         LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
 
         UpAuction completedAfterAsOf = persistAuction("조회 도중 즉시구매 체결", asOf.plusDays(1));
-        overrideStartedAt(completedAfterAsOf, asOf.minusDays(1));
+        overrideCreatedAt(completedAfterAsOf, asOf.minusDays(1));
         overrideCompletedAt(completedAfterAsOf, asOf.plusMinutes(1));
 
         entityManager.clear();
@@ -291,15 +291,13 @@ class AuctionRepositoryIntegrationTest {
         return auction;
     }
 
-    // findAllForList가 asOf와 비교하는 기준이 started_at(DB 시계)이라, 그 조건을 검증하는
-    // 테스트는 created_at이 아니라 started_at을 직접 조작해야 한다.
-    private void overrideStartedAt(Auction auction, LocalDateTime startedAt) {
+    private void overrideCreatedAt(Auction auction, LocalDateTime createdAt) {
         entityManager.createNativeQuery("""
                         update auction
-                        set started_at = :startedAt
+                        set created_at = :createdAt
                         where id = :auctionId
                         """)
-                .setParameter("startedAt", startedAt)
+                .setParameter("createdAt", createdAt)
                 .setParameter("auctionId", auction.getId())
                 .executeUpdate();
     }
