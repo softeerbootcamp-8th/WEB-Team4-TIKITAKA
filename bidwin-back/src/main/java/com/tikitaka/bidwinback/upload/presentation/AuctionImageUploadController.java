@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.upload.presentation;
 
-import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.Login;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.upload.application.AuctionImageDraftService;
 import com.tikitaka.bidwinback.upload.application.AuctionImagePresignService;
@@ -15,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -38,7 +37,7 @@ public class AuctionImageUploadController {
 
     @PostMapping("/presign")
     public ResponseEntity<ApiResponse<List<AuctionImagePresignResponse>>> presign(
-            @RequestAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY) AuthMember authMember,
+            @Login AuthMember authMember,
             @Valid @RequestBody AuctionImagePresignBatchRequest request
     ) {
         List<AuctionImagePresignResponse> response = presignService.issue(

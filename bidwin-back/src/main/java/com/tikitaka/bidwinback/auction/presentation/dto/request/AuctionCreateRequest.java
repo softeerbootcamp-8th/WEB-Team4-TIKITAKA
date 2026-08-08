@@ -59,7 +59,7 @@ public record AuctionCreateRequest(
         @Positive(message = "인하 주기는 0보다 커야 합니다.")
         Long priceDropInterval,
 
-        // presign으로 업로드한 이미지의 objectKey 목록. 순서가 곧 노출 순서(첫 장이 대표 이미지)다.
-        List<@NotBlank String> images
+        // presign 응답의 uploadId 목록. 순서가 곧 노출 순서(첫 장이 대표 이미지)다.
+        List<@NotNull UUID> imageUploadIds
 ) {
 }

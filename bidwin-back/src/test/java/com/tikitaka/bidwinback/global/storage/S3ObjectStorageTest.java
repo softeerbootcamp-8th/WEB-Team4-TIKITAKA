@@ -4,6 +4,8 @@ import com.tikitaka.bidwinback.global.config.S3Properties;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ChecksumMode;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -54,6 +56,7 @@ class S3ObjectStorageTest {
         String objectKey = "auction-images/image-id.jpg";
         String contentType = "image/jpeg";
         long contentLength = 248_392L;
+        String checksumSha256 = "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4=";
         String url = "https://example.com/presigned-upload";
         Map<String, List<String>> signedHeaders = Map.of(
                 "Content-Type",
@@ -70,7 +73,8 @@ class S3ObjectStorageTest {
         PresignedUpload result = storage.presignPut(
                 objectKey,
                 contentType,
-                contentLength
+                contentLength,
+                checksumSha256
         );
 
         ArgumentCaptor<PutObjectPresignRequest> captor =
@@ -87,6 +91,8 @@ class S3ObjectStorageTest {
                         .isEqualTo(contentType),
                 () -> assertThat(putObjectRequest.contentLength())
                         .isEqualTo(contentLength),
+                () -> assertThat(putObjectRequest.checksumSHA256())
+                        .isEqualTo(checksumSha256),
                 () -> assertThat(result.url()).isEqualTo(url),
                 () -> assertThat(result.signedHeaders()).isEqualTo(signedHeaders),
                 () -> assertThat(result.expiresAt()).isEqualTo(expiresAt)
@@ -104,7 +110,10 @@ class S3ObjectStorageTest {
         );
         String objectKey = "profile-images/1/image.jpg";
         when(s3Client.headObject(any(HeadObjectRequest.class)))
-                .thenReturn(HeadObjectResponse.builder().build());
+                .thenReturn(HeadObjectResponse.builder()
+                        .contentLength(1L)
+                        .contentType("image/jpeg")
+                        .build());
 
         boolean exists = storage.exists(objectKey);
 
@@ -147,6 +156,63 @@ class S3ObjectStorageTest {
 
         assertThatThrownBy(() -> storage.exists("profile-images/1/image.jpg"))
                 .isSameAs(exception);
+    }
+
+    @Test
+    void 객체_메타데이터를_체크섬과_함께_조회한다() {
+        S3Client s3Client = mock(S3Client.class);
+        S3ObjectStorage storage = new S3ObjectStorage(
+                s3Client,
+                mock(S3Presigner.class),
+                PROPERTIES
+        );
+        String objectKey = "temp/a2ddf707-cc3b-43d0-8c92-b86e8da74bc6";
+        String checksumSha256 = "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4=";
+        when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(
+                HeadObjectResponse.builder()
+                        .contentLength(248_392L)
+                        .contentType("image/jpeg")
+                        .checksumSHA256(checksumSha256)
+                        .build()
+        );
+
+        StoredObjectMetadata metadata = storage.head(objectKey).orElseThrow();
+
+        ArgumentCaptor<HeadObjectRequest> captor =
+                ArgumentCaptor.forClass(HeadObjectRequest.class);
+        verify(s3Client).headObject(captor.capture());
+        assertAll(
+                () -> assertThat(captor.getValue().bucket()).isEqualTo(BUCKET),
+                () -> assertThat(captor.getValue().key()).isEqualTo(objectKey),
+                () -> assertThat(captor.getValue().checksumMode()).isEqualTo(ChecksumMode.ENABLED),
+                () -> assertThat(metadata.contentLength()).isEqualTo(248_392L),
+                () -> assertThat(metadata.contentType()).isEqualTo("image/jpeg"),
+                () -> assertThat(metadata.checksumSha256()).isEqualTo(checksumSha256)
+        );
+    }
+
+    @Test
+    void 임시_객체를_영구_객체_키로_복사한다() {
+        S3Client s3Client = mock(S3Client.class);
+        S3ObjectStorage storage = new S3ObjectStorage(
+                s3Client,
+                mock(S3Presigner.class),
+                PROPERTIES
+        );
+        String sourceKey = "temp/a2ddf707-cc3b-43d0-8c92-b86e8da74bc6";
+        String destinationKey = "auction-images/100/a2ddf707-cc3b-43d0-8c92-b86e8da74bc6.jpg";
+
+        storage.copy(sourceKey, destinationKey);
+
+        ArgumentCaptor<CopyObjectRequest> captor =
+                ArgumentCaptor.forClass(CopyObjectRequest.class);
+        verify(s3Client).copyObject(captor.capture());
+        assertAll(
+                () -> assertThat(captor.getValue().sourceBucket()).isEqualTo(BUCKET),
+                () -> assertThat(captor.getValue().sourceKey()).isEqualTo(sourceKey),
+                () -> assertThat(captor.getValue().destinationBucket()).isEqualTo(BUCKET),
+                () -> assertThat(captor.getValue().destinationKey()).isEqualTo(destinationKey)
+        );
     }
 
     @Test

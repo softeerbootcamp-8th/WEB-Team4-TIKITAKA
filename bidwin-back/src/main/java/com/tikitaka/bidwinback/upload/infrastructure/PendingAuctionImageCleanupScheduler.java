@@ -20,7 +20,7 @@ public class PendingAuctionImageCleanupScheduler {
     public void cleanup() {
         int deletedCount = cleanupService.cleanup();
         if (deletedCount > 0) {
-            log.info("만료 경매 이미지 정리 완료: count={}", deletedCount);
+            log.info("만료 경매 이미지 예약 정리 완료: count={}", deletedCount);
         }
     }
 }

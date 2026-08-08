@@ -3,7 +3,7 @@ package com.tikitaka.bidwinback.upload.application;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.storage.ObjectStorage;
 import com.tikitaka.bidwinback.global.storage.PresignedUpload;
-import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.AuctionImageUploadReservation;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.domain.UploadException;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
@@ -39,12 +39,15 @@ class AuctionImagePresignServiceTest {
         );
         long memberId = 1L;
         UUID draftId = UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09");
+        String checksumSha256 = "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4=";
+        UUID uploadId = UUID.fromString("a2ddf707-cc3b-43d0-8c92-b86e8da74bc6");
         AuctionImagePresignRequest request = new AuctionImagePresignRequest(
                 "headphone.jpeg",
                 "image/jpeg",
-                248_392L
+                248_392L,
+                checksumSha256
         );
-        String objectKey = "auction-images/image-id.jpg";
+        String objectKey = "temp/a2ddf707-cc3b-43d0-8c92-b86e8da74bc6";
         String presignedUrl = "https://example.com/presigned-upload";
         Instant expiresAt = Instant.parse("2026-07-28T06:10:00Z");
         Map<String, List<String>> signedHeaders = Map.of(
@@ -52,9 +55,15 @@ class AuctionImagePresignServiceTest {
                 List.of("image/jpeg")
         );
 
-        when(objectKeyGenerator.generate(AuctionImageFileType.JPEG))
+        when(objectKeyGenerator.generateUploadId()).thenReturn(uploadId);
+        when(objectKeyGenerator.generateTemporary(uploadId))
                 .thenReturn(objectKey);
-        when(objectStorage.presignPut(objectKey, "image/jpeg", request.size()))
+        when(objectStorage.presignPut(
+                objectKey,
+                "image/jpeg",
+                request.size(),
+                checksumSha256
+        ))
                 .thenReturn(new PresignedUpload(
                         presignedUrl,
                         signedHeaders,
@@ -68,17 +77,29 @@ class AuctionImagePresignServiceTest {
         ).getFirst();
 
         assertAll(
+                () -> assertEquals(uploadId, response.uploadId()),
                 () -> assertEquals(presignedUrl, response.presignedUrl()),
-                () -> assertEquals(objectKey, response.objectKey()),
                 () -> assertEquals(signedHeaders, response.signedHeaders()),
                 () -> assertEquals(expiresAt, response.expiresAt())
         );
-        verify(objectKeyGenerator).generate(AuctionImageFileType.JPEG);
-        verify(objectStorage).presignPut(objectKey, "image/jpeg", request.size());
+        verify(objectKeyGenerator).generateUploadId();
+        verify(objectKeyGenerator).generateTemporary(uploadId);
+        verify(objectStorage).presignPut(
+                objectKey,
+                "image/jpeg",
+                request.size(),
+                checksumSha256
+        );
         verify(pendingAuctionImageStore).saveAll(
                 memberId,
                 draftId,
-                List.of(objectKey)
+                List.of(new AuctionImageUploadReservation(
+                        uploadId,
+                        objectKey,
+                        "image/jpeg",
+                        request.size(),
+                        checksumSha256
+                ))
         );
     }
 
@@ -96,27 +117,35 @@ class AuctionImagePresignServiceTest {
         );
         long memberId = 1L;
         UUID draftId = UUID.fromString("44eac1aa-827d-40c3-b3e9-c44abb94ed09");
+        String firstChecksum = "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4=";
+        String secondChecksum = "YgVvBrlqJ7qG0u/UokhAn3lVnI5PThR2Y7Nk2cQ7QzE=";
+        UUID firstUploadId = UUID.fromString("a2ddf707-cc3b-43d0-8c92-b86e8da74bc6");
+        UUID secondUploadId = UUID.fromString("f6822a2e-d7ad-4896-a801-1524c81eb6b2");
         AuctionImagePresignRequest firstRequest = new AuctionImagePresignRequest(
                 "headphone.jpg",
                 "image/jpeg",
-                248_392L
+                248_392L,
+                firstChecksum
         );
         AuctionImagePresignRequest secondRequest = new AuctionImagePresignRequest(
                 "keyboard.png",
                 "image/png",
-                128_000L
+                128_000L,
+                secondChecksum
         );
-        String firstObjectKey = "auction-images/image-id-1.jpg";
-        String secondObjectKey = "auction-images/image-id-2.png";
+        String firstObjectKey = "temp/a2ddf707-cc3b-43d0-8c92-b86e8da74bc6";
+        String secondObjectKey = "temp/f6822a2e-d7ad-4896-a801-1524c81eb6b2";
 
-        when(objectKeyGenerator.generate(AuctionImageFileType.JPEG))
+        when(objectKeyGenerator.generateUploadId()).thenReturn(firstUploadId, secondUploadId);
+        when(objectKeyGenerator.generateTemporary(firstUploadId))
                 .thenReturn(firstObjectKey);
-        when(objectKeyGenerator.generate(AuctionImageFileType.PNG))
+        when(objectKeyGenerator.generateTemporary(secondUploadId))
                 .thenReturn(secondObjectKey);
         when(objectStorage.presignPut(
                 firstObjectKey,
                 "image/jpeg",
-                firstRequest.size()
+                firstRequest.size(),
+                firstChecksum
         )).thenReturn(new PresignedUpload(
                 "https://example.com/presigned-upload-1",
                 Map.of(),
@@ -125,7 +154,8 @@ class AuctionImagePresignServiceTest {
         when(objectStorage.presignPut(
                 secondObjectKey,
                 "image/png",
-                secondRequest.size()
+                secondRequest.size(),
+                secondChecksum
         )).thenReturn(new PresignedUpload(
                 "https://example.com/presigned-upload-2",
                 Map.of(),
@@ -141,28 +171,39 @@ class AuctionImagePresignServiceTest {
         assertAll(
                 () -> assertEquals(2, responses.size()),
                 () -> assertEquals(
-                        firstObjectKey,
-                        responses.get(0).objectKey()
+                        firstUploadId,
+                        responses.get(0).uploadId()
                 ),
                 () -> assertEquals(
-                        secondObjectKey,
-                        responses.get(1).objectKey()
+                        secondUploadId,
+                        responses.get(1).uploadId()
                 )
         );
         verify(objectStorage).presignPut(
                 firstObjectKey,
                 "image/jpeg",
-                firstRequest.size()
+                firstRequest.size(),
+                firstChecksum
         );
         verify(objectStorage).presignPut(
                 secondObjectKey,
                 "image/png",
-                secondRequest.size()
+                secondRequest.size(),
+                secondChecksum
         );
         verify(pendingAuctionImageStore).saveAll(
                 memberId,
                 draftId,
-                List.of(firstObjectKey, secondObjectKey)
+                List.of(
+                        new AuctionImageUploadReservation(
+                                firstUploadId, firstObjectKey, "image/jpeg",
+                                firstRequest.size(), firstChecksum
+                        ),
+                        new AuctionImageUploadReservation(
+                                secondUploadId, secondObjectKey, "image/png",
+                                secondRequest.size(), secondChecksum
+                        )
+                )
         );
     }
 
@@ -181,7 +222,8 @@ class AuctionImagePresignServiceTest {
         AuctionImagePresignRequest request = new AuctionImagePresignRequest(
                 "malware.exe",
                 "application/octet-stream",
-                1_024L
+                1_024L,
+                "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4="
         );
 
         UploadException exception = assertThrows(
