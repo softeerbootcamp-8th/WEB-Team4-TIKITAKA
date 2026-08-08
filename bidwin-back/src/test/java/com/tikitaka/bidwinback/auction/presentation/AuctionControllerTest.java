@@ -14,6 +14,7 @@ import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDeta
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.auth.LoginMemberArgumentResolver;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,7 @@ class AuctionControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuctionController(auctionDetailService, auctionCreateService, auctionListService))
+                .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -146,7 +148,7 @@ class AuctionControllerTest {
                   "durationMinutes": 60,
                   "startPrice": 200000,
                   "buyNowPrice": 300000,
-                  "images": ["auctions/1/product.jpg"]
+                  "imageUploadIds": ["a2ddf707-cc3b-43d0-8c92-b86e8da74bc6"]
                 }
                 """;
 

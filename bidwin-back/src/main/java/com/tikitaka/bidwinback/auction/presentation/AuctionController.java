@@ -11,8 +11,8 @@ import com.tikitaka.bidwinback.auction.presentation.dto.request.AuctionCreateReq
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionCreateResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
-import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.Login;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import jakarta.validation.Valid;
@@ -22,7 +22,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -55,7 +54,7 @@ public class AuctionController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<AuctionCreateResponse>> create(
-            @RequestAttribute(AuthConstant.REQUEST_ATTRIBUTE_KEY) AuthMember authMember,
+            @Login AuthMember authMember,
             @Valid @RequestBody AuctionCreateRequest request
     ) {
         AuctionCreateResponse response = auctionCreateService.create(authMember.memberId(), request);

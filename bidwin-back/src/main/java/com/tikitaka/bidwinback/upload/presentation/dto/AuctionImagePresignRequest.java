@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record AuctionImagePresignRequest(
@@ -18,6 +19,13 @@ public record AuctionImagePresignRequest(
         @NotNull(message = "파일 크기는 필수입니다.")
         @Positive(message = "파일 크기는 0보다 커야 합니다.")
         @Max(value = 10_485_760, message = "파일 크기는 10MB 이하여야 합니다.")
-        Long size
+        Long size,
+
+        @NotBlank(message = "파일 체크섬은 필수입니다.")
+        @Pattern(
+                regexp = "^[A-Za-z0-9+/]{43}=$",
+                message = "파일 체크섬 형식이 올바르지 않습니다."
+        )
+        String checksumSha256
 ) {
 }

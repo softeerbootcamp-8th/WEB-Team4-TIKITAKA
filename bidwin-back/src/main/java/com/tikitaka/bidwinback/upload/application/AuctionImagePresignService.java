@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.upload.application;
 import com.tikitaka.bidwinback.global.storage.ObjectStorage;
 import com.tikitaka.bidwinback.global.storage.PresignedUpload;
 import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.AuctionImageUploadReservation;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
 import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -26,40 +28,65 @@ public class AuctionImagePresignService {
             UUID draftId,
             List<AuctionImagePresignRequest> requests
     ) {
-        List<AuctionImagePresignResponse> responses = requests
-                .stream()
-                .map(this::issueOne)
+        List<AuctionImageFileType> fileTypes = requests.stream()
+                .map(request -> AuctionImageFileType.from(
+                        request.fileName(),
+                        request.contentType()
+                ))
+                .toList();
+        List<IssuedUpload> issuedUploads = IntStream
+                .range(0, requests.size())
+                .mapToObj(index -> issueOne(requests.get(index), fileTypes.get(index)))
                 .toList();
 
+        // URL을 반환하기 전에 소유자·draft·서명 조건을 저장해 경매 등록 시 검증 기준으로 사용한다.
         pendingAuctionImageStore.saveAll(
                 memberId,
                 draftId,
-                responses.stream()
-                        .map(AuctionImagePresignResponse::objectKey)
+                issuedUploads.stream()
+                        .map(IssuedUpload::reservation)
                         .toList()
         );
 
-        return responses;
+        return issuedUploads.stream()
+                .map(IssuedUpload::response)
+                .toList();
     }
 
-    private AuctionImagePresignResponse issueOne(AuctionImagePresignRequest request) {
-
-        // 파일 확장자와 MIME 타입이 허용된 조합인지 검증한다.
-        AuctionImageFileType fileType = AuctionImageFileType.from(request.fileName(), request.contentType());
-
-        String objectKey = objectKeyGenerator.generate(fileType);
+    private IssuedUpload issueOne(
+            AuctionImagePresignRequest request,
+            AuctionImageFileType fileType
+    ) {
+        // uploadId는 S3가 아닌 백엔드가 생성하며, 임시 객체 키와 업로드 예약을 연결하는 식별자다.
+        UUID uploadId = objectKeyGenerator.generateUploadId();
+        String objectKey = objectKeyGenerator.generateTemporary(uploadId);
 
         PresignedUpload presignedUpload = objectStorage.presignPut(
                 objectKey,
                 fileType.getContentType(),
-                request.size()
+                request.size(),
+                request.checksumSha256()
         );
 
-        return new AuctionImagePresignResponse(
-                presignedUpload.url(),
+        AuctionImageUploadReservation reservation = new AuctionImageUploadReservation(
+                uploadId,
                 objectKey,
+                fileType.getContentType(),
+                request.size(),
+                request.checksumSha256()
+        );
+        AuctionImagePresignResponse response = new AuctionImagePresignResponse(
+                uploadId,
+                presignedUpload.url(),
                 presignedUpload.signedHeaders(),
                 presignedUpload.expiresAt()
         );
+        return new IssuedUpload(reservation, response);
+    }
+
+    private record IssuedUpload(
+            AuctionImageUploadReservation reservation,
+            AuctionImagePresignResponse response
+    ) {
     }
 }

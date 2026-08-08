@@ -39,16 +39,57 @@ public class PendingAuctionImage extends BaseTimeEntity {
     @Column(name = "draft_id", nullable = false)
     private UUID draftId;
 
+    // 마이그레이션 이전 대기 행은 cleanup 대상으로 남겨두기 위해 DB에서만 null을 허용한다.
+    @Column(name = "upload_id", unique = true)
+    private UUID uploadId;
+
     @Column(name = "object_key", nullable = false, length = 100, unique = true)
     private String objectKey;
 
-    private PendingAuctionImage(Long memberId, UUID draftId, String objectKey) {
+    @Column(name = "content_type", length = 100)
+    private String contentType;
+
+    @Column(name = "content_length")
+    private Long contentLength;
+
+    @Column(name = "checksum_sha256", length = 44)
+    private String checksumSha256;
+
+    private PendingAuctionImage(
+            Long memberId,
+            UUID draftId,
+            UUID uploadId,
+            String objectKey,
+            String contentType,
+            long contentLength,
+            String checksumSha256
+    ) {
         this.memberId = memberId;
         this.draftId = draftId;
+        this.uploadId = uploadId;
         this.objectKey = objectKey;
+        this.contentType = contentType;
+        this.contentLength = contentLength;
+        this.checksumSha256 = checksumSha256;
     }
 
-    public static PendingAuctionImage issue(Long memberId, UUID draftId, String objectKey) {
-        return new PendingAuctionImage(memberId, draftId, objectKey);
+    public static PendingAuctionImage issue(
+            Long memberId,
+            UUID draftId,
+            UUID uploadId,
+            String objectKey,
+            String contentType,
+            long contentLength,
+            String checksumSha256
+    ) {
+        return new PendingAuctionImage(
+                memberId,
+                draftId,
+                uploadId,
+                objectKey,
+                contentType,
+                contentLength,
+                checksumSha256
+        );
     }
 }

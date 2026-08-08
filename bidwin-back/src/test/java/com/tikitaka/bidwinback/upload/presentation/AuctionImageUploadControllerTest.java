@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.auth.LoginMemberArgumentResolver;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import com.tikitaka.bidwinback.upload.application.AuctionImageDraftService;
@@ -50,12 +51,14 @@ class AuctionImageUploadControllerTest {
                 {
                   "fileName": "headphone.jpg",
                   "contentType": "image/jpeg",
-                  "size": 248392
+                  "size": 248392,
+                  "checksumSha256": "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4="
                 },
                 {
                   "fileName": "keyboard.png",
                   "contentType": "image/png",
-                  "size": 128000
+                  "size": 128000,
+                  "checksumSha256": "YgVvBrlqJ7qG0u/UokhAn3lVnI5PThR2Y7Nk2cQ7QzE="
                 }
               ]
             }
@@ -79,6 +82,7 @@ class AuctionImageUploadControllerTest {
                         presignService,
                         draftService
                 ))
+                .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .addFilters(
                         new AuthExceptionFilter(new ObjectMapper()),
@@ -111,24 +115,26 @@ class AuctionImageUploadControllerTest {
                 new AuctionImagePresignRequest(
                         "headphone.jpg",
                         "image/jpeg",
-                        248_392L
+                        248_392L,
+                        "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4="
                 ),
                 new AuctionImagePresignRequest(
                         "keyboard.png",
                         "image/png",
-                        128_000L
+                        128_000L,
+                        "YgVvBrlqJ7qG0u/UokhAn3lVnI5PThR2Y7Nk2cQ7QzE="
                 )
         );
         List<AuctionImagePresignResponse> responses = List.of(
                 new AuctionImagePresignResponse(
+                        UUID.fromString("a2ddf707-cc3b-43d0-8c92-b86e8da74bc6"),
                         "https://example.com/presigned-upload-1",
-                        "auction-images/image-id-1.jpg",
                         Map.of("Content-Type", List.of("image/jpeg")),
                         Instant.parse("2026-07-28T06:10:00Z")
                 ),
                 new AuctionImagePresignResponse(
+                        UUID.fromString("f6822a2e-d7ad-4896-a801-1524c81eb6b2"),
                         "https://example.com/presigned-upload-2",
-                        "auction-images/image-id-2.png",
                         Map.of("Content-Type", List.of("image/png")),
                         Instant.parse("2026-07-28T06:10:00Z")
                 )
@@ -143,15 +149,15 @@ class AuctionImageUploadControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].presignedUrl")
                         .value(responses.get(0).presignedUrl()))
-                .andExpect(jsonPath("$.data[0].objectKey")
-                        .value(responses.get(0).objectKey()))
+                .andExpect(jsonPath("$.data[0].uploadId")
+                        .value(responses.get(0).uploadId().toString()))
                 .andExpect(jsonPath(
                         "$.data[0].signedHeaders['Content-Type'][0]"
                 ).value("image/jpeg"))
                 .andExpect(jsonPath("$.data[1].presignedUrl")
                         .value(responses.get(1).presignedUrl()))
-                .andExpect(jsonPath("$.data[1].objectKey")
-                        .value(responses.get(1).objectKey()))
+                .andExpect(jsonPath("$.data[1].uploadId")
+                        .value(responses.get(1).uploadId().toString()))
                 .andExpect(jsonPath(
                         "$.data[1].signedHeaders['Content-Type'][0]"
                 ).value("image/png"));
@@ -171,7 +177,8 @@ class AuctionImageUploadControllerTest {
                                     {
                                       "fileName": "headphone.jpg",
                                       "contentType": "image/jpeg",
-                                      "size": 10485761
+                                      "size": 10485761,
+                                      "checksumSha256": "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4="
                                     }
                                   ]
                                 }
