@@ -22,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -32,6 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class MyPageAccountUpdateControllerTest {
+
+    private static final Instant NOW = Instant.parse("2026-08-06T10:00:00Z");
 
     @Mock
     private MemberService memberService;
@@ -58,7 +61,7 @@ class MyPageAccountUpdateControllerTest {
                         new AuthExceptionFilter(new ObjectMapper()),
                         new SessionAuthenticationFilter(
                                 sessionAuthService,
-                                Clock.systemUTC()
+                                Clock.fixed(NOW, ZoneOffset.UTC)
                         )
                 )
                 .build();
@@ -146,7 +149,7 @@ class MyPageAccountUpdateControllerTest {
         return new AuthMember(
                 1L,
                 2L,
-                Instant.parse("2026-08-06T10:00:00Z")
+                NOW
         );
     }
 

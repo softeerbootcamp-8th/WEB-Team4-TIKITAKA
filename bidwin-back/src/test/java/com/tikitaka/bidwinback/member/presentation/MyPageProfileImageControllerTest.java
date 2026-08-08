@@ -22,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class MyPageProfileImageControllerTest {
+
+    private static final Instant NOW = Instant.parse("2026-08-06T10:00:00Z");
 
     @Mock
     private MemberProfileImageService profileImageService;
@@ -51,7 +54,7 @@ class MyPageProfileImageControllerTest {
                         new AuthExceptionFilter(new ObjectMapper()),
                         new SessionAuthenticationFilter(
                                 sessionAuthService,
-                                Clock.systemUTC()
+                                Clock.fixed(NOW, ZoneOffset.UTC)
                         )
                 )
                 .build();
@@ -105,7 +108,7 @@ class MyPageProfileImageControllerTest {
         AuthMember authMember = new AuthMember(
                 1L,
                 0L,
-                Instant.parse("2026-08-06T10:00:00Z")
+                NOW
         );
         MockHttpSession session = new MockHttpSession();
         session.setAttribute(AuthConstant.SESSION_KEY, authMember);
