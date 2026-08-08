@@ -37,6 +37,17 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
             """)
     Optional<AuctionTrade> findByIdForUpdate(@Param("tradeId") Long tradeId);
 
+    // 거래 상세·SSE 조회용. 잠금 없이 역할 판별과 연락처 게이팅에 필요한 연관을 함께 가져온다.
+    @Query("""
+            select trade
+            from AuctionTrade trade
+            join fetch trade.buyer
+            join fetch trade.auction auction
+            join fetch auction.seller
+            where trade.id = :tradeId
+            """)
+    Optional<AuctionTrade> findDetailById(@Param("tradeId") Long tradeId);
+
     @Query("""
             select trade
             from AuctionTrade trade

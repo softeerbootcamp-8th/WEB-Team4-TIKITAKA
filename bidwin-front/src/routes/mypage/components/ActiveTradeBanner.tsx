@@ -64,7 +64,7 @@ function ActiveTradeCard({ trade }: { trade: ActiveTrade }) {
 
   return (
     <Link
-      to={`/auctions/${trade.auctionId}`}
+      to={`/trades/${trade.tradeId}`}
       className="flex h-full flex-col gap-sm rounded-lg bg-canvas p-sm transition-shadow hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div className="flex gap-sm">

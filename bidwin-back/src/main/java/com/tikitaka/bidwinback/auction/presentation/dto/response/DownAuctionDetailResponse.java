@@ -21,7 +21,6 @@ public record DownAuctionDetailResponse(
         long serverTime,
         long deadline,
         TradeType tradeType,
-        String contact,
         AuctionSellerResponse seller,
         Long finalPrice,
         long minimumPrice,

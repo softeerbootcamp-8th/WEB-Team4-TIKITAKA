@@ -1,9 +1,11 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.TradeStatusChanged;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.exception.TradeException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,7 @@ public class TradeConfirmationService {
 
     private final AuctionTradeRepository auctionTradeRepository;
     private final DepositSettlementService depositSettlementService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public TradeConfirmationResult confirmBuyer(Long memberId, Long tradeId) {
@@ -28,6 +31,8 @@ public class TradeConfirmationService {
                 trade.getBuyer().getId(),
                 trade.getFinalPrice()
         );
+        // 커밋 뒤 거래 SSE로 상태 변경(WAITING_CONFIRM→CONFIRMED)을 전파해 양쪽 화면을 갱신한다.
+        eventPublisher.publishEvent(new TradeStatusChanged(trade.getId()));
         return TradeConfirmationResult.from(trade);
     }
 
@@ -43,6 +48,8 @@ public class TradeConfirmationService {
                 trade.getAuction().getSeller().getId(),
                 trade.getFinalPrice()
         );
+        // 커밋 뒤 거래 SSE로 상태 변경(CONFIRMED→COMPLETED)을 전파해 양쪽 화면을 갱신한다.
+        eventPublisher.publishEvent(new TradeStatusChanged(trade.getId()));
         return TradeConfirmationResult.from(trade);
     }
 
