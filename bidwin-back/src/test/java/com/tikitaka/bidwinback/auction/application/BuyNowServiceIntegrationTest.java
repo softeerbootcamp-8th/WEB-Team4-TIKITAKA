@@ -46,7 +46,10 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-@SpringBootTest(properties = "app.storage.s3.bucket=test-bucket")
+@SpringBootTest(properties = {
+        "app.storage.s3.bucket=test-bucket",
+        "app.auction.closing-interval=1d"
+})
 class BuyNowServiceIntegrationTest {
 
     private static final long BUY_NOW_PRICE = 150_000L;

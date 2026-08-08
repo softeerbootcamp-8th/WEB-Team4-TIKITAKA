@@ -151,7 +151,7 @@ export interface AuctionCreateRequest {
   minimumPrice: number | null
   dropPrice: number | null
   priceDropInterval: number | null
-  images: string[]
+  imageUploadIds: string[]
 }
 
 export interface AuctionCreateResponse {

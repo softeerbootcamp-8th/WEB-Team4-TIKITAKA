@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuctionImageObjectKeyGeneratorTest {
 
@@ -19,24 +21,28 @@ class AuctionImageObjectKeyGeneratorTest {
             "PNG, png",
             "WEBP, webp"
     })
-    void 이미지_형식에_맞는_objectKey를_생성한다(
+    void 경매와_uploadId와_이미지_형식에_맞는_영구_objectKey를_생성한다(
             AuctionImageFileType fileType,
             String extension
     ) {
-        String objectKey = generator.generate(fileType);
+        UUID uploadId = UUID.fromString("a2ddf707-cc3b-43d0-8c92-b86e8da74bc6");
+        String objectKey = generator.generatePermanent(100L, uploadId, fileType);
 
-        assertTrue(objectKey.matches(
-                "^auction-images/[0-9a-f]{8}-[0-9a-f]{4}-"
-                        + "[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\."
-                        + extension + "$"
-        ));
+        assertEquals("auction-images/100/" + uploadId + "." + extension, objectKey);
     }
 
     @Test
-    void 호출할_때마다_서로_다른_objectKey를_생성한다() {
-        String first = generator.generate(AuctionImageFileType.JPEG);
-        String second = generator.generate(AuctionImageFileType.JPEG);
+    void 호출할_때마다_서로_다른_uploadId를_생성한다() {
+        UUID first = generator.generateUploadId();
+        UUID second = generator.generateUploadId();
 
         assertNotEquals(first, second);
+    }
+
+    @Test
+    void uploadId를_포함한_임시_objectKey를_생성한다() {
+        UUID uploadId = UUID.fromString("a2ddf707-cc3b-43d0-8c92-b86e8da74bc6");
+
+        assertEquals("temp/" + uploadId, generator.generateTemporary(uploadId));
     }
 }

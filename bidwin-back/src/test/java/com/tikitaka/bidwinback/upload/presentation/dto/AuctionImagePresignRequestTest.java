@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AuctionImagePresignRequestTest {
 
     private static final long MAX_FILE_SIZE = 10_485_760L;
+    private static final String CHECKSUM = "mH2LpXfVw2f2Y87a5SIc1J5m3eS74iqrAx/CBEhb3c4=";
 
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
@@ -27,7 +28,7 @@ class AuctionImagePresignRequestTest {
     @Test
     void 파일명이_비어있으면_검증에_실패한다() {
         AuctionImagePresignRequest request =
-                new AuctionImagePresignRequest(" ", "image/jpeg", 1L);
+                new AuctionImagePresignRequest(" ", "image/jpeg", 1L, CHECKSUM);
 
         assertViolation(request, "fileName");
     }
@@ -35,7 +36,7 @@ class AuctionImagePresignRequestTest {
     @Test
     void 파일명이_255자를_초과하면_검증에_실패한다() {
         AuctionImagePresignRequest request =
-                new AuctionImagePresignRequest("a".repeat(256), "image/jpeg", 1L);
+                new AuctionImagePresignRequest("a".repeat(256), "image/jpeg", 1L, CHECKSUM);
 
         assertViolation(request, "fileName");
     }
@@ -43,7 +44,7 @@ class AuctionImagePresignRequestTest {
     @Test
     void 파일_형식이_비어있으면_검증에_실패한다() {
         AuctionImagePresignRequest request =
-                new AuctionImagePresignRequest("image.jpg", " ", 1L);
+                new AuctionImagePresignRequest("image.jpg", " ", 1L, CHECKSUM);
 
         assertViolation(request, "contentType");
     }
@@ -51,7 +52,7 @@ class AuctionImagePresignRequestTest {
     @Test
     void 파일_형식이_100자를_초과하면_검증에_실패한다() {
         AuctionImagePresignRequest request =
-                new AuctionImagePresignRequest("image.jpg", "a".repeat(101), 1L);
+                new AuctionImagePresignRequest("image.jpg", "a".repeat(101), 1L, CHECKSUM);
 
         assertViolation(request, "contentType");
     }
@@ -59,7 +60,7 @@ class AuctionImagePresignRequestTest {
     @Test
     void 파일_크기가_누락되면_검증에_실패한다() {
         AuctionImagePresignRequest request =
-                new AuctionImagePresignRequest("image.jpg", "image/jpeg", null);
+                new AuctionImagePresignRequest("image.jpg", "image/jpeg", null, CHECKSUM);
 
         assertViolation(request, "size");
     }
@@ -79,8 +80,15 @@ class AuctionImagePresignRequestTest {
         assertViolation(request, "size");
     }
 
+    @Test
+    void 체크섬이_없거나_Base64_SHA256_형식이_아니면_검증에_실패한다() {
+        assertViolation(new AuctionImagePresignRequest(
+                "image.jpg", "image/jpeg", 1L, "invalid"
+        ), "checksumSha256");
+    }
+
     private AuctionImagePresignRequest validRequest(Long size) {
-        return new AuctionImagePresignRequest("image.jpg", "image/jpeg", size);
+        return new AuctionImagePresignRequest("image.jpg", "image/jpeg", size, CHECKSUM);
     }
 
     private void assertViolation(AuctionImagePresignRequest request, String field) {

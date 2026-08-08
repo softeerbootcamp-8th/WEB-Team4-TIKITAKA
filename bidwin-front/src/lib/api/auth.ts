@@ -3,11 +3,13 @@ import type { ApiResult } from './client'
 
 const AUTH_API_PATH = {
   login: '/api/v1/auth/login',
+  logout: '/api/v1/auth/logout',
   session: '/api/v1/auth/session',
   signUp: '/api/v1/auth/signups',
   emailAvailability: '/api/v1/auth/signups/email/verify',
   nicknameAvailability: '/api/v1/auth/signups/nickname/verify',
   emailVerificationSend: '/api/v1/auth/signups/email/send',
+  emailVerificationConfirm: '/api/v1/auth/signups/email/confirm',
   passwordReset: '/api/v1/auth/password-resets',
   passwordResetConfirm: '/api/v1/auth/password-resets/confirm',
 }
@@ -67,6 +69,10 @@ function requestEmailVerification(email: string): Promise<ApiResult<void>> {
   return postJson<void, { email: string }>(AUTH_API_PATH.emailVerificationSend, { email })
 }
 
+function requestEmailVerificationConfirm(token: string): Promise<ApiResult<void>> {
+  return postJson<void, { token: string }>(AUTH_API_PATH.emailVerificationConfirm, { token })
+}
+
 function requestPasswordReset(email: string): Promise<ApiResult<void>> {
   return postJson<void, { email: string }>(AUTH_API_PATH.passwordReset, { email })
 }
@@ -84,6 +90,10 @@ function requestLogin(request: LoginRequest): Promise<ApiResult<void>> {
   return postJson<void, LoginRequest>(AUTH_API_PATH.login, request)
 }
 
+function requestLogout(): Promise<ApiResult<void>> {
+  return postJson<void, Record<string, never>>(AUTH_API_PATH.logout, {})
+}
+
 function requestSession(): Promise<ApiResult<void>> {
   return getJson<void>(AUTH_API_PATH.session)
 }
@@ -91,7 +101,9 @@ function requestSession(): Promise<ApiResult<void>> {
 export {
   requestEmailAvailability,
   requestEmailVerification,
+  requestEmailVerificationConfirm,
   requestLogin,
+  requestLogout,
   requestNicknameAvailability,
   requestPasswordReset,
   requestPasswordResetConfirm,

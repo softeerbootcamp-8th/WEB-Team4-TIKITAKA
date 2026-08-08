@@ -7,12 +7,26 @@ import java.util.UUID;
 
 @Component
 public class AuctionImageObjectKeyGenerator {
-    private static final String PREFIX = "auction-images";
+    private static final String TEMP_PREFIX = "temp";
+    private static final String PERMANENT_PREFIX = "auction-images";
 
-    public String generate(AuctionImageFileType fileType) {
-        return "%s/%s.%s".formatted(
-                PREFIX,
-                UUID.randomUUID(),
+    public UUID generateUploadId() {
+        return UUID.randomUUID();
+    }
+
+    public String generateTemporary(UUID uploadId) {
+        return "%s/%s".formatted(TEMP_PREFIX, uploadId);
+    }
+
+    public String generatePermanent(
+            long auctionId,
+            UUID uploadId,
+            AuctionImageFileType fileType
+    ) {
+        return "%s/%d/%s.%s".formatted(
+                PERMANENT_PREFIX,
+                auctionId,
+                uploadId,
                 fileType.getObjectExtension()
         );
     }

@@ -9,6 +9,7 @@ import TextInput from '../../../components/ui/TextInput'
 import Textarea from '../../../components/ui/Textarea'
 import { useToast } from '../../../hooks/useToast'
 import {
+  calculateFileChecksumSha256,
   requestAuctionImageDraft,
   requestAuctionImagePresign,
   uploadImageToPresignedUrl,
@@ -130,14 +131,24 @@ function AuctionRegisterPage() {
     setImages((prev) => [...prev, ...newItems])
     setError(null)
 
-    const presignResult = await requestAuctionImagePresign({
-      draftId,
-      images: validFiles.map((file) => ({
-        fileName: file.name,
-        contentType: file.type,
-        size: file.size,
-      })),
-    })
+    let presignResult
+    try {
+      presignResult = await requestAuctionImagePresign({
+        draftId,
+        images: await Promise.all(
+          validFiles.map(async (file) => ({
+            fileName: file.name,
+            contentType: file.type,
+            size: file.size,
+            checksumSha256: await calculateFileChecksumSha256(file),
+          })),
+        ),
+      })
+    } catch {
+      newItems.forEach((item) => updateImageItem(item.id, { status: 'error' }))
+      setError(ERROR_MESSAGE.imageUploadFailed)
+      return
+    }
 
     if (!presignResult.ok) {
       newItems.forEach((item) => updateImageItem(item.id, { status: 'error' }))
@@ -157,7 +168,7 @@ function AuctionRegisterPage() {
         const uploaded = await uploadImageToPresignedUrl(presign, item.file)
         updateImageItem(item.id, {
           status: uploaded ? 'done' : 'error',
-          objectKey: uploaded ? presign.objectKey : undefined,
+          uploadId: uploaded ? presign.uploadId : undefined,
         })
       }),
     )
@@ -222,8 +233,8 @@ function AuctionRegisterPage() {
     setError(null)
 
     setIsSubmitting(true)
-    const imageKeys = images.flatMap((image) => image.objectKey ? [image.objectKey] : [])
-    if (draftId === null || imageKeys.length !== images.length) {
+    const imageUploadIds = images.flatMap((image) => image.uploadId ? [image.uploadId] : [])
+    if (draftId === null || imageUploadIds.length !== images.length) {
       setIsSubmitting(false)
       setError(ERROR_MESSAGE.imageUploadFailed)
       return
@@ -243,7 +254,7 @@ function AuctionRegisterPage() {
       minimumPrice: auctionType === 'DOWN' ? Number(minimumPrice) : null,
       dropPrice: auctionType === 'DOWN' ? Number(dropPrice) : null,
       priceDropInterval: auctionType === 'DOWN' ? Number(priceDropInterval) : null,
-      images: imageKeys,
+      imageUploadIds,
     })
     setIsSubmitting(false)
     if (!result.ok) {

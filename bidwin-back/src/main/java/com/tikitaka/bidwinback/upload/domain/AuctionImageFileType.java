@@ -39,6 +39,14 @@ public enum AuctionImageFileType {
                         new UploadException(ErrorCode.UNSUPPORTED_IMAGE_TYPE));
     }
 
+    public static AuctionImageFileType fromContentType(String contentType) {
+        return Arrays.stream(values())
+                .filter(type -> type.contentType.equalsIgnoreCase(contentType))
+                .findFirst()
+                .orElseThrow(() ->
+                        new UploadException(ErrorCode.UNSUPPORTED_IMAGE_TYPE));
+    }
+
     private static String extractExtension(String fileName) {
         int dotIndex = fileName.lastIndexOf(".");
         if (dotIndex == -1 || dotIndex == fileName.length() - 1) {

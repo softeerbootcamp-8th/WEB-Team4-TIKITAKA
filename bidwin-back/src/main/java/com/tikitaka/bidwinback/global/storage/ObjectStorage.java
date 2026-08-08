@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.global.storage;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ObjectStorage {
 
@@ -14,7 +15,18 @@ public interface ObjectStorage {
             long contentLength
     );
 
+    PresignedUpload presignPut(
+            String objectKey,
+            String contentType,
+            long contentLength,
+            String checksumSha256
+    );
+
     boolean exists(String objectKey);
+
+    Optional<StoredObjectMetadata> head(String objectKey);
+
+    void copy(String sourceObjectKey, String destinationObjectKey);
 
     ObjectDeletionResult deleteAll(List<String> objectKeys);
 }
