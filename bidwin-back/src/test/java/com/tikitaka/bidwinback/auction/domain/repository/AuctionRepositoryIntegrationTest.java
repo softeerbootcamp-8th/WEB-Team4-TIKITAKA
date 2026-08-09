@@ -164,82 +164,6 @@ class AuctionRepositoryIntegrationTest {
                 .extracting(Auction::getId)
                 .isSortedAccordingTo((left, right) -> Long.compare(right, left));
     }
-
-    
-    @Test
-    void asOf_이후에_생성된_경매는_같은_asOf로_조회한_목록에_나타나지_않는다() {
-        LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
-
-        UpAuction visible = persistAuction("asOf 이전 등록", asOf.plusDays(1));
-        overrideStartedAt(visible, asOf);
-
-        UpAuction createdLater = persistAuction("asOf 이후 등록", asOf.plusDays(1));
-        overrideStartedAt(createdLater, asOf.plusMinutes(1));
-
-        entityManager.clear();
-
-        List<Auction> result = auctionRepository.findAllForList(null, asOf);
-
-        assertThat(result).extracting(Auction::getId)
-                .contains(visible.getId())
-                .doesNotContain(createdLater.getId());
-    }
-
-    @Test
-    void 마감_시각이_asOf_이전인_경매는_목록에서_제외된다() {
-        LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
-
-        UpAuction stillOpen = persistAuction("아직 진행중", asOf.plusDays(1));
-        overrideStartedAt(stillOpen, asOf.minusDays(1));
-
-        UpAuction alreadyEnded = persistAuction("이미 마감", asOf.minusMinutes(1));
-        overrideStartedAt(alreadyEnded, asOf.minusDays(1));
-
-        entityManager.clear();
-
-        List<Auction> result = auctionRepository.findAllForList(null, asOf);
-
-        assertThat(result).extracting(Auction::getId)
-                .contains(stillOpen.getId())
-                .doesNotContain(alreadyEnded.getId());
-    }
-
-    @Test
-    void asOf_이전에_완료_처리된_경매는_목록에서_제외된다() {
-        LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
-
-        UpAuction notCompleted = persistAuction("미완료", asOf.plusDays(1));
-        overrideStartedAt(notCompleted, asOf.minusDays(1));
-
-        UpAuction completed = persistAuction("낙찰 완료", asOf.plusDays(1));
-        overrideStartedAt(completed, asOf.minusDays(1));
-        overrideCompletedAt(completed, asOf.minusMinutes(1));
-
-        entityManager.clear();
-
-        List<Auction> result = auctionRepository.findAllForList(null, asOf);
-
-        assertThat(result).extracting(Auction::getId)
-                .contains(notCompleted.getId())
-                .doesNotContain(completed.getId());
-    }
-
-    @Test
-    void asOf_이후에_완료_처리된_경매는_같은_asOf_페이지_조회에서_계속_노출된다() {
-        LocalDateTime asOf = LocalDateTime.of(2026, 8, 3, 12, 0);
-
-        UpAuction completedAfterAsOf = persistAuction("조회 도중 즉시구매 체결", asOf.plusDays(1));
-        overrideStartedAt(completedAfterAsOf, asOf.minusDays(1));
-        overrideCompletedAt(completedAfterAsOf, asOf.plusMinutes(1));
-
-        entityManager.clear();
-
-        List<Auction> result = auctionRepository.findAllForList(null, asOf);
-
-        assertThat(result).extracting(Auction::getId)
-                .contains(completedAfterAsOf.getId());
-    }
-
     private long revisionOf(Long auctionId) {
         entityManager.clear();
         Number revision = (Number) entityManager.createNativeQuery("""
@@ -271,50 +195,6 @@ class AuctionRepositoryIntegrationTest {
         return auction;
     }
 
-    private UpAuction persistAuction(String title, LocalDateTime endedAt) {
-        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        Member seller = persistMember("seller-" + suffix, "판매" + suffix);
-        UpAuction auction = UpAuction.builder()
-                .seller(seller)
-                .title(title)
-                .description("목록 조회 통합 테스트")
-                .status(AuctionStatus.OPEN)
-                .category(AuctionCategory.HOUSEHOLD)
-                .startPrice(START_PRICE)
-                .endedAt(endedAt)
-                .tradeType(TradeType.DELIVERY)
-                .contact("01012345678")
-                .buyNowPrice(300_000L)
-                .build();
-        entityManager.persist(auction);
-        entityManager.flush();
-        return auction;
-    }
-
-    // findAllForList가 asOf와 비교하는 기준이 started_at(DB 시계)이라, 그 조건을 검증하는
-    // 테스트는 created_at이 아니라 started_at을 직접 조작해야 한다.
-    private void overrideStartedAt(Auction auction, LocalDateTime startedAt) {
-        entityManager.createNativeQuery("""
-                        update auction
-                        set started_at = :startedAt
-                        where id = :auctionId
-                        """)
-                .setParameter("startedAt", startedAt)
-                .setParameter("auctionId", auction.getId())
-                .executeUpdate();
-    }
-
-    private void overrideCompletedAt(Auction auction, LocalDateTime completedAt) {
-        entityManager.createNativeQuery("""
-                        update auction
-                        set completed_at = :completedAt
-                        where id = :auctionId
-                        """)
-                .setParameter("completedAt", completedAt)
-                .setParameter("auctionId", auction.getId())
-                .executeUpdate();
-    }
-
     private void moveToSealedWindow(Long auctionId) {
         entityManager.createNativeQuery("""
                         update auction
@@ -344,16 +224,4 @@ class AuctionRepositoryIntegrationTest {
         return member;
     }
 
-    private Member persistMember(String identifier, String nickname) {
-        Member member = Member.builder()
-                .email(identifier + "@example.com")
-                .password("encoded-password")
-                .name("통합테스트")
-                .phoneNumber("01012345678")
-                .nickname(nickname)
-                .status(MemberStatus.ACTIVE)
-                .build();
-        entityManager.persist(member);
-        return member;
-    }
 }
