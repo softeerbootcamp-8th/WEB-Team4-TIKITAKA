@@ -87,11 +87,13 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     ) {
         List<AuctionListMetrics> metrics = switch (condition.sort()) {
             case DEADLINE, LATEST -> findPageByColumnSort(condition, offset, limit);
-            case RECOMMENDED, PRICE_LOW, PRICE_HIGH -> findPageByAggregateSort(
+            case RECOMMENDED -> findPageByAggregateSort(
                     condition,
                     offset,
                     limit
             );
+            case PRICE_LOW, PRICE_HIGH ->
+                    throw new IllegalArgumentException("가격순은 Top-K 조회를 사용해야 합니다.");
         };
         return findRows(metrics);
     }
@@ -456,15 +458,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                     expressions.bidCount().desc(),
                     auction.id.desc()
             };
-            case PRICE_LOW -> new OrderSpecifier<?>[]{
-                    expressions.currentPrice().asc(),
-                    auction.id.desc()
-            };
-            case PRICE_HIGH -> new OrderSpecifier<?>[]{
-                    expressions.currentPrice().desc(),
-                    auction.id.desc()
-            };
-            case DEADLINE, LATEST ->
+            case PRICE_LOW, PRICE_HIGH, DEADLINE, LATEST ->
                     throw new IllegalArgumentException("집계 정렬이 아닙니다: " + sort);
         };
     }

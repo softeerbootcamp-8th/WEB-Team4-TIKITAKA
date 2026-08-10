@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
 import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
+import com.tikitaka.bidwinback.auction.application.AuctionPricePageQuery;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -49,6 +50,9 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
 
     @Autowired
     private AuctionListQueryRepository auctionListQueryRepository;
+
+    @Autowired
+    private AuctionPricePageQuery auctionPricePageQuery;
 
     @Autowired
     private EntityManager entityManager;
@@ -163,7 +167,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         entityManager.clear();
 
         AuctionListSearchCondition condition = condition(AuctionSort.LATEST);
-        List<AuctionListRow> page = auctionListQueryRepository.findPage(condition, 1, 2);
+        List<AuctionListRow> page = findPage(condition, 1, 2);
 
         assertThat(page)
                 .extracting(AuctionListRow::auctionId)
@@ -181,7 +185,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         entityManager.clear();
 
         for (AuctionSort sort : AuctionSort.values()) {
-            List<AuctionListRow> rows = auctionListQueryRepository.findPage(condition(sort), 0, 2);
+            List<AuctionListRow> rows = findPage(condition(sort), 0, 2);
             List<Long> expectedIds = sort == AuctionSort.DEADLINE
                     ? List.of(first.getId(), second.getId())
                     : List.of(second.getId(), first.getId());
@@ -208,7 +212,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         setBidCreatedAt(afterAsOf, AS_OF.plusMinutes(1));
         entityManager.clear();
 
-        List<AuctionListRow> rows = auctionListQueryRepository.findPage(
+        List<AuctionListRow> rows = findPage(
                 condition(AuctionSort.RECOMMENDED),
                 0,
                 10
@@ -242,19 +246,19 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         setBidCreatedAt(bid, AS_OF.minusMinutes(1));
         entityManager.clear();
 
-        assertThat(auctionListQueryRepository.findPage(
+        assertThat(findPage(
                 condition(AuctionSort.RECOMMENDED),
                 0,
                 3
         )).extracting(AuctionListRow::auctionId)
                 .containsExactly(highest.getId(), lowest.getId(), noBid.getId());
-        assertThat(auctionListQueryRepository.findPage(
+        assertThat(findPage(
                 condition(AuctionSort.PRICE_LOW),
                 0,
                 3
         )).extracting(AuctionListRow::auctionId)
                 .containsExactly(lowest.getId(), noBid.getId(), highest.getId());
-        assertThat(auctionListQueryRepository.findPage(
+        assertThat(findPage(
                 condition(AuctionSort.PRICE_HIGH),
                 0,
                 3
@@ -322,7 +326,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        List<AuctionListRow> rows = auctionListQueryRepository.findPage(
+        List<AuctionListRow> rows = findPage(
                 condition(AuctionSort.LATEST),
                 0,
                 10
@@ -365,7 +369,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         setAuctionTimeline(auction, listedAt, startedAt);
         entityManager.clear();
 
-        List<AuctionListRow> rows = auctionListQueryRepository.findPage(
+        List<AuctionListRow> rows = findPage(
                 condition(AuctionSort.LATEST),
                 0,
                 10
@@ -407,7 +411,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                 .getStatistics();
         statistics.clear();
 
-        List<AuctionListRow> rows = auctionListQueryRepository.findPage(
+        List<AuctionListRow> rows = findPage(
                 condition(AuctionSort.LATEST),
                 0,
                 10
@@ -422,6 +426,27 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         return new AuctionListSearchCondition(null, sort, null, AS_OF);
     }
 
+    private List<AuctionListRow> findPage(
+            AuctionListSearchCondition condition,
+            long offset,
+            int limit
+    ) {
+        if (condition.sort() != AuctionSort.PRICE_LOW
+                && condition.sort() != AuctionSort.PRICE_HIGH) {
+            return auctionListQueryRepository.findPage(condition, offset, limit);
+        }
+        if (offset % limit != 0) {
+            throw new IllegalArgumentException("가격순 테스트 페이지의 offset이 limit 배수가 아닙니다.");
+        }
+        int page = Math.toIntExact(offset / limit) + 1;
+        return auctionPricePageQuery.findPage(
+                condition,
+                page,
+                limit,
+                auctionListQueryRepository.count(condition)
+        );
+    }
+
     private long countByKeyword(String keyword) {
         return auctionListQueryRepository.count(new AuctionListSearchCondition(
                 null,
@@ -432,7 +457,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     private long currentPriceAt(DownAuction auction, LocalDateTime asOf) {
-        List<AuctionListRow> rows = auctionListQueryRepository.findPage(
+        List<AuctionListRow> rows = findPage(
                 new AuctionListSearchCondition(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, asOf),
                 0,
                 1
@@ -497,6 +522,17 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                 .build();
         entityManager.persist(bid);
         entityManager.flush();
+        if (auction instanceof UpAuction) {
+            // 운영 입찰 경로와 동일하게 상향 경매 행의 current_price도 함께 전진시킨다.
+            entityManager.createNativeQuery("""
+                            UPDATE auction
+                            SET current_price = GREATEST(current_price, :price)
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("price", price)
+                    .setParameter("auctionId", auction.getId())
+                    .executeUpdate();
+        }
         return bid;
     }
 
