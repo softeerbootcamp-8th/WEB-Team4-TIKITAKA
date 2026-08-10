@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.DownAuctionCurrentPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
@@ -7,7 +8,6 @@ import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.BUY_NOW_PRICE_NOT_SET;
 
@@ -37,31 +37,15 @@ public class BuyNowPriceCalculator {
             DownAuction auction,
             LocalDateTime purchasedAt
     ) {
-        validateDownAuctionPricing(auction);
-
-        // 요구사항: 하향 경매는 완료 시각까지 지난 하락 주기만큼 가격을 내린다.
-        long elapsedMinutes = Math.max(
-                0,
-                ChronoUnit.MINUTES.between(auction.getStartedAt(), purchasedAt)
+        // 목록 Top-K와 구매 확정가가 같은 시각·같은 가격 공식을 사용해야
+        // 하락 주기 경계에서도 정렬된 가격과 실제 구매가가 어긋나지 않는다.
+        return DownAuctionCurrentPriceCalculator.calculate(
+                auction.getStartPrice(),
+                auction.getMinimumPrice(),
+                auction.getDropPrice(),
+                auction.getPriceDropInterval(),
+                auction.getStartedAt(),
+                purchasedAt
         );
-        long elapsedDrops = elapsedMinutes / auction.getPriceDropInterval();
-        long priceRange = auction.getStartPrice() - auction.getMinimumPrice();
-        long dropsBeforeFloor = priceRange / auction.getDropPrice();
-
-        // 요구사항: 하향 경매의 최종가는 설정된 최저가보다 낮아질 수 없다.
-        if (elapsedDrops > dropsBeforeFloor) {
-            return auction.getMinimumPrice();
-        }
-        return auction.getStartPrice() - elapsedDrops * auction.getDropPrice();
-    }
-
-    private void validateDownAuctionPricing(DownAuction auction) {
-        if (auction.getStartedAt() == null
-                || auction.getPriceDropInterval() <= 0
-                || auction.getDropPrice() <= 0
-                || auction.getMinimumPrice() < 0
-                || auction.getMinimumPrice() > auction.getStartPrice()) {
-            throw new IllegalStateException("하향 경매 가격 설정이 올바르지 않습니다.");
-        }
     }
 }
