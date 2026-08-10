@@ -44,6 +44,9 @@ class AuctionListServiceTest {
     private AuctionListQueryRepository auctionListQueryRepository;
 
     @Mock
+    private AuctionPricePageQuery auctionPricePageQuery;
+
+    @Mock
     private ImageUrlResolver imageUrlResolver;
 
     private AuctionListService auctionListService;
@@ -53,6 +56,7 @@ class AuctionListServiceTest {
         auctionListService = new AuctionListService(
                 auctionRepository,
                 auctionListQueryRepository,
+                auctionPricePageQuery,
                 imageUrlResolver
         );
         when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
@@ -137,6 +141,27 @@ class AuctionListServiceTest {
         assertThat(response.totalCount()).isEqualTo(3L);
         assertThat(response.totalPages()).isEqualTo(2);
         assertThat(response.page()).isEqualTo(1);
+    }
+
+    @Test
+    void 가격순은_전체_집계_페이지_쿼리_대신_top_k_조회를_사용한다() {
+        // given
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                null,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        when(auctionListQueryRepository.count(condition)).thenReturn(2L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 2L))
+                .thenReturn(List.of(upRow(1L, null, 100_000L, 0L)));
+
+        // when
+        auctionListService.getList(query(null, AuctionSort.PRICE_LOW, null, 1, 16));
+
+        // then
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 2L);
+        verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
     }
 
     @Test

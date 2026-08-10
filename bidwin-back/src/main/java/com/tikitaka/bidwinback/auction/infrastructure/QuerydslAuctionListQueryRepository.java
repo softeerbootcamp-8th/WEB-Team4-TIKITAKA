@@ -9,6 +9,7 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.core.types.dsl.Param;
+import com.querydsl.core.types.dsl.StringExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -18,8 +19,13 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Repository;
 
@@ -53,9 +59,14 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             """;
 
     private final JPAQueryFactory queryFactory;
+    private final BidRepository bidRepository;
 
-    public QuerydslAuctionListQueryRepository(EntityManager entityManager) {
+    public QuerydslAuctionListQueryRepository(
+            EntityManager entityManager,
+            BidRepository bidRepository
+    ) {
         this.queryFactory = new JPAQueryFactory(entityManager);
+        this.bidRepository = bidRepository;
     }
 
     @Override
@@ -76,12 +87,228 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     ) {
         List<AuctionListMetrics> metrics = switch (condition.sort()) {
             case DEADLINE, LATEST -> findPageByColumnSort(condition, offset, limit);
-            case RECOMMENDED, PRICE_LOW, PRICE_HIGH -> findPageByAggregateSort(
+            case RECOMMENDED -> findPageByAggregateSort(
                     condition,
                     offset,
                     limit
             );
+            case PRICE_LOW, PRICE_HIGH ->
+                    throw new IllegalArgumentException("가격순은 Top-K 조회를 사용해야 합니다.");
         };
+        return findRows(metrics);
+    }
+
+    @Override
+    public List<AuctionPriceSnapshot> findUpPriceSnapshots(
+            AuctionListSearchCondition condition,
+            int limit
+    ) {
+        List<Tuple> prices = queryFactory
+                .select(auction.id, auction.currentPrice)
+                .from(auction)
+                .where(
+                        searchPredicate(condition),
+                        auction.instanceOf(UpAuction.class)
+                )
+                .orderBy(upPriceOrderBy(condition.sort()))
+                .limit(limit)
+                .fetch();
+        if (prices.isEmpty()) {
+            return List.of();
+        }
+
+        return prices.stream()
+                .map(tuple -> {
+                    long auctionId = requireValue(tuple.get(auction.id), "auctionId");
+                    long currentPrice = requireValue(
+                            tuple.get(auction.currentPrice),
+                            "currentPrice"
+                    );
+                    return new AuctionPriceSnapshot(
+                            auctionId,
+                            currentPrice
+                    );
+                })
+                .toList();
+    }
+
+    @Override
+    public List<DownAuctionPriceCandidate> findDownPriceCandidates(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor,
+            int limit
+    ) {
+        List<DownAuctionPriceCandidateDetails> details = switch (condition.sort()) {
+            case PRICE_LOW -> findDownCandidatesByMinimumPrice(condition, cursor, limit);
+            case PRICE_HIGH -> findDownCandidatesByStartPrice(condition, cursor, limit);
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + condition.sort());
+        };
+        return toDownPriceCandidates(details);
+    }
+
+    @Override
+    public List<DownAuctionPriceCandidate> findRemainingDownPriceCandidatesAtBound(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        List<DownAuctionPriceCandidateDetails> details = switch (condition.sort()) {
+            case PRICE_LOW -> findRemainingDownCandidatesAtMinimumPrice(condition, cursor);
+            case PRICE_HIGH -> findRemainingDownCandidatesAtStartPrice(condition, cursor);
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + condition.sort());
+        };
+        return toDownPriceCandidates(details);
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findDownCandidatesByMinimumPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor,
+            int limit
+    ) {
+        // 최저가는 하위 테이블에만 있으므로 down_auction의 경계 인덱스부터 읽어야
+        // 활성 경매 필터를 위한 auction 조인 전에 LIMIT을 향해 순서대로 스캔할 수 있다.
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        downAuction.id,
+                        downAuction.startPrice,
+                        downAuction.minimumPrice,
+                        downAuction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(downAuction)
+                .where(
+                        downSearchPredicate(condition),
+                        minimumPriceCursorAfter(cursor)
+                )
+                .orderBy(
+                        downAuction.minimumPrice.asc(),
+                        downAuction.id.desc()
+                )
+                .limit(limit)
+                .fetch();
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findRemainingDownCandidatesAtMinimumPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        downAuction.id,
+                        downAuction.startPrice,
+                        downAuction.minimumPrice,
+                        downAuction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(downAuction)
+                .where(
+                        downSearchPredicate(condition),
+                        downAuction.minimumPrice.eq(cursor.priceBound()),
+                        downAuction.id.lt(cursor.auctionId())
+                )
+                .orderBy(downAuction.id.desc())
+                .fetch();
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findDownCandidatesByStartPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor,
+            int limit
+    ) {
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        auction.id,
+                        auction.startPrice,
+                        downAuction.minimumPrice,
+                        auction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(auction)
+                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+                .where(
+                        searchPredicate(condition),
+                        auction.instanceOf(DownAuction.class),
+                        downAuction.id.isNotNull(),
+                        startPriceCursorAfter(cursor)
+                )
+                .orderBy(
+                        auction.startPrice.desc(),
+                        auction.id.desc()
+                )
+                .limit(limit)
+                .fetch();
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findRemainingDownCandidatesAtStartPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        auction.id,
+                        auction.startPrice,
+                        downAuction.minimumPrice,
+                        auction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(auction)
+                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+                .where(
+                        searchPredicate(condition),
+                        auction.instanceOf(DownAuction.class),
+                        downAuction.id.isNotNull(),
+                        auction.startPrice.eq(cursor.priceBound()),
+                        auction.id.lt(cursor.auctionId())
+                )
+                .orderBy(auction.id.desc())
+                .fetch();
+    }
+
+    private List<DownAuctionPriceCandidate> toDownPriceCandidates(
+            List<DownAuctionPriceCandidateDetails> details
+    ) {
+        if (details.isEmpty()) {
+            return List.of();
+        }
+        return details.stream()
+                .map(DownAuctionPriceCandidateDetails::toCandidate)
+                .toList();
+    }
+
+    @Override
+    public List<AuctionListRow> findRowsByPriceSnapshots(
+            List<AuctionPriceSnapshot> snapshots,
+            LocalDateTime asOf
+    ) {
+        if (snapshots.isEmpty()) {
+            return List.of();
+        }
+        List<Long> auctionIds = snapshots.stream()
+                .map(AuctionPriceSnapshot::auctionId)
+                .toList();
+        Map<Long, AuctionBidSummary> bidSummaries = bidSummariesByAuctionId(
+                auctionIds,
+                asOf
+        );
+        List<AuctionListMetrics> metrics = snapshots.stream()
+                .map(snapshot -> {
+                    AuctionBidSummary bidSummary = bidSummaries.get(snapshot.auctionId());
+                    return new AuctionListMetrics(
+                            snapshot.auctionId(),
+                            snapshot.currentPrice(),
+                            bidSummary != null ? bidSummary.bidCount() : 0L
+                    );
+                })
+                .toList();
+        return findRows(metrics);
+    }
+
+    private List<AuctionListRow> findRows(List<AuctionListMetrics> metrics) {
         if (metrics.isEmpty()) {
             return List.of();
         }
@@ -99,6 +326,51 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         thumbnailKeysByAuctionId.get(metric.auctionId())
                 ))
                 .toList();
+    }
+
+    private BooleanExpression minimumPriceCursorAfter(AuctionPriceCursor cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        return downAuction.minimumPrice.gt(cursor.priceBound())
+                .or(downAuction.minimumPrice.eq(cursor.priceBound())
+                        .and(downAuction.id.lt(cursor.auctionId())));
+    }
+
+    private BooleanExpression startPriceCursorAfter(AuctionPriceCursor cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        return auction.startPrice.lt(cursor.priceBound())
+                .or(auction.startPrice.eq(cursor.priceBound())
+                        .and(auction.id.lt(cursor.auctionId())));
+    }
+
+    private OrderSpecifier<?>[] upPriceOrderBy(AuctionSort sort) {
+        return switch (sort) {
+            case PRICE_LOW -> new OrderSpecifier<?>[]{
+                    auction.currentPrice.asc(),
+                    auction.id.desc()
+            };
+            case PRICE_HIGH -> new OrderSpecifier<?>[]{
+                    auction.currentPrice.desc(),
+                    auction.id.desc()
+            };
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + sort);
+        };
+    }
+
+    private Map<Long, AuctionBidSummary> bidSummariesByAuctionId(
+            List<Long> auctionIds,
+            LocalDateTime asOf
+    ) {
+        return bidRepository.summarizeByAuctionIds(auctionIds, asOf)
+                .stream()
+                .collect(Collectors.toMap(
+                        AuctionBidSummary::auctionId,
+                        Function.identity()
+                ));
     }
 
     private List<AuctionListMetrics> findPageByColumnSort(
@@ -195,10 +467,20 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ))
                 .and(auction.endedAt.gt(condition.asOf()))
                 .and(auctionTypeEq(condition.auctionType()))
-                .and(titleContains(condition.keyword()));
+                .and(titleContains(auction.title, condition.keyword()));
     }
 
-    private BooleanExpression titleContains(String keyword) {
+    private Predicate downSearchPredicate(AuctionListSearchCondition condition) {
+        return new BooleanBuilder()
+                .and(downAuction.startedAt.loe(condition.asOf()))
+                .and(downAuction.completedAt.isNull().or(
+                        downAuction.completedAt.gt(condition.asOf())
+                ))
+                .and(downAuction.endedAt.gt(condition.asOf()))
+                .and(titleContains(downAuction.title, condition.keyword()));
+    }
+
+    private BooleanExpression titleContains(StringExpression title, String keyword) {
         // 제목 검색 조건이 없으면 BooleanBuilder.and(null)에서 무시되도록 null을 반환한다.
         if (keyword == null) {
             return null;
@@ -206,7 +488,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         // 컬럼 collation이 utf8mb4_0900_ai_ci(대소문자 무시)라 LOWER() 없이도
         // 대소문자 구분 없이 매칭된다.
         String pattern = "%" + AuctionListKeywordEscaper.escape(keyword) + "%";
-        return auction.title.like(pattern, AuctionListKeywordEscaper.LIKE_ESCAPE);
+        return title.like(pattern, AuctionListKeywordEscaper.LIKE_ESCAPE);
     }
 
     private BooleanExpression auctionTypeEq(AuctionType auctionType) {
@@ -244,15 +526,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                     expressions.bidCount().desc(),
                     auction.id.desc()
             };
-            case PRICE_LOW -> new OrderSpecifier<?>[]{
-                    expressions.currentPrice().asc(),
-                    auction.id.desc()
-            };
-            case PRICE_HIGH -> new OrderSpecifier<?>[]{
-                    expressions.currentPrice().desc(),
-                    auction.id.desc()
-            };
-            case DEADLINE, LATEST ->
+            case PRICE_LOW, PRICE_HIGH, DEADLINE, LATEST ->
                     throw new IllegalArgumentException("집계 정렬이 아닙니다: " + sort);
         };
     }

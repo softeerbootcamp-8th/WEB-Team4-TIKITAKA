@@ -29,6 +29,7 @@ public class AuctionListService {
 
     private final AuctionRepository auctionRepository;
     private final AuctionListQueryRepository auctionListQueryRepository;
+    private final AuctionPricePageQuery auctionPricePageQuery;
     private final ImageUrlResolver imageUrlResolver;
 
     @Transactional(readOnly = true)
@@ -50,7 +51,7 @@ public class AuctionListService {
 
         List<AuctionSummaryResponse> pageItems = totalCount == 0
                 ? List.of()
-                : auctionListQueryRepository.findPage(condition, offset, size)
+                : findPage(condition, currentPage, size, totalCount, offset)
                         .stream()
                         .map(this::toSummary)
                         .toList();
@@ -63,6 +64,25 @@ public class AuctionListService {
                 totalPages,
                 totalCount
         );
+    }
+
+    private List<AuctionListRow> findPage(
+            AuctionListSearchCondition condition,
+            int currentPage,
+            int size,
+            long totalCount,
+            long offset
+    ) {
+        return switch (condition.sort()) {
+            case PRICE_LOW, PRICE_HIGH -> auctionPricePageQuery.findPage(
+                    condition,
+                    currentPage,
+                    size,
+                    totalCount
+            );
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    auctionListQueryRepository.findPage(condition, offset, size);
+        };
     }
 
     private AuctionSummaryResponse toSummary(AuctionListRow row) {
