@@ -38,6 +38,9 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     );
     private static final List<PathPattern> PUBLIC_GET_PATHS = List.of(
             PathPatternParser.defaultInstance.parse("/api/v1/health"),
+            // 컨테이너 상태 확인과 Prometheus 수집은 사용자 세션 없이 동작해야 한다.
+            PathPatternParser.defaultInstance.parse("/actuator/health"),
+            PathPatternParser.defaultInstance.parse("/actuator/prometheus"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions/*"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions/*/bids"),

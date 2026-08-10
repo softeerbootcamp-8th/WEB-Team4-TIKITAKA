@@ -487,6 +487,46 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
+    void Actuator_헬스체크는_세션_없이_요청할_수_있다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/actuator/health"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
+    void Prometheus는_세션_없이_메트릭을_수집할_수_있다()
+            throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/actuator/prometheus"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
     void 경매_상세_실시간_구독은_세션_없이_요청할_수_있다() throws ServletException, IOException {
         // given
         MockHttpServletRequest request = new MockHttpServletRequest(

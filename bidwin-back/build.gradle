@@ -24,12 +24,14 @@ dependencies {
     implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.5'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:7.5:jpa'
     annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
@@ -49,6 +51,10 @@ tasks.named('test') {
     // 테스트는 main()을 거치지 않아 TimeZone.setDefault가 적용되지 않으므로, CI 러너의
     // 기본 시간대와 무관하게 시각 관련 검증이 흔들리지 않도록 여기서 서울로 고정한다.
     systemProperty 'user.timezone', 'Asia/Seoul'
+    // 통합 테스트가 개발 데이터와 섞이면 목록 결과가 오염되고 scheduler와
+    // 같은 행을 두고 경합한다. TEST_DB_URL을 주지 않으면 전용 스키마를 자동 생성한다.
+    systemProperty 'spring.datasource.url', providers.environmentVariable('TEST_DB_URL')
+            .getOrElse('jdbc:mysql://localhost:3306/bidwin_test?createDatabaseIfNotExist=true&connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8')
     finalizedBy tasks.named('jacocoTestReport')
 }
 

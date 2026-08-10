@@ -1,0 +1,75 @@
+name: bidwin-mysql
+
+services:
+  mysql:
+    image: mysql:8.4.10
+    environment:
+      MYSQL_DATABASE: bidwin
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bidwin-local-password}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  mysql-monitoring-user:
+    image: mysql:8.4.10
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:-bidwin-local-password}
+      MYSQL_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:-bidwin-exporter-password}
+      MYSQL_GRAFANA_PASSWORD: ${MYSQL_GRAFANA_PASSWORD:-bidwin-grafana-password}
+    entrypoint: ["/bin/sh", "-c"]
+    # 기존 볼륨에도 적용되도록 initdb 스크립트 대신 매 시작 시 멱등하게 계정을 맞춘다.
+    command:
+      - >-
+        mysql -h mysql -uroot -e "CREATE USER IF NOT EXISTS 'exporter'@'%' IDENTIFIED BY '$${MYSQL_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+        ALTER USER 'exporter'@'%' IDENTIFIED BY '$${MYSQL_EXPORTER_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+        GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'%';
+        CREATE USER IF NOT EXISTS 'grafana_reader'@'%' IDENTIFIED BY '$${MYSQL_GRAFANA_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+        ALTER USER 'grafana_reader'@'%' IDENTIFIED BY '$${MYSQL_GRAFANA_PASSWORD}' WITH MAX_USER_CONNECTIONS 3;
+        GRANT SELECT ON performance_schema.* TO 'grafana_reader'@'%';"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  mysql-exporter:
+    image: prom/mysqld-exporter:v0.17.1
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:-bidwin-exporter-password}
+    command:
+      - --mysqld.address=mysql:3306
+      - --mysqld.username=exporter
+      - --collect.info_schema.innodb_metrics
+      - --collect.info_schema.processlist
+      - --collect.perf_schema.eventsstatements
+      - --collect.perf_schema.eventswaits
+      - --collect.perf_schema.memory_events
+      - --collect.perf_schema.tableiowaits
+      - --collect.perf_schema.tablelocks
+    ports:
+      - "9104:9104"
+    depends_on:
+      mysql-monitoring-user:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    # 분리 전 Compose에서 사용하던 데이터를 그대로 이어서 사용한다.
+    name: bidwin_mysql-data
+    external: true
+
+networks:
+  default:
+    name: bidwin-network

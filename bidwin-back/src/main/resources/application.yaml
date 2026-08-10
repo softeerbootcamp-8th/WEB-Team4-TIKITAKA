@@ -31,6 +31,10 @@ spring:
       ddl-auto: validate
 
 server:
+  tomcat:
+    # Micrometer가 busy/current/max thread를 수집할 수 있도록 embedded Tomcat MBean을 연다.
+    mbeanregistry:
+      enabled: true
   servlet:
     session:
       tracking-modes: cookie
@@ -39,6 +43,24 @@ server:
         http-only: true
         same-site: lax
         path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms,300ms,1s
 
 app:
   auction:

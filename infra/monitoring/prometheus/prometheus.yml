@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 5s
+  # 수집 주기보다 먼저 실패를 확정해 다음 scrape와 겹치지 않게 한다.
+  scrape_timeout: 4s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: bidwin-back
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["app:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: mysql
+    static_configs:
+      - targets: ["mysql-exporter:9104"]
+
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]
