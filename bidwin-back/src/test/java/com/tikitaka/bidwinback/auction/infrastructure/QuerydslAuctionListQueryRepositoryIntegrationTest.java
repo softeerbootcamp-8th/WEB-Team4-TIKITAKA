@@ -16,6 +16,8 @@ import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.EntityManager;
@@ -195,6 +197,131 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                     .extracting(AuctionListRow::auctionId)
                     .containsExactlyElementsOf(expectedIds);
         }
+    }
+
+    @Test
+    void 낮은가격_경계_나머지는_같은_최저가의_뒤쪽_후보만_조회한다() {
+        // given
+        Member seller = persistMember("minimum-price-bound-seller");
+        DownAuction first = persistDown(
+                seller,
+                "최저가 동률 A",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction second = persistDown(
+                seller,
+                "최저가 동률 B",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction third = persistDown(
+                seller,
+                "최저가 동률 C",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction differentBound = persistDown(
+                seller,
+                "다른 최저가",
+                AuctionCategory.HOUSEHOLD,
+                50_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(first, AS_OF.minusHours(3), AS_OF.minusHours(3));
+        setAuctionTimeline(second, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setAuctionTimeline(third, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setAuctionTimeline(differentBound, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        entityManager.clear();
+
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+
+        // when
+        List<DownAuctionPriceCandidate> remaining = auctionListQueryRepository
+                .findRemainingDownPriceCandidatesAtBound(
+                        condition,
+                        new AuctionPriceCursor(60_000L, third.getId())
+                );
+
+        // then
+        assertThat(remaining)
+                .extracting(DownAuctionPriceCandidate::auctionId)
+                .containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    void 높은가격_경계_나머지는_같은_시작가의_뒤쪽_후보만_조회한다() {
+        // given
+        Member seller = persistMember("start-price-bound-seller");
+        DownAuction first = persistDown(
+                seller,
+                "시작가 동률 A",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction second = persistDown(
+                seller,
+                "시작가 동률 B",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction third = persistDown(
+                seller,
+                "시작가 동률 C",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction differentBound = persistDown(
+                seller,
+                "다른 시작가",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(first, AS_OF.minusHours(3), AS_OF.minusHours(3));
+        setAuctionTimeline(second, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setAuctionTimeline(third, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setAuctionTimeline(differentBound, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setStartPrice(differentBound, 90_000L);
+        entityManager.clear();
+
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_HIGH,
+                null,
+                AS_OF
+        );
+
+        // when
+        List<DownAuctionPriceCandidate> remaining = auctionListQueryRepository
+                .findRemainingDownPriceCandidatesAtBound(
+                        condition,
+                        new AuctionPriceCursor(START_PRICE, third.getId())
+                );
+
+        // then
+        assertThat(remaining)
+                .extracting(DownAuctionPriceCandidate::auctionId)
+                .containsExactly(second.getId(), first.getId());
     }
 
     @Test
@@ -596,6 +723,17 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                         WHERE id = :auctionId
                         """)
                 .setParameter("endedAt", endedAt)
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+    }
+
+    private void setStartPrice(Auction auction, long startPrice) {
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET start_price = :startPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("startPrice", startPrice)
                 .setParameter("auctionId", auction.getId())
                 .executeUpdate();
     }

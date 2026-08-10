@@ -86,18 +86,49 @@ public class AuctionPricePageQuery {
 
             DownAuctionPriceCandidate lastCandidate = candidates.getLast();
             long remainingPriceBound = priceBound(lastCandidate, condition.sort());
-            if (candidates.size() < CANDIDATE_BATCH_SIZE
-                    || canDiscardRemaining(
-                            topK,
-                            topKSize,
-                            remainingPriceBound,
-                            condition.sort()
-                    )) {
+            if (candidates.size() < CANDIDATE_BATCH_SIZE) {
                 break;
             }
-            cursor = new AuctionPriceCursor(
+
+            if (canDiscardRemaining(
+                    topK,
+                    topKSize,
+                    remainingPriceBound,
+                    condition.sort()
+            )) {
+                break;
+            }
+
+            AuctionPriceCursor priceBoundCursor = new AuctionPriceCursor(
                     remainingPriceBound,
                     lastCandidate.auctionId()
+            );
+            // 경계와 Top-K 가격이 겹치면 같은 경계의 뒤쪽 후보도 Top-K에 들어올 수 있다.
+            // 경계를 한 번에 소진해야 동률 후보를 누락하지 않으면서 다음 가격대로 넘어가지 않는다.
+            List<DownAuctionPriceCandidate> remainingAtBound = auctionListQueryRepository
+                    .findRemainingDownPriceCandidatesAtBound(condition, priceBoundCursor);
+            remainingAtBound.forEach(candidate -> offer(
+                    topK,
+                    snapshotAt(candidate, condition),
+                    topKSize,
+                    resultOrder
+            ));
+
+            if (canDiscardAfterExhaustedBound(
+                    topK,
+                    topKSize,
+                    remainingPriceBound,
+                    condition.sort()
+            )) {
+                break;
+            }
+
+            DownAuctionPriceCandidate lastAtBound = remainingAtBound.isEmpty()
+                    ? lastCandidate
+                    : remainingAtBound.getLast();
+            cursor = new AuctionPriceCursor(
+                    remainingPriceBound,
+                    lastAtBound.auctionId()
             );
         }
     }
@@ -149,10 +180,31 @@ public class AuctionPricePageQuery {
 
         long worstTopKPrice = topK.element().currentPrice();
         // 경계가 같은 뒤쪽 레코드는 id tie-break에 따라 Top-K에 들어올 수 있으므로
-        // 등호에서는 다음 배치를 확인하고, 가격이 엄격히 앞설 때만 중단한다.
+        // 등호에서는 동률 경계를 소진하고, 가격이 엄격히 앞설 때만 즉시 중단한다.
         return switch (sort) {
             case PRICE_LOW -> worstTopKPrice < remainingPriceBound;
             case PRICE_HIGH -> worstTopKPrice > remainingPriceBound;
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + sort);
+        };
+    }
+
+    private boolean canDiscardAfterExhaustedBound(
+            PriorityQueue<AuctionPriceSnapshot> topK,
+            int topKSize,
+            long exhaustedPriceBound,
+            AuctionSort sort
+    ) {
+        if (topK.size() < topKSize) {
+            return false;
+        }
+
+        long worstTopKPrice = topK.element().currentPrice();
+        // 같은 가격 경계를 모두 처리했으므로 남은 후보의 경계는 엄격히 뒤에 있다.
+        // 이때는 Top-K 가격과 소진한 경계가 같아도 결과가 뒤집히지 않는다.
+        return switch (sort) {
+            case PRICE_LOW -> worstTopKPrice <= exhaustedPriceBound;
+            case PRICE_HIGH -> worstTopKPrice >= exhaustedPriceBound;
             case RECOMMENDED, DEADLINE, LATEST ->
                     throw new IllegalArgumentException("가격 정렬이 아닙니다: " + sort);
         };

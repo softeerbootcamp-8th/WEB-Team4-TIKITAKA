@@ -30,6 +30,11 @@ public interface AuctionListQueryRepository {
             int limit
     );
 
+    List<DownAuctionPriceCandidate> findRemainingDownPriceCandidatesAtBound(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    );
+
     List<AuctionListRow> findRowsByPriceSnapshots(
             List<AuctionPriceSnapshot> snapshots,
             LocalDateTime asOf

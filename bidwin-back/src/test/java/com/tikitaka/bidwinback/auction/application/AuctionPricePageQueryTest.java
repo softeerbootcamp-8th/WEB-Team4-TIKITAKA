@@ -105,11 +105,11 @@ class AuctionPricePageQueryTest {
     }
 
     @Test
-    void top_k_현재가와_하향_가격경계가_같으면_다음_배치를_확인한다() {
+    void 낮은가격_동률_그룹을_모두_반영하면_다음_가격대는_조회하지_않는다() {
         // given
         AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
         List<DownAuctionPriceCandidate> firstBatch = IntStream.range(0, 1_000)
-                .mapToObj(index -> downCandidate(2_000L - index, 1_000L, 1_000L))
+                .mapToObj(index -> downCandidate(2_000L - index, 1_000L, 2_000L))
                 .toList();
         AuctionPriceCursor cursor = new AuctionPriceCursor(1_000L, 1_001L);
         when(auctionListQueryRepository.findDownPriceCandidates(
@@ -117,19 +117,53 @@ class AuctionPricePageQueryTest {
                 isNull(),
                 eq(1_000)
         )).thenReturn(firstBatch);
-        when(auctionListQueryRepository.findDownPriceCandidates(
+        when(auctionListQueryRepository.findRemainingDownPriceCandidatesAtBound(
                 eq(condition),
-                eq(cursor),
-                eq(1_000)
+                eq(cursor)
         )).thenReturn(List.of(downCandidate(1_000L, 1_000L, 1_000L)));
 
         // when
         auctionPricePageQuery.findPage(condition, 1, 1, 1_001);
 
         // then
-        verify(auctionListQueryRepository).findDownPriceCandidates(
+        assertThat(capturedSnapshots())
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(1_000L);
+        verify(auctionListQueryRepository, times(1)).findDownPriceCandidates(
                 eq(condition),
-                eq(cursor),
+                nullable(AuctionPriceCursor.class),
+                eq(1_000)
+        );
+    }
+
+    @Test
+    void 높은가격_동률_그룹을_모두_반영하면_다음_가격대는_조회하지_않는다() {
+        // given
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_HIGH);
+        List<DownAuctionPriceCandidate> firstBatch = IntStream.range(0, 1_000)
+                .mapToObj(index -> downCandidate(2_000L - index, 0L, 1_000L))
+                .toList();
+        AuctionPriceCursor cursor = new AuctionPriceCursor(1_000L, 1_001L);
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(firstBatch);
+        when(auctionListQueryRepository.findRemainingDownPriceCandidatesAtBound(
+                eq(condition),
+                eq(cursor)
+        )).thenReturn(List.of(downCandidate(1_000L, 0L, 1_000L)));
+
+        // when
+        auctionPricePageQuery.findPage(condition, 1, 1, 1_001);
+
+        // then
+        assertThat(capturedSnapshots())
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(2_000L);
+        verify(auctionListQueryRepository, times(1)).findDownPriceCandidates(
+                eq(condition),
+                nullable(AuctionPriceCursor.class),
                 eq(1_000)
         );
     }

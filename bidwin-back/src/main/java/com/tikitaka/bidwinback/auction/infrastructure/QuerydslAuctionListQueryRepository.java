@@ -144,13 +144,21 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             case RECOMMENDED, DEADLINE, LATEST ->
                     throw new IllegalArgumentException("가격 정렬이 아닙니다: " + condition.sort());
         };
-        if (details.isEmpty()) {
-            return List.of();
-        }
+        return toDownPriceCandidates(details);
+    }
 
-        return details.stream()
-                .map(DownAuctionPriceCandidateDetails::toCandidate)
-                .toList();
+    @Override
+    public List<DownAuctionPriceCandidate> findRemainingDownPriceCandidatesAtBound(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        List<DownAuctionPriceCandidateDetails> details = switch (condition.sort()) {
+            case PRICE_LOW -> findRemainingDownCandidatesAtMinimumPrice(condition, cursor);
+            case PRICE_HIGH -> findRemainingDownCandidatesAtStartPrice(condition, cursor);
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + condition.sort());
+        };
+        return toDownPriceCandidates(details);
     }
 
     private List<DownAuctionPriceCandidateDetails> findDownCandidatesByMinimumPrice(
@@ -182,6 +190,29 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .fetch();
     }
 
+    private List<DownAuctionPriceCandidateDetails> findRemainingDownCandidatesAtMinimumPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        downAuction.id,
+                        downAuction.startPrice,
+                        downAuction.minimumPrice,
+                        downAuction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(downAuction)
+                .where(
+                        downSearchPredicate(condition),
+                        downAuction.minimumPrice.eq(cursor.priceBound()),
+                        downAuction.id.lt(cursor.auctionId())
+                )
+                .orderBy(downAuction.id.desc())
+                .fetch();
+    }
+
     private List<DownAuctionPriceCandidateDetails> findDownCandidatesByStartPrice(
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor,
@@ -210,6 +241,43 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 )
                 .limit(limit)
                 .fetch();
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findRemainingDownCandidatesAtStartPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor
+    ) {
+        return queryFactory
+                .select(new QDownAuctionPriceCandidateDetails(
+                        auction.id,
+                        auction.startPrice,
+                        downAuction.minimumPrice,
+                        auction.startedAt,
+                        downAuction.dropPrice,
+                        downAuction.priceDropInterval
+                ))
+                .from(auction)
+                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+                .where(
+                        searchPredicate(condition),
+                        auction.instanceOf(DownAuction.class),
+                        downAuction.id.isNotNull(),
+                        auction.startPrice.eq(cursor.priceBound()),
+                        auction.id.lt(cursor.auctionId())
+                )
+                .orderBy(auction.id.desc())
+                .fetch();
+    }
+
+    private List<DownAuctionPriceCandidate> toDownPriceCandidates(
+            List<DownAuctionPriceCandidateDetails> details
+    ) {
+        if (details.isEmpty()) {
+            return List.of();
+        }
+        return details.stream()
+                .map(DownAuctionPriceCandidateDetails::toCandidate)
+                .toList();
     }
 
     @Override
