@@ -176,28 +176,6 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     @Query("select auction from Auction auction where auction.id = :auctionId")
     Optional<Auction> findDetailById(@Param("auctionId") long auctionId);
 
-    // 목록 조회용. 정렬·타입 필터·현재가 계산은 서비스에서 처리하고(1차 뼈대라 원시적으로),
-    // 여기서는 키워드로 좁히고 "asOf 시점에 활성 상태인" 경매만 가져온다.
-    // createdAt <= asOf까지 걸어야, asOf 스냅샷을 공유하는 다음 페이지 요청 사이에 새로
-    // 등록된 경매가 끼어들어 목록 구성이 흔들리는 걸 막을 수 있다.
-    // completedAt은 "지금 null이냐"가 아니라 "asOf 시점엔 완료 전이었냐"로 봐야 한다.
-    // 그래야 asOf를 공유하는 페이지 요청 사이에 즉시구매가 체결돼도, 그 뒤에 있던 다른 경매가
-    // 목록 인덱스가 밀리면서 통째로 스킵되는 일이 없다. completedAt is null과 completedAt > asOf를
-    // OR로 묶을 땐 반드시 괄호로 감싸야 한다 — AND가 OR보다 우선순위가 높아서, 괄호 없이 쓰면
-    // "이 OR 조건만 참이면 keyword/createdAt 조건까지 전부 무시하고 통과"하는 전혀 다른 쿼리가 된다.
-    @EntityGraph(attributePaths = "seller")
-    @Query("""
-            select auction from Auction auction
-            where (:keyword is null or lower(auction.title) like lower(concat('%', :keyword, '%')))
-              and auction.createdAt <= :asOf
-              and (auction.completedAt is null or auction.completedAt > :asOf)
-              and auction.endedAt > :asOf
-            """)
-    List<Auction> findAllForList(
-            @Param("keyword") String keyword,
-            @Param("asOf") LocalDateTime asOf
-    );
-
     // 하락 경매의 계산 기준이 애플리케이션 서버마다 달라지지 않도록 DB 시각을 사용한다.
     @Query(value = "select current_timestamp(6)", nativeQuery = true)
     LocalDateTime currentDatabaseTime();
