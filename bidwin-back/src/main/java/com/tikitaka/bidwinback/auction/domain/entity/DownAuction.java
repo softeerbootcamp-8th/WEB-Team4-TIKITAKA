@@ -15,7 +15,13 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Getter
 @Entity
-@Table(name = "DownAuction")
+@Table(
+        name = "DownAuction",
+        indexes = @Index(
+                name = "idx_down_auction_minimum_price_id",
+                columnList = "minimum_price ASC, auction_id DESC"
+        )
+)
 @PrimaryKeyJoinColumn(name = "auction_id")
 @NoArgsConstructor(access = PROTECTED)
 @DiscriminatorValue("DOWN")
