@@ -482,7 +482,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private Predicate searchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(auction.startedAt.loe(condition.asOf()))
-                .and(auction.completedAt.isNull())
+                .and(auction.completedAt.isNull()
+                        .or(auction.completedAt.gt(condition.asOf())))
                 .and(auction.endedAt.gt(condition.asOf()))
                 .and(auctionTypeEq(condition.auctionType()))
                 .and(titleContains(auction.title, condition.keyword()));
@@ -491,7 +492,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private Predicate downSearchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(downAuction.startedAt.loe(condition.asOf()))
-                .and(downAuction.completedAt.isNull())
+                .and(downAuction.completedAt.isNull()
+                        .or(downAuction.completedAt.gt(condition.asOf())))
                 .and(downAuction.endedAt.gt(condition.asOf()))
                 .and(titleContains(downAuction.title, condition.keyword()));
     }
