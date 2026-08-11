@@ -27,6 +27,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 import jakarta.persistence.EntityManager;
+import org.hibernate.jpa.HibernateHints;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -75,6 +76,10 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .select(auction.count())
                 .from(auction)
                 .where(searchPredicate(condition))
+                .setHint(
+                        HibernateHints.HINT_QUERY_DATABASE,
+                        "idx_auction_count"
+                )
                 .fetchOne();
         return count != null ? count : 0L;
     }
@@ -166,6 +171,23 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionPriceCursor cursor,
             int limit
     ) {
+
+        List<Long> fetch = queryFactory
+                .select(downAuction.id)
+                .from(downAuction)
+                .where(
+                        downSearchPredicate(condition),
+                        minimumPriceCursorAfter(cursor)
+                )
+                .orderBy(
+                        downAuction.minimumPrice.asc(),
+                        downAuction.id.desc()
+                )
+                .limit(limit)
+                .setHint(HibernateHints.HINT_QUERY_DATABASE,
+                        "idx_down_auction_minimum_price_id")
+                .fetch();
+
         // 최저가는 하위 테이블에만 있으므로 down_auction의 경계 인덱스부터 읽어야
         // 활성 경매 필터를 위한 auction 조인 전에 LIMIT을 향해 순서대로 스캔할 수 있다.
         return queryFactory
@@ -179,14 +201,12 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ))
                 .from(downAuction)
                 .where(
-                        downSearchPredicate(condition),
-                        minimumPriceCursorAfter(cursor)
+                        downAuction.id.in(fetch)
                 )
                 .orderBy(
                         downAuction.minimumPrice.asc(),
                         downAuction.id.desc()
                 )
-                .limit(limit)
                 .fetch();
     }
 
@@ -462,9 +482,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private Predicate searchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(auction.startedAt.loe(condition.asOf()))
-                .and(auction.completedAt.isNull().or(
-                        auction.completedAt.gt(condition.asOf())
-                ))
+                .and(auction.completedAt.isNull()
+                        .or(auction.completedAt.gt(condition.asOf())))
                 .and(auction.endedAt.gt(condition.asOf()))
                 .and(auctionTypeEq(condition.auctionType()))
                 .and(titleContains(auction.title, condition.keyword()));
@@ -473,9 +492,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private Predicate downSearchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(downAuction.startedAt.loe(condition.asOf()))
-                .and(downAuction.completedAt.isNull().or(
-                        downAuction.completedAt.gt(condition.asOf())
-                ))
+                .and(downAuction.completedAt.isNull()
+                        .or(downAuction.completedAt.gt(condition.asOf())))
                 .and(downAuction.endedAt.gt(condition.asOf()))
                 .and(titleContains(downAuction.title, condition.keyword()));
     }

@@ -239,6 +239,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         setAuctionTimeline(second, AS_OF.minusHours(2), AS_OF.minusHours(2));
         setAuctionTimeline(third, AS_OF.minusHours(1), AS_OF.minusHours(1));
         setAuctionTimeline(differentBound, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setCompletedAt(second, AS_OF.plusMinutes(1));
         entityManager.clear();
 
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
