@@ -18,10 +18,12 @@ docker compose --env-file deploy/.env -f compose.local.yaml up -d --build
 ```
 
 - Spring API: http://localhost:8080
+- Spring Actuator: http://localhost:9292/actuator/prometheus
+- Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 (`admin` / `admin`)
 - MySQL: `localhost:3307` (`bidwin` / `bidwin-local`)
 
-Prometheus, Loki, Alloy 포트는 Compose 내부에서만 열리며 Grafana datasource로 자동 등록된다. Alloy는 `bidwin-local` Compose 프로젝트의 컨테이너 로그만 Loki로 전송한다.
+Spring Actuator와 Prometheus는 기본적으로 `127.0.0.1`에만 바인딩된다. Loki와 Alloy 포트는 Compose 내부에서만 열리며 Grafana datasource로 자동 등록된다. Alloy는 `bidwin-local` Compose 프로젝트의 컨테이너 로그만 Loki로 전송한다.
 
 ## 종료
 

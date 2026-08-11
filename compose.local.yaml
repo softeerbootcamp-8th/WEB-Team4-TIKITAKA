@@ -45,7 +45,9 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-bidwin}?connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8
       DB_USERNAME: ${MYSQL_USER:-bidwin}
       DB_PASSWORD: ${MYSQL_PASSWORD:-bidwin-local}
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
       MANAGEMENT_SERVER_PORT: 9090
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
       SESSION_COOKIE_SECURE: "false"
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60.0 -XX:+ExitOnOutOfMemoryError}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -60,6 +62,7 @@ services:
       AWS_CLOUDFRONT_DOMAIN: ${AWS_CLOUDFRONT_DOMAIN:-http://localhost:8080}
     ports:
       - "${SERVER_BIND_ADDRESS:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
+      - "${MANAGEMENT_BIND_ADDRESS:-127.0.0.1}:${MANAGEMENT_PORT:-9292}:9090"
     expose:
       - "9090"
     depends_on:
@@ -86,6 +89,8 @@ services:
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_BIND_ADDRESS:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     logging: *default-logging
     networks:
       - local
