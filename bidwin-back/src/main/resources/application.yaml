@@ -40,6 +40,12 @@ server:
         same-site: lax
         path: /
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: []
+
 app:
   auction:
     closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
