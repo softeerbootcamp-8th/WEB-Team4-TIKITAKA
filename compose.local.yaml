@@ -39,6 +39,8 @@ services:
     image: ${APP_IMAGE:-bidwin-back:local}
     build:
       context: ./bidwin-back
+    mem_limit: 1g
+    memswap_limit: 1g
     restart: unless-stopped
     init: true
     environment:
