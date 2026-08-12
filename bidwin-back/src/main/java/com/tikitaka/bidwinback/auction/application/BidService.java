@@ -56,6 +56,7 @@ public class BidService {
     private final BidRepository bidRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SealedBidRepository sealedBidRepository;
+    private final BidPriceCache bidPriceCache;
   
     @Transactional
     public BidResult place(
@@ -66,6 +67,15 @@ public class BidService {
     ) {
         validateBidUnit(price);
 
+        // Redis에서 즉시 원자적으로 승패를 가른다(비교+갱신을 한 번에). 이겼을 때 받은 "이전 값"은
+        // MySQL에서 다른 이유로 최종 실패할 경우 되돌리는 데 쓴다. SEALED는 이 캐시 대상이 아니다.
+        Long previousPrice = bidType == BidType.OPEN
+                ? bidPriceCache.tryWinRace(auctionId, price)
+                : null;
+        if (bidPriceCache.isLost(previousPrice)) {
+            throw new BidException(BID_PRICE_TOO_LOW);
+        }
+
         // bidType은 클라이언트가 인지한 입찰 단계일 뿐이며, 실제 단계는 DB 시각을 사용하는
         // 조건부 UPDATE가 판정한다. 단계가 바뀌어도 다른 입찰 유형으로 자동 전환하지 않는다.
         int updatedRows = switch (bidType) {
@@ -73,6 +83,11 @@ public class BidService {
             case SEALED -> tryUpdateAuctionForSealedBid(memberId, auctionId, price);
         };
         if (updatedRows != 1) {
+            // Redis에서는 이겼다고 판정했지만 MySQL에서 다른 이유(본인 경매, 종료 등)로 최종 실패한
+            // 경우, 그 사이 아무도 안 건드렸다면 캐시를 이전 값으로 되돌린다.
+            if (previousPrice != null && !bidPriceCache.isLost(previousPrice)) {
+                bidPriceCache.revertIfStillMine(auctionId, price, previousPrice);
+            }
             // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다.
             return rejectBid(memberId, auctionId, price, bidType);
         }
