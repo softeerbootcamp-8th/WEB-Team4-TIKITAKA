@@ -24,11 +24,15 @@ public class BidPriceCache {
 
     // 비교와 갱신을 한 번에 원자적으로 처리해, 다음 요청이 곧바로 최신 값을 보게 한다.
     // 이겼을 때 "이전 값"을 같이 반환해, 실패 시 되돌려야 하는 선점이었는지 판단하는 데 쓴다.
-    // KEEPTTL을 안 붙이면 SET이 initialize()에서 걸어둔 만료시간을 지워버려, 경매가 끝나도
-    // 키가 영구히 남는다.
+    // 키가 아예 없으면(initialize 실패, Redis flush/재시작, 이 기능 도입 전 경매 등) nil을
+    // 돌려줘 자바 쪽에서 null(모름)로 처리하게 한다 - 없던 키를 0 기준으로 새로 만들면
+    // KEEPTTL이 지킬 기존 만료시간이 없어 영구 키가 생긴다.
     private static final RedisScript<Long> WIN_RACE_SCRIPT = new DefaultRedisScript<>(
             """
-                local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+                if redis.call('EXISTS', KEYS[1]) == 0 then
+                    return nil
+                end
+                local current = tonumber(redis.call('GET', KEYS[1]))
                 if tonumber(ARGV[1]) > current then
                     redis.call('SET', KEYS[1], ARGV[1], 'KEEPTTL')
                     return current
@@ -44,9 +48,13 @@ public class BidPriceCache {
     // 다른 요청이 Redis에서만 선점했다가 DB에서 실패한 값일 수 있어서, 체인으로 되돌리면
     // 실제 현재가보다 높은 가짜 값이 남을 수 있다(예: 판매자가 동시에 두 번 자기 경매에
     // 입찰하는 경우). DB 현재가로 재동기화하면 몇 번을 겹쳐도 항상 진짜 값으로 수렴한다.
+    // 키가 이미 없다면(만료됐거나 애초에 없었으면) 되돌릴 대상이 없으니 그대로 둔다.
     private static final RedisScript<Long> RESYNC_SCRIPT = new DefaultRedisScript<>(
             """
-                local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+                if redis.call('EXISTS', KEYS[1]) == 0 then
+                    return 0
+                end
+                local current = tonumber(redis.call('GET', KEYS[1]))
                 if tonumber(ARGV[1]) == current then
                     redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL')
                     return 1
