@@ -23,14 +23,27 @@ spring:
     # 이름 기반 time zone은 MySQL time zone table이 비어 있으면 연결부터 실패한다.
     # +09:00 세션 오프셋으로 DB 시각과 서비스의 Asia/Seoul 변환 기준을 맞춘다.
     url: ${DB_URL:jdbc:mysql://localhost:3306/bidwin?connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8}
+    hikari:
+      # t3.micro(vCPU 2) 기준 HikariCP 권장 공식: (core_count * 2) + effective_spindle_count
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:5}
   flyway:
     baseline-on-migrate: true
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
+    threads:
+      # t3.micro(RAM 1GiB)에서 기본값 200은 쓰레드 스택만으로 ~200MB를 차지해 부담스럽다.
+      max: ${TOMCAT_THREADS_MAX:100}
   servlet:
     session:
       tracking-modes: cookie
