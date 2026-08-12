@@ -92,6 +92,9 @@ class BidServiceTest {
     private SealedBidRepository sealedBidRepository;
 
     @Mock
+    private BidPriceCache bidPriceCache;
+
+    @Mock
     private Member bidder;
 
     @Mock
