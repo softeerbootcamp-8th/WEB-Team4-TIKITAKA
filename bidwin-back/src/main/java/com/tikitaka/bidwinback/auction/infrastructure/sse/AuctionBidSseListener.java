@@ -26,16 +26,20 @@ public class AuctionBidSseListener {
             return;
         }
 
+        long preparationStartedAtNanos = System.nanoTime();
         try {
             BidHistoryItemResponse bid = bidHistoryService.getPublishedBid(
                     event.auctionId(),
                     event.bidId()
             );
-            sseHub.publish(AuctionSseMessages.bidCreated(
-                    event.auctionId(),
-                    event.bidId(),
-                    bid
-            ));
+            sseHub.publish(
+                    AuctionSseMessages.bidCreated(
+                            event.auctionId(),
+                            event.bidId(),
+                            bid
+                    ),
+                    preparationStartedAtNanos
+            );
         } catch (RuntimeException exception) {
             log.warn(
                     "커밋된 입찰을 SSE로 발행하지 못했습니다. auctionId={}, bidId={}",
@@ -52,12 +56,16 @@ public class AuctionBidSseListener {
             return;
         }
 
+        long preparationStartedAtNanos = System.nanoTime();
         try {
-            sseHub.publish(AuctionSseMessages.bidHistorySnapshot(
-                    event.auctionId(),
-                    event.revision(),
-                    bidHistoryService.getBidHistory(event.auctionId())
-            ));
+            sseHub.publish(
+                    AuctionSseMessages.bidHistorySnapshot(
+                            event.auctionId(),
+                            event.revision(),
+                            bidHistoryService.getBidHistory(event.auctionId())
+                    ),
+                    preparationStartedAtNanos
+            );
         } catch (RuntimeException exception) {
             log.warn(
                     "공개된 입찰 내역을 SSE로 발행하지 못했습니다. auctionId={}",

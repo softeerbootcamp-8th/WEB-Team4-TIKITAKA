@@ -1,6 +1,6 @@
 # 로컬 Docker 테스트 환경
 
-팀원이 저장소를 받은 뒤 MySQL, Spring 서버, Prometheus, Loki, Alloy, Grafana를 한 번에 실행하는 구성이다.
+팀원이 저장소를 받은 뒤 MySQL, Spring 서버, Prometheus, cAdvisor, Loki, Alloy, Grafana를 한 번에 실행하는 구성이다.
 
 ## 실행
 
@@ -23,7 +23,9 @@ docker compose --env-file deploy/.env -f compose.local.yaml up -d --build
 - Grafana: http://localhost:3000 (`admin` / `admin`)
 - MySQL: `localhost:3307` (`bidwin` / `bidwin-local`)
 
-Spring Actuator와 Prometheus는 기본적으로 `127.0.0.1`에만 바인딩된다. Loki와 Alloy 포트는 Compose 내부에서만 열리며 Grafana datasource로 자동 등록된다. Alloy는 `bidwin-local` Compose 프로젝트의 컨테이너 로그만 Loki로 전송한다.
+Spring Actuator와 Prometheus는 기본적으로 `127.0.0.1`에만 바인딩된다. Loki, Alloy, cAdvisor 포트는 Compose 내부에서만 열리며 Prometheus/Loki datasource와 `Bidwin / 서버 및 SSE 모니터링` 대시보드가 Grafana에 자동 등록된다. Alloy와 cAdvisor는 `bidwin-local` Compose 프로젝트의 로그와 컨테이너 자원을 수집한다.
+
+대시보드의 SSE 지표는 서버에서 확인 가능한 활성 연결, 대기열, 발행/전송 처리량, 서버 전송 지연, 실패와 연결 종료를 다룬다. [SSE Gatling 부하테스트](../bidwin-load-test/README.md)를 실행하면 클라이언트 수신 수, 입찰 성공 응답부터 수신까지의 지연, 중복·역순도 같은 대시보드에 표시된다.
 
 ## 종료
 

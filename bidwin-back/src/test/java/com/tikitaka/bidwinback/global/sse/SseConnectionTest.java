@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.global.sse;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -292,7 +293,8 @@ class SseConnectionTest {
                 emitter,
                 3_000L,
                 maxPendingMessages,
-                onClosed
+                onClosed,
+                new SseMetrics(new SimpleMeterRegistry())
         );
         connection.activate();
         connections.add(connection);

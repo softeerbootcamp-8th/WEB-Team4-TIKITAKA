@@ -24,6 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -72,7 +74,10 @@ class AuctionSseStateChangeListenerTransactionTest {
         });
 
         // then
-        verify(sseHub).publish(AuctionSseMessages.state(state));
+        verify(sseHub).publish(
+                eq(AuctionSseMessages.state(state)),
+                anyLong()
+        );
     }
 
     @Test
@@ -116,7 +121,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
         // then
         verifyNoInteractions(stateService);
-        verify(sseHub, never()).publish(any());
+        verify(sseHub, never()).publish(any(), anyLong());
     }
 
     @Configuration(proxyBeanMethods = false)

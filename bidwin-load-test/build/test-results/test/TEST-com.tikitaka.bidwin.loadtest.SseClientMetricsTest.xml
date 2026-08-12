@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-12T09:22:00.746Z" hostname="adminui-MacBookPro-8.local" time="0.007">
+  <properties/>
+  <testcase name="같은_연결에서_같은_입찰을_두번_받으면_중복으로_센다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.004"/>
+  <testcase name="SSE가_HTTP_성공_응답보다_먼저_도착하면_지연을_0으로_기록한다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.0"/>
+  <testcase name="수신_건수와_입찰_성공_이후_수신_지연을_노출한다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.0"/>
+  <testcase name="입찰_생성_외의_SSE는_수신_지표에서_제외한다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.001"/>
+  <testcase name="같은_연결에서_더_낮은_새_입찰_ID를_받으면_역순으로_센다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.0"/>
+  <testcase name="숫자_범위를_벗어난_입찰_ID는_수신_지표에서_제외한다()" classname="com.tikitaka.bidwin.loadtest.SseClientMetricsTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

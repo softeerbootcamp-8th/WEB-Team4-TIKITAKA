@@ -28,6 +28,7 @@ public class SseHub {
     private final int maxPendingMessagesPerConnection;
     private final int maxConnections;
     private final Semaphore connectionPermits;
+    private final SseMetrics metrics;
 
     public SseHub(
             @Value("${app.sse.connection-timeout-ms:300000}") long timeoutMs,
@@ -37,7 +38,8 @@ public class SseHub {
             @Value("${app.sse.max-pending-messages-per-connection:100}")
             int maxPendingMessagesPerConnection,
             @Value("${app.sse.max-connections:1000}")
-            int maxConnections
+            int maxConnections,
+            SseMetrics metrics
     ) {
         if (maxPendingMessagesPerConnection <= 0) {
             throw new IllegalArgumentException("SSE 대기열 상한은 양수여야 합니다.");
@@ -51,6 +53,8 @@ public class SseHub {
         this.maxPendingMessagesPerConnection = maxPendingMessagesPerConnection;
         this.maxConnections = maxConnections;
         this.connectionPermits = new Semaphore(maxConnections);
+        this.metrics = metrics;
+        metrics.bind(connections, maxConnections, maxPendingMessagesPerConnection);
     }
 
     public SseEmitter subscribe(
@@ -71,7 +75,8 @@ public class SseHub {
                 emitter,
                 reconnectTimeMs,
                 maxPendingMessagesPerConnection,
-                closed -> unsubscribe(subscriptions, closed)
+                closed -> unsubscribe(subscriptions, closed),
+                metrics
         );
         // 검사와 등록 사이의 경쟁으로 상한을 넘지 않도록 연결 자리를 먼저 원자적으로 예약한다.
         reserveConnection();
@@ -124,13 +129,20 @@ public class SseHub {
     }
 
     public void publish(SseMessage<?> message) {
+        metrics.recordPublished(message);
         Set<SseConnection> subscribers = connectionsByChannel.get(message.channel());
         if (subscribers != null) {
             subscribers.forEach(connection -> connection.send(message));
         }
     }
 
+    public void publish(SseMessage<?> message, long preparationStartedAtNanos) {
+        metrics.recordPrepared(message, preparationStartedAtNanos);
+        publish(message);
+    }
+
     public void broadcast(SseMessage<?> message) {
+        metrics.recordPublished(message);
         connections.forEach(connection -> connection.send(message));
     }
 
@@ -166,6 +178,7 @@ public class SseHub {
     // 초과분은 gateway가 아닌 애플리케이션에서도 막아, 반복 재연결이 서버 자원을 고갈시키지 못하게 한다.
     private void reserveConnection() {
         if (!connectionPermits.tryAcquire()) {
+            metrics.recordRejected();
             throw new SseException(
                     SSE_CONNECTION_LIMIT_EXCEEDED,
                     "전체 SSE 연결 상한(" + maxConnections + ")을 초과했습니다."

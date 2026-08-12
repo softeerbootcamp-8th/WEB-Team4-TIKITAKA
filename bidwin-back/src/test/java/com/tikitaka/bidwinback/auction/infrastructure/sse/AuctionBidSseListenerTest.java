@@ -14,11 +14,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class AuctionBidSseListenerTest {
@@ -49,7 +51,10 @@ class AuctionBidSseListenerTest {
 
         listener.publishBid(new AuctionBidCreated(1L, 9L));
 
-        verify(sseHub).publish(AuctionSseMessages.bidCreated(1L, 9L, bid));
+        verify(sseHub).publish(
+                eq(AuctionSseMessages.bidCreated(1L, 9L, bid)),
+                anyLong()
+        );
     }
 
     @Test
@@ -60,7 +65,10 @@ class AuctionBidSseListenerTest {
 
         listener.publishRevealedHistory(new AuctionBidHistoryRevealed(1L, 4L));
 
-        verify(sseHub).publish(AuctionSseMessages.bidHistorySnapshot(1L, 4L, history));
+        verify(sseHub).publish(
+                eq(AuctionSseMessages.bidHistorySnapshot(1L, 4L, history)),
+                anyLong()
+        );
     }
 
     @Test
@@ -70,6 +78,6 @@ class AuctionBidSseListenerTest {
         listener.publishBid(new AuctionBidCreated(1L, 9L));
 
         verifyNoInteractions(bidHistoryService);
-        verify(sseHub, never()).publish(any());
+        verify(sseHub, never()).publish(any(), anyLong());
     }
 }

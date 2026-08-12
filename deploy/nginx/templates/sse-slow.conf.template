@@ -1,0 +1,13 @@
+server {
+    listen 8080;
+
+    location / {
+        proxy_pass http://server:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+        limit_rate ${SSE_SLOW_BYTES_PER_SECOND};
+    }
+}

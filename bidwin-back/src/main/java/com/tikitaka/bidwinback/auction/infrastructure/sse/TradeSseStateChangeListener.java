@@ -28,9 +28,13 @@ public class TradeSseStateChangeListener {
             return;
         }
 
+        long preparationStartedAtNanos = System.nanoTime();
         try {
             // 상태는 별도 읽기 트랜잭션에서 조회하고, socket write는 SseConnection이 담당한다.
-            sseHub.publish(TradeSseMessages.state(stateService.getState(tradeId)));
+            sseHub.publish(
+                    TradeSseMessages.state(stateService.getState(tradeId)),
+                    preparationStartedAtNanos
+            );
         } catch (RuntimeException exception) {
             // 다음 변경이나 재연결 snapshot으로 수렴할 수 있으므로 비즈니스 결과와 격리한다.
             log.warn("커밋된 거래 상태를 SSE로 발행하지 못했습니다. tradeId={}", tradeId, exception);

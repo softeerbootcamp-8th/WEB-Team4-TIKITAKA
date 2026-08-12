@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.global.sse;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -417,7 +418,8 @@ class SseHubTest {
                 3_000L,
                 maxChannelsPerConnection,
                 100,
-                maxConnections
+                maxConnections,
+                new SseMetrics(new SimpleMeterRegistry())
         );
         hubs.add(hub);
         return hub;

@@ -20,28 +20,31 @@ final class SseConnection {
     private final SseEmitter emitter;
     private final long reconnectTimeMs;
     private final Consumer<SseConnection> onClosed;
-    private final BlockingQueue<SseMessage<?>> pendingMessages;
+    private final BlockingQueue<PendingMessage> pendingMessages;
     private final Map<MessageKey, Long> latestVersions = new HashMap<>();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Thread writerThread;
+    private final SseMetrics metrics;
 
     SseConnection(
             SseEmitter emitter,
             long reconnectTimeMs,
             int maxPendingMessages,
-            Consumer<SseConnection> onClosed
+            Consumer<SseConnection> onClosed,
+            SseMetrics metrics
     ) {
         this.emitter = emitter;
         this.reconnectTimeMs = reconnectTimeMs;
         this.onClosed = onClosed;
+        this.metrics = metrics;
         this.pendingMessages = new ArrayBlockingQueue<>(maxPendingMessages);
         this.writerThread = WRITER_THREADS.newThread(this::writeLoop);
     }
 
     void activate() {
-        emitter.onCompletion(this::terminate);
-        emitter.onTimeout(this::terminate);
-        emitter.onError(ignored -> terminate());
+        emitter.onCompletion(() -> terminate("completion"));
+        emitter.onTimeout(() -> terminate("timeout"));
+        emitter.onError(ignored -> terminate("error"));
         writerThread.start();
     }
 
@@ -50,7 +53,8 @@ final class SseConnection {
             return;
         }
 
-        if (!pendingMessages.offer(message)) {
+        if (!pendingMessages.offer(new PendingMessage(message, System.nanoTime()))) {
+            metrics.recordFailed(message, "queue_full");
             disconnectSlowConsumer();
             return;
         }
@@ -61,14 +65,14 @@ final class SseConnection {
     }
 
     void close() {
-        if (!terminate()) {
+        if (!terminate("shutdown")) {
             return;
         }
         complete();
     }
 
     private void disconnectSlowConsumer() {
-        if (!terminate()) {
+        if (!terminate("slow_consumer")) {
             return;
         }
         // send가 Spring의 write lock을 쥐고 있어도 발행 스레드는 기다리지 않는다.
@@ -94,25 +98,40 @@ final class SseConnection {
         return true;
     }
 
+    int pendingMessageCount() {
+        return pendingMessages.size();
+    }
+
     private void writeLoop() {
         try {
             while (!closed.get()) {
-                SseMessage<?> message = pendingMessages.take();
+                PendingMessage pendingMessage = pendingMessages.take();
+                SseMessage<?> message = pendingMessage.message();
                 if (!acceptLatestVersion(message)) {
+                    metrics.recordSuppressed(message);
                     continue;
                 }
-                emitter.send(SseEmitter.event()
-                        .name(message.eventName())
-                        .reconnectTime(reconnectTimeMs)
-                        .data(message.data()));
+                long writeStartedAtNanos = System.nanoTime();
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name(message.eventName())
+                            .reconnectTime(reconnectTimeMs)
+                            .data(message.data()));
+                    metrics.recordSent(
+                            message,
+                            pendingMessage.enqueuedAtNanos(),
+                            writeStartedAtNanos
+                    );
+                } catch (IOException exception) {
+                    metrics.recordFailed(message, "io");
+                    terminate("io_error");
+                } catch (RuntimeException exception) {
+                    metrics.recordFailed(message, "application");
+                    completeWithError(exception);
+                }
             }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-        } catch (IOException exception) {
-            // I/O 실패는 컨테이너가 오류 완료하므로 색인만 정리한다.
-            terminate();
-        } catch (RuntimeException exception) {
-            completeWithError(exception);
         } finally {
             pendingMessages.clear();
             latestVersions.clear();
@@ -120,7 +139,7 @@ final class SseConnection {
     }
 
     private void completeWithError(RuntimeException exception) {
-        if (!terminate()) {
+        if (!terminate("application_error")) {
             return;
         }
         try {
@@ -131,12 +150,13 @@ final class SseConnection {
         }
     }
 
-    private boolean terminate() {
+    private boolean terminate(String reason) {
         if (!closed.compareAndSet(false, true)) {
             return false;
         }
         writerThread.interrupt();
         pendingMessages.clear();
+        metrics.recordClosed(reason);
         onClosed.accept(this);
         return true;
     }
@@ -146,5 +166,8 @@ final class SseConnection {
         private static MessageKey from(SseMessage<?> message) {
             return new MessageKey(message.channel(), message.eventName());
         }
+    }
+
+    private record PendingMessage(SseMessage<?> message, long enqueuedAtNanos) {
     }
 }

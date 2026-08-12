@@ -12,6 +12,15 @@ scrape_configs:
     static_configs:
       - targets: ["server:9090"]
 
+  - job_name: gatling-sse-client
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["host.docker.internal:9101"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
   - job_name: observability
     static_configs:
       - targets:

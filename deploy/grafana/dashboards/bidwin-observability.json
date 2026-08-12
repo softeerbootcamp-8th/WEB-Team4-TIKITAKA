@@ -1,0 +1,386 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "panels": [],
+      "title": "1. 시스템 자원",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "process_cpu_usage{application=\"bidwin-back\"} * 100", "legendFormat": "JVM process", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "system_cpu_usage{application=\"bidwin-back\"} * 100", "legendFormat": "system", "range": true, "refId": "B"}
+      ],
+      "title": "CPU 사용률 / Spike",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(jvm_memory_used_bytes{application=\"bidwin-back\", area=\"heap\"})", "legendFormat": "heap", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(jvm_memory_used_bytes{application=\"bidwin-back\", area=\"nonheap\"})", "legendFormat": "non-heap", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(jvm_buffer_memory_used_bytes{application=\"bidwin-back\"})", "legendFormat": "buffer", "range": true, "refId": "C"}
+      ],
+      "title": "JVM Heap / Non-Heap / Buffer",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+      "id": 4,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(jvm_gc_pause_seconds_count{application=\"bidwin-back\"}[5m]))", "legendFormat": "GC pauses/s", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(jvm_gc_pause_seconds_sum{application=\"bidwin-back\"}[5m])) * 1000", "legendFormat": "GC pause ms/s", "range": true, "refId": "B"}
+      ],
+      "title": "GC 횟수와 정지 시간",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "id": 5,
+      "panels": [],
+      "title": "런타임 스레드와 DB 커넥션 풀",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 10},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(tomcat_threads_busy_threads{application=\"bidwin-back\"})", "legendFormat": "busy", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(tomcat_threads_current_threads{application=\"bidwin-back\"})", "legendFormat": "current", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(tomcat_threads_config_max_threads{application=\"bidwin-back\"})", "legendFormat": "max", "range": true, "refId": "C"}
+      ],
+      "title": "Tomcat 작업 스레드",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 10},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(hikaricp_connections_active{application=\"bidwin-back\"})", "legendFormat": "active", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(hikaricp_connections_idle{application=\"bidwin-back\"})", "legendFormat": "idle", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "sum(hikaricp_connections_pending{application=\"bidwin-back\"})", "legendFormat": "pending", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "sum(hikaricp_connections_max{application=\"bidwin-back\"})", "legendFormat": "max", "range": true, "refId": "D"}
+      ],
+      "title": "HikariCP 커넥션 풀",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 10},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(hikaricp_connections_acquire_seconds_bucket{application=\"bidwin-back\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(hikaricp_connections_acquire_seconds_bucket{application=\"bidwin-back\"}[5m])))", "legendFormat": "p99", "range": true, "refId": "B"}
+      ],
+      "title": "HikariCP 획득 지연",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 10},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "process_files_open_files{application=\"bidwin-back\"}", "legendFormat": "JVM open FD", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "process_files_max_files{application=\"bidwin-back\"}", "legendFormat": "JVM FD limit", "range": true, "refId": "B"}
+      ],
+      "title": "Socket / File Descriptor",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+      "id": 10,
+      "panels": [],
+      "title": "2. SSE 연결과 네트워크",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 18},
+      "id": 11,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "bidwin_sse_connections_active", "legendFormat": "active", "range": true, "refId": "A"}],
+      "title": "활성 SSE 연결",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 18},
+      "id": 12,
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"},
+      "targets": [{"editorMode": "code", "expr": "100 * bidwin_sse_connections_active / clamp_min(bidwin_sse_connections_limit, 1)", "legendFormat": "usage", "range": true, "refId": "A"}],
+      "title": "SSE 연결 상한 점유율",
+      "type": "gauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 18},
+      "id": 13,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "bidwin_sse_messages_pending", "legendFormat": "pending", "range": true, "refId": "A"}],
+      "title": "전체 Pending 메시지",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"max": 100, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}, "unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 18},
+      "id": 14,
+      "options": {"minVizHeight": 75, "minVizWidth": 75, "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto"},
+      "targets": [{"editorMode": "code", "expr": "100 * bidwin_sse_messages_pending_max / clamp_min(bidwin_sse_messages_pending_limit, 1)", "legendFormat": "max queue usage", "range": true, "refId": "A"}],
+      "title": "가장 느린 연결의 Queue 점유율",
+      "type": "gauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 18},
+      "id": 15,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "sum(container_network_tcp_usage_total{container_label_com_docker_compose_project=\"bidwin-local\", container_label_com_docker_compose_service=\"server\"})", "legendFormat": "TCP", "range": true, "refId": "A"}],
+      "title": "TCP 연결",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 20, "y": 18},
+      "id": 16,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"editorMode": "code", "expr": "sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_project=\"bidwin-local\", container_label_com_docker_compose_service=\"server\"}[5m]))", "legendFormat": "egress", "range": true, "refId": "A"}],
+      "title": "서버 Egress",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 17,
+      "panels": [],
+      "title": "3. 처리량과 요청",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24},
+      "id": 18,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum by (event) (rate(bidwin_sse_events_total{result=\"published\"}[1m]))", "legendFormat": "{{event}}", "range": true, "refId": "A"}],
+      "title": "서버 이벤트 발행 처리량",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24},
+      "id": 19,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum by (event) (rate(bidwin_sse_events_total{result=\"sent\"}[1m]))", "legendFormat": "{{event}}", "range": true, "refId": "A"}],
+      "title": "SSE 실제 write 처리량",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24},
+      "id": 20,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum by (uri, method) (rate(http_server_requests_seconds_count{application=\"bidwin-back\"}[1m]))", "legendFormat": "{{method}} {{uri}}", "range": true, "refId": "A"}],
+      "title": "HTTP 요청 처리량",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 21,
+      "panels": [],
+      "title": "4. 서버 구간 지연",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 33},
+      "id": 22,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (rate(bidwin_sse_delivery_seconds_bucket[5m])))", "legendFormat": "p50", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(bidwin_sse_delivery_seconds_bucket[5m])))", "legendFormat": "p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(bidwin_sse_delivery_seconds_bucket[5m])))", "legendFormat": "p99", "range": true, "refId": "C"}
+      ],
+      "title": "SSE enqueue → write 완료",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 33},
+      "id": 23,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(bidwin_sse_preparation_seconds_bucket[5m])))", "legendFormat": "DB 조회/준비 p95", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(bidwin_sse_queue_seconds_bucket[5m])))", "legendFormat": "queue p95", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(bidwin_sse_write_seconds_bucket[5m])))", "legendFormat": "socket write p95", "range": true, "refId": "C"}
+      ],
+      "title": "SSE 단계별 전송 시간",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 33},
+      "id": 24,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"bidwin-back\"}[5m])))", "legendFormat": "p95", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"bidwin-back\"}[5m])))", "legendFormat": "p99", "range": true, "refId": "B"}
+      ],
+      "title": "HTTP 응답 지연",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
+      "id": 25,
+      "panels": [],
+      "title": "5. 신뢰성과 오류",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 42},
+      "id": 26,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum(rate(http_server_requests_seconds_count{application=\"bidwin-back\", status=~\"5..\"}[5m]))", "legendFormat": "HTTP 5xx/s", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(bidwin_sse_events_total{result=\"failed\"}[5m]))", "legendFormat": "SSE failure/s", "range": true, "refId": "B"}
+      ],
+      "title": "오류율",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 42},
+      "id": 27,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "sum by (reason) (rate(bidwin_sse_connections_closed_total[5m]))", "legendFormat": "{{reason}}", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "sum(rate(bidwin_sse_connections_rejected_total[5m]))", "legendFormat": "limit rejected", "range": true, "refId": "B"}
+      ],
+      "title": "SSE 연결 종료 / 거부",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 42},
+      "id": 28,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"editorMode": "code", "expr": "sum by (event) (rate(bidwin_sse_events_total{result=\"suppressed\", reason=\"stale_version\"}[5m]))", "legendFormat": "{{event}}", "range": true, "refId": "A"}],
+      "title": "서버가 억제한 중복/역순 version",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 50},
+      "id": 29,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [{"datasource": {"type": "loki", "uid": "loki"}, "editorMode": "code", "expr": "{service_name=\"server\"} |~ \"WARN|ERROR\"", "queryType": "range", "refId": "A"}],
+      "title": "서버 WARN / ERROR 로그",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 58},
+      "id": 30,
+      "panels": [],
+      "title": "6. Gatling 클라이언트 수신 품질",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 59},
+      "id": 31,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {"editorMode": "code", "expr": "round(sum(increase(bidwin_sse_events_total{event=\"bid-created\", result=\"published\"}[$__range])))", "instant": true, "legendFormat": "서버 DB 발행", "range": false, "refId": "A"},
+        {"editorMode": "code", "expr": "round(sum(increase(bidwin_sse_events_total{event=\"bid-created\", result=\"sent\"}[$__range])))", "instant": true, "legendFormat": "서버 write", "range": false, "refId": "B"},
+        {"editorMode": "code", "expr": "round(sum by (consumer) (increase(bidwin_sse_client_events_received_total[$__range])))", "instant": true, "legendFormat": "클라이언트 {{consumer}} 수신", "range": false, "refId": "C"}
+      ],
+      "title": "선택 구간 bid-created 발행 / write / 수신 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 59},
+      "id": 32,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (rate(bidwin_sse_delivery_seconds_bucket{event=\"bid-created\"}[5m])))", "legendFormat": "서버 enqueue→write p95", "range": true, "refId": "A"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (consumer, le) (rate(bidwin_sse_client_receive_latency_seconds_bucket[5m])))", "legendFormat": "클라이언트 {{consumer}} p50", "range": true, "refId": "B"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.95, sum by (consumer, le) (rate(bidwin_sse_client_receive_latency_seconds_bucket[5m])))", "legendFormat": "클라이언트 {{consumer}} p95", "range": true, "refId": "C"},
+        {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (consumer, le) (rate(bidwin_sse_client_receive_latency_seconds_bucket[5m])))", "legendFormat": "클라이언트 {{consumer}} p99", "range": true, "refId": "D"}
+      ],
+      "title": "서버 전송 / 입찰 성공 이후 클라이언트 수신 지연",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 59},
+      "id": 33,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [
+        {"editorMode": "code", "expr": "round(sum by (consumer, type) (increase(bidwin_sse_client_anomalies_total[$__range])))", "instant": true, "legendFormat": "{{consumer}} {{type}}", "range": false, "refId": "A"}
+      ],
+      "title": "선택 구간 클라이언트 중복 / 역순 횟수",
+      "type": "stat"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["bidwin", "sse", "spring-boot"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "서버 및 SSE 모니터링",
+  "uid": "bidwin-observability",
+  "version": 2
+}

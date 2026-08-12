@@ -80,6 +80,23 @@ services:
     networks:
       - local
 
+  slow-sse-proxy:
+    image: nginx:1.29.8-alpine
+    profiles: ["load-test"]
+    restart: unless-stopped
+    environment:
+      SSE_SLOW_BYTES_PER_SECOND: ${SSE_SLOW_BYTES_PER_SECOND:-128}
+    ports:
+      - "${SLOW_SSE_PROXY_BIND_ADDRESS:-127.0.0.1}:${SLOW_SSE_PROXY_PORT:-8081}:8080"
+    volumes:
+      - ./deploy/nginx/templates:/etc/nginx/templates:ro
+    depends_on:
+      server:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - local
+
   prometheus:
     image: prom/prometheus:v3.13.2
     restart: unless-stopped
@@ -93,6 +110,28 @@ services:
       - prometheus-data:/prometheus
     ports:
       - "${PROMETHEUS_BIND_ADDRESS:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging: *default-logging
+    networks:
+      - local
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.5
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=10s
+      - --enable_metrics=cpu,memory,network,process,tcp
+    volumes:
+      - /:/rootfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    expose:
+      - "8080"
     logging: *default-logging
     networks:
       - local
@@ -146,6 +185,7 @@ services:
       - "${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       prometheus:

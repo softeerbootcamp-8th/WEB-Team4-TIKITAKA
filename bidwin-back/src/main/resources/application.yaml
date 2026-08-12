@@ -31,6 +31,9 @@ spring:
       ddl-auto: validate
 
 server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
   servlet:
     session:
       tracking-modes: cookie
@@ -45,6 +48,13 @@ management:
     web:
       exposure:
         include: []
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        hikaricp.connections.acquire: true
 
 app:
   auction:
@@ -60,6 +70,7 @@ app:
     reconnect-time-ms: ${SSE_RECONNECT_TIME_MS:3000}
     max-channels-per-connection: ${SSE_MAX_CHANNELS_PER_CONNECTION:50}
     max-pending-messages-per-connection: ${SSE_MAX_PENDING_MESSAGES_PER_CONNECTION:100}
+    max-connections: ${SSE_MAX_CONNECTIONS:1000}
 
   password-reset:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset/confirm}

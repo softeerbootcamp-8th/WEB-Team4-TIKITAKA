@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-12T09:22:00.728Z" hostname="adminui-MacBookPro-8.local" time="0.017">
+  <properties/>
+  <testcase name="느린_소비자_비율이_유한한_수가_아니면_실행을_거부한다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.008"/>
+  <testcase name="구독_대상에_양수가_아닌_ID가_있으면_실행을_거부한다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.0"/>
+  <testcase name="점진_시간이_0이면_모든_구독자가_같은_시간_동안_연결된다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.0"/>
+  <testcase name="입찰_계정이_없으면_실행을_거부한다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.001"/>
+  <testcase name="환경변수로_부하_형상과_구독_대상을_구성한다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.001"/>
+  <testcase name="느린_소비자_비율이_범위를_벗어나면_실행을_거부한다()" classname="com.tikitaka.bidwin.loadtest.LoadTestConfigTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
