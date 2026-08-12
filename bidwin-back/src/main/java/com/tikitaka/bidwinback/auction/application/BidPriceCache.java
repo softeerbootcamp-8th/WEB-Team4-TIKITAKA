@@ -22,8 +22,15 @@ public class BidPriceCache {
 
     private final StringRedisTemplate redisTemplate;
 
-    // 비교와 갱신을 한 번에 원자적으로 처리해, 다음 요청이 곧바로 최신 값을 보게 한다.
-    // 이겼을 때 "이전 값"을 같이 반환해, 실패 시 되돌려야 하는 선점이었는지 판단하는 데 쓴다.
+    // Lua의 숫자는 전부 배정밀도 실수(double)라 2^53(약 900조)을 넘는 정수는 반올림된다.
+    // 우리 가격은 Long 전 범위(약 900경까지)를 오버플로 없이 다뤄야 해서, tonumber로 비교하면
+    // 그 근처의 서로 다른 두 가격이 같은 값으로 뭉개져 정상적인 상향 입찰이 거절될 수 있다.
+    // 대신 가격이 항상 "양수, 앞자리 0 없는 순수 숫자 문자열"이라는 걸 우리가 보장하므로,
+    // 길이가 길면 더 큰 수이고 길이가 같으면 사전식 비교가 곧 숫자 비교와 같다(문자 '0'~'9'가
+    // 바이트 값 순서 그대로 커지므로) - 정밀도 손실 없이 문자열만으로 비교한다.
+    //
+    // 이겼을 때는 "이전 값" 대신 고정값 1을 반환한다(자바 쪽은 -1인지 아닌지만 구분하면 되고,
+    // 이전 값 자체는 안 쓴다) - 반환값에서도 큰 수를 다시 숫자로 바꿀 필요가 없어진다.
     // 키가 아예 없으면(initialize 실패, Redis flush/재시작, 이 기능 도입 전 경매 등) nil을
     // 돌려줘 자바 쪽에서 null(모름)로 처리하게 한다 - 없던 키를 0 기준으로 새로 만들면
     // KEEPTTL이 지킬 기존 만료시간이 없어 영구 키가 생긴다.
@@ -32,10 +39,11 @@ public class BidPriceCache {
                 if redis.call('EXISTS', KEYS[1]) == 0 then
                     return nil
                 end
-                local current = tonumber(redis.call('GET', KEYS[1]))
-                if tonumber(ARGV[1]) > current then
-                    redis.call('SET', KEYS[1], ARGV[1], 'KEEPTTL')
-                    return current
+                local bid = ARGV[1]
+                local current = redis.call('GET', KEYS[1])
+                if (#bid > #current) or (#bid == #current and bid > current) then
+                    redis.call('SET', KEYS[1], bid, 'KEEPTTL')
+                    return 1
                 else
                     return -1
                 end
@@ -49,13 +57,14 @@ public class BidPriceCache {
     // 실제 현재가보다 높은 가짜 값이 남을 수 있다(예: 판매자가 동시에 두 번 자기 경매에
     // 입찰하는 경우). DB 현재가로 재동기화하면 몇 번을 겹쳐도 항상 진짜 값으로 수렴한다.
     // 키가 이미 없다면(만료됐거나 애초에 없었으면) 되돌릴 대상이 없으니 그대로 둔다.
+    // 동등 비교는 문자열이 정확히 같은지만 보면 되므로 숫자 변환이 필요 없어 정밀도 문제도 없다.
     private static final RedisScript<Long> RESYNC_SCRIPT = new DefaultRedisScript<>(
             """
                 if redis.call('EXISTS', KEYS[1]) == 0 then
                     return 0
                 end
-                local current = tonumber(redis.call('GET', KEYS[1]))
-                if tonumber(ARGV[1]) == current then
+                local current = redis.call('GET', KEYS[1])
+                if ARGV[1] == current then
                     redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL')
                     return 1
                 else
@@ -67,7 +76,7 @@ public class BidPriceCache {
 
     /**
      * 캐싱된 가격보다 높은지 즉시 원자적으로 판정하고, 이기면 캐시를 바로 갱신한다.
-     * 반환값: 이겼으면 "이전 값"(되돌릴 때 필요), 졌으면 -1, Redis 장애 시 null(모르니 MySQL이 판단).
+     * 반환값: 이겼으면 1(고정값), 졌으면 -1, Redis 장애 시 null(모르니 MySQL이 판단).
      */
     public Long tryWinRace(Long auctionId, long price) {
         try {
