@@ -4,6 +4,9 @@ HELP.md
 !.env.example
 .gradle
 build/
+
+# 개인 부하테스트 도구 (k6/시드데이터/도커컴포즈) - 팀 저장소에 안 올림
+load-test/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
