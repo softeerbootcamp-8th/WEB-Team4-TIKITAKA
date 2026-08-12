@@ -21,6 +21,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -114,6 +116,13 @@ class BidServiceTest {
 
     @InjectMocks
     private BidService bidService;
+
+    @BeforeEach
+    void setUpBidPriceCache() {
+        // Mockito는 Long처럼 박싱된 숫자 타입의 기본 반환값을 null이 아닌 0으로 준다.
+        // 스텁 안 해두면 previousPrice가 0으로 잡혀 "Redis에서 선점 성공"으로 오인된다.
+        lenient().when(bidPriceCache.tryWinRace(any(), anyLong())).thenReturn(null);
+    }
 
     @Test
     void 조건부_현재가_갱신에_성공하면_UP_입찰을_저장한다() {
