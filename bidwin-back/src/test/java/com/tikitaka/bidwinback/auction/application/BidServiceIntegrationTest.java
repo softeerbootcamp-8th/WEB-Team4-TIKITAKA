@@ -20,7 +20,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +58,12 @@ class BidServiceIntegrationTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     private final List<Long> auctionIds = new ArrayList<>();
     private final List<Long> memberIds = new ArrayList<>();
     private final AtomicInteger memberSequence = new AtomicInteger();
@@ -86,6 +96,9 @@ class BidServiceIntegrationTest {
             }
             return null;
         });
+        if (!auctionIds.isEmpty()) {
+            redisTemplate.delete(auctionIds.stream().map(BidServiceIntegrationTest::cacheKey).toList());
+        }
     }
 
     @Test
@@ -317,6 +330,7 @@ class BidServiceIntegrationTest {
     void 같은_회원이_여러_번_입찰해도_시작가의_30퍼센트를_한_번만_예치한다() {
         Fixture fixture = createFixture(1);
         Long bidderId = fixture.bidderIds().getFirst();
+        cachePrice(fixture.auctionId(), START_PRICE);
 
         bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.OPEN);
         bidService.place(bidderId, fixture.auctionId(), SECOND_BID_PRICE, BidType.OPEN);
@@ -328,6 +342,7 @@ class BidServiceIntegrationTest {
                         INITIAL_POINT - DEPOSIT_AMOUNT,
                         DEPOSIT_AMOUNT
                 ));
+        assertThat(cachedPrice(fixture.auctionId())).isEqualTo(SECOND_BID_PRICE);
     }
 
     @Test
@@ -336,6 +351,7 @@ class BidServiceIntegrationTest {
         Long bidderId = fixture.bidderIds().getFirst();
         long insufficientPoint = DEPOSIT_AMOUNT - 1L;
         updateMemberPoints(bidderId, insufficientPoint, 0L);
+        cachePrice(fixture.auctionId(), START_PRICE);
 
         Throwable thrown = catchThrowable(() -> bidService.place(
                 bidderId,
@@ -355,11 +371,34 @@ class BidServiceIntegrationTest {
                 .isEqualTo(new AuctionSnapshot(START_PRICE, AuctionStatus.OPEN));
         assertThat(findMemberPointSnapshot(bidderId))
                 .isEqualTo(new MemberPointSnapshot(insufficientPoint, 0L));
+        assertThat(cachedPrice(fixture.auctionId())).isEqualTo(START_PRICE);
+    }
+
+    @Test
+    void 공개입찰_트랜잭션이_롤백되면_캐시도_갱신하지_않는다() {
+        Fixture fixture = createFixture(1);
+        Long bidderId = fixture.bidderIds().getFirst();
+        cachePrice(fixture.auctionId(), START_PRICE);
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+        transaction.executeWithoutResult(status -> {
+            bidService.place(bidderId, fixture.auctionId(), FIRST_BID_PRICE, BidType.OPEN);
+            status.setRollbackOnly();
+        });
+
+        assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findDepositSnapshots(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionSnapshot(fixture.auctionId()))
+                .isEqualTo(new AuctionSnapshot(START_PRICE, AuctionStatus.OPEN));
+        assertThat(findMemberPointSnapshot(bidderId))
+                .isEqualTo(new MemberPointSnapshot(INITIAL_POINT, 0L));
+        assertThat(cachedPrice(fixture.auctionId())).isEqualTo(START_PRICE);
     }
 
     @Test
     void 동일한_가격의_동시_입찰은_정확히_한_건만_성공한다() throws Exception {
         Fixture fixture = createFixture(2);
+        cachePrice(fixture.auctionId(), START_PRICE);
         CyclicBarrier barrier = new CyclicBarrier(2);
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -394,6 +433,7 @@ class BidServiceIntegrationTest {
                             FIRST_BID_PRICE,
                             AuctionStatus.BID_ONGOING
                     ));
+            assertThat(cachedPrice(fixture.auctionId())).isEqualTo(FIRST_BID_PRICE);
         } finally {
             executor.shutdownNow();
         }
@@ -402,6 +442,7 @@ class BidServiceIntegrationTest {
     @Test
     void 서로_다른_가격의_동시_입찰은_최종_최고가를_보장한다() throws Exception {
         Fixture fixture = createFixture(2);
+        cachePrice(fixture.auctionId(), START_PRICE);
         CyclicBarrier barrier = new CyclicBarrier(2);
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -432,6 +473,7 @@ class BidServiceIntegrationTest {
             assertThat(storedPrices).allMatch(price -> price % 1_000L == 0);
             assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
                     .isEqualTo(SECOND_BID_PRICE);
+            assertThat(cachedPrice(fixture.auctionId())).isEqualTo(SECOND_BID_PRICE);
         } finally {
             executor.shutdownNow();
         }
@@ -878,6 +920,22 @@ class BidServiceIntegrationTest {
                     .executeUpdate();
             return null;
         });
+    }
+
+    private void cachePrice(Long auctionId, long price) {
+        redisTemplate.opsForValue().set(
+                cacheKey(auctionId),
+                String.valueOf(price),
+                Duration.ofMinutes(30)
+        );
+    }
+
+    private long cachedPrice(Long auctionId) {
+        return Long.parseLong(redisTemplate.opsForValue().get(cacheKey(auctionId)));
+    }
+
+    private static String cacheKey(Long auctionId) {
+        return "auction:" + auctionId + ":committed-price";
     }
 
     private AuctionSnapshot findAuctionSnapshot(Long auctionId) {

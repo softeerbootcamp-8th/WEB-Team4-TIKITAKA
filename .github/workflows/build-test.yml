@@ -68,6 +68,15 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v7
       # PR 코드는 주입된 값을 읽을 수 있으므로 운영 자격 증명이 아닌 테스트 전용 값만 저장한다.
@@ -88,7 +97,18 @@ jobs:
       - name: Build and test
         id: backend-build
         continue-on-error: true
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
         run: ./gradlew clean build --no-daemon
+      - name: Redis load test
+        id: redis-load-test
+        if: steps.backend-build.outcome == 'success'
+        continue-on-error: true
+        env:
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: ./gradlew redisLoadTest --no-daemon
       - name: Upload backend artifact
         if: github.event_name == 'push' && steps.backend-build.outcome == 'success'
         uses: actions/upload-artifact@v7
@@ -256,7 +276,10 @@ jobs:
             }
       # 코멘트 작성을 위해 보류했던 Gradle 실패를 job 결과에 다시 반영한다.
       - name: Fail when backend build or tests fail
-        if: always() && steps.backend-build.outcome == 'failure'
+        if: >-
+          always()
+          && (steps.backend-build.outcome == 'failure'
+          || steps.redis-load-test.outcome == 'failure')
         run: exit 1
 
   deploy:

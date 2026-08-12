@@ -50,11 +50,25 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'redis-load'
+    }
     // 테스트는 main()을 거치지 않아 TimeZone.setDefault가 적용되지 않으므로, CI 러너의
     // 기본 시간대와 무관하게 시각 관련 검증이 흔들리지 않도록 여기서 서울로 고정한다.
     systemProperty 'user.timezone', 'Asia/Seoul'
     finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.register('redisLoadTest', Test) {
+    description = 'Runs the Redis bid-price cache load test.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'redis-load'
+    }
+    systemProperty 'user.timezone', 'Asia/Seoul'
+    shouldRunAfter tasks.named('test')
 }
 
 tasks.named('bootJar') {

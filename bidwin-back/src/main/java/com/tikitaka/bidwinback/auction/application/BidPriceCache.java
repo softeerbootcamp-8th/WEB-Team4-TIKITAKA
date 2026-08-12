@@ -14,97 +14,64 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BidPriceCache {
 
-    // 가격은 항상 양수이므로, "졌다"를 나타내는 신호로 절대 안 헷갈리는 -1을 쓴다.
-    private static final long LOST = -1L;
-
     // 마감 시각에 딱 맞춰 만료시키면 그 순간 처리 중인 요청이 애매해지므로 여유를 둔다.
     private static final long EXPIRE_AFTER_ENDED_HOURS = 1L;
 
     private final StringRedisTemplate redisTemplate;
 
-    // 비교와 갱신을 한 번에 원자적으로 처리해, 다음 요청이 곧바로 최신 값을 보게 한다.
-    // 이겼을 때 "이전 값"을 같이 반환해, 나중에 되돌려야 할 때 그 값을 다시 쓸 수 있게 한다.
-    private static final RedisScript<Long> WIN_RACE_SCRIPT = new DefaultRedisScript<>(
+    // 커밋 이벤트의 실행 순서가 뒤바뀌어도 캐시 가격이 후퇴하지 않게 최댓값만 저장한다.
+    // Lua number는 BIGINT 전체를 정확히 표현하지 못하므로 양의 정수 문자열의 길이와 사전순으로 비교한다.
+    private static final RedisScript<Long> UPDATE_COMMITTED_PRICE_SCRIPT = new DefaultRedisScript<>(
             """
-                local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-                if tonumber(ARGV[1]) > current then
-                    redis.call('SET', KEYS[1], ARGV[1])
-                    return current
-                else
-                    return -1
-                end
-            """,
-            Long.class
-    );
-
-    // 내가 올린 값이 그 사이 아무도 안 건드려서 아직 그대로일 때만 이전 값으로 되돌린다.
-    // 이미 다른 요청이 더 높은 값으로 갱신했으면 그 값을 건드리지 않는다.
-    private static final RedisScript<Long> REVERT_SCRIPT = new DefaultRedisScript<>(
-            """
-                local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-                if tonumber(ARGV[1]) == current then
-                    redis.call('SET', KEYS[1], ARGV[2])
+                local current = redis.call('GET', KEYS[1])
+                local incoming = ARGV[1]
+                if not current or #incoming > #current or (#incoming == #current and incoming > current) then
+                    redis.call('SET', KEYS[1], incoming, 'PX', ARGV[2])
                     return 1
-                else
-                    return 0
                 end
+
+                redis.call('PEXPIRE', KEYS[1], ARGV[2])
+                return 0
             """,
             Long.class
     );
 
     /**
-     * 캐싱된 가격보다 높은지 즉시 원자적으로 판정하고, 이기면 캐시를 바로 갱신한다.
-     * 반환값: 이겼으면 "이전 값"(되돌릴 때 필요), 졌으면 -1, Redis 장애 시 null(모르니 MySQL이 판단).
+     * 커밋된 캐시 가격 이하인 명백한 저가 입찰만 거절한다.
+     * 캐시 미존재·오염·Redis 장애 시에는 거절하지 않고 MySQL이 최종 판정한다.
      */
-    public Long tryWinRace(Long auctionId, long price) {
+    public boolean isTooLow(Long auctionId, long price) {
         try {
-            return redisTemplate.execute(
-                    WIN_RACE_SCRIPT,
-                    List.of(key(auctionId)),
-                    String.valueOf(price)
-            );
+            String committedPrice = redisTemplate.opsForValue().get(key(auctionId));
+            return committedPrice != null && price <= Long.parseLong(committedPrice);
         } catch (Exception exception) {
-            return null;
-        }
-    }
-
-    public boolean isLost(Long previousPrice) {
-        return previousPrice != null && previousPrice == LOST;
-    }
-
-    /** MySQL에서 최종적으로 실패했을 때, 앞서 이겼다고 판정했던 캐시 값을 되돌린다. */
-    public void revertIfStillMine(Long auctionId, long myPrice, long previousPrice) {
-        try {
-            redisTemplate.execute(
-                    REVERT_SCRIPT,
-                    List.of(key(auctionId)),
-                    String.valueOf(myPrice),
-                    String.valueOf(previousPrice)
-            );
-        } catch (Exception exception) {
-            // 되돌리기 실패해도 무시 - 다음 정상 요청이 결국 올바른 값으로 다시 덮어씀
+            return false;
         }
     }
 
     /**
-     * 경매 생성 시 시작가로 캐시를 미리 채워둔다. 이게 없으면 첫 요청은 키가 없어 0으로
-     * 취급되어, 시작가보다 낮은 가격도 Redis 관문을 통과해버린다(MySQL이 최종 거절하지만
-     * 그만큼 왕복이 낭비된다). TTL은 마감 시각 기준으로 둬서 별도 정리 작업 없이 자동 만료된다.
+     * MySQL에 커밋된 가격만 단조 증가로 반영한다. 캐시는 DB보다 같거나 느리게 갱신되므로,
+     * 갱신 실패나 이벤트 역전이 발생해도 정상 입찰을 잘못 거절하지 않는다.
      */
-    public void initialize(Long auctionId, long startPrice, LocalDateTime endedAt) {
+    public void updateCommittedPrice(Long auctionId, long price, LocalDateTime endedAt) {
         try {
             Duration ttl = Duration.between(LocalDateTime.now(), endedAt)
                     .plusHours(EXPIRE_AFTER_ENDED_HOURS);
             if (ttl.isNegative() || ttl.isZero()) {
                 return;
             }
-            redisTemplate.opsForValue().set(key(auctionId), String.valueOf(startPrice), ttl);
+            redisTemplate.execute(
+                    UPDATE_COMMITTED_PRICE_SCRIPT,
+                    List.of(key(auctionId)),
+                    String.valueOf(price),
+                    String.valueOf(ttl.toMillis())
+            );
         } catch (Exception exception) {
-            // 초기화 실패해도 무시 - 키가 없으면 tryWinRace가 0으로 취급해 안전망(MySQL)이 대신 판단한다.
+            // 캐시가 뒤처지거나 없어도 안전망인 MySQL이 최종 판정한다.
         }
     }
 
     private static String key(Long auctionId) {
-        return "auction:" + auctionId + ":price";
+        return "auction:" + auctionId + ":committed-price";
     }
 }

@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.application.live.OpenBidAccepted;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -120,14 +121,18 @@ class BidServiceTest {
         stubSuccessfulUpdate();
         stubExistingDeposit();
         stubPersistedBid();
+        when(auction.getEndedAt()).thenReturn(DATABASE_TIME);
+        when(bidPriceCache.isTooLow(AUCTION_ID, PRICE)).thenReturn(false);
         when(bidRepository.save(any(Bid.class))).thenReturn(persistedBid);
 
         BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN);
 
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
+        verify(bidPriceCache).isTooLow(AUCTION_ID, PRICE);
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
         verify(eventPublisher).publishEvent(new AuctionBidCreated(AUCTION_ID, BID_ID));
+        verify(eventPublisher).publishEvent(new OpenBidAccepted(AUCTION_ID, PRICE, DATABASE_TIME));
         Bid saved = bidCaptor.getValue();
         assertAll(
                 () -> assertThat(saved.getAuction()).isSameAs(auction),
@@ -140,6 +145,27 @@ class BidServiceTest {
                 () -> assertThat(result.price()).isEqualTo(PRICE),
                 () -> assertThat(result.status()).isEqualTo(BidStatus.UP),
                 () -> assertThat(result.bidAt()).isEqualTo(BID_AT)
+        );
+    }
+
+    @Test
+    void 캐시가_저가로_판단하면_DB_호출_없이_입찰을_거절한다() {
+        when(bidPriceCache.isTooLow(AUCTION_ID, PRICE)).thenReturn(true);
+
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.OPEN)
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
+        verify(bidPriceCache).isTooLow(AUCTION_ID, PRICE);
+        verifyNoInteractions(
+                memberRepository,
+                auctionRepository,
+                auctionDepositRepository,
+                bidRepository,
+                eventPublisher,
+                sealedBidRepository
         );
     }
 
@@ -230,6 +256,8 @@ class BidServiceTest {
 
         // then
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
+        verify(eventPublisher, never()).publishEvent(any(OpenBidAccepted.class));
+        verifyNoInteractions(bidPriceCache);
     }
 
     @Test

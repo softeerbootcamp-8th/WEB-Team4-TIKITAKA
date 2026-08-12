@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.application.live.OpenBidAccepted;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -67,12 +68,9 @@ public class BidService {
     ) {
         validateBidUnit(price);
 
-        // Redis에서 즉시 원자적으로 승패를 가른다(비교+갱신을 한 번에). 이겼을 때 받은 "이전 값"은
-        // MySQL에서 다른 이유로 최종 실패할 경우 되돌리는 데 쓴다. SEALED는 이 캐시 대상이 아니다.
-        Long previousPrice = bidType == BidType.OPEN
-                ? bidPriceCache.tryWinRace(auctionId, price)
-                : null;
-        if (bidPriceCache.isLost(previousPrice)) {
+        // Redis에는 커밋된 공개입찰 가격만 있으므로, 그 이하인 명백한 저가 입찰만 미리 거절한다.
+        // 캐시가 없거나 장애가 나면 기존 MySQL 조건부 UPDATE가 그대로 최종 판정한다.
+        if (bidType == BidType.OPEN && bidPriceCache.isTooLow(auctionId, price)) {
             throw new BidException(BID_PRICE_TOO_LOW);
         }
 
@@ -83,11 +81,6 @@ public class BidService {
             case SEALED -> tryUpdateAuctionForSealedBid(memberId, auctionId, price);
         };
         if (updatedRows != 1) {
-            // Redis에서는 이겼다고 판정했지만 MySQL에서 다른 이유(본인 경매, 종료 등)로 최종 실패한
-            // 경우, 그 사이 아무도 안 건드렸다면 캐시를 이전 값으로 되돌린다.
-            if (previousPrice != null && !bidPriceCache.isLost(previousPrice)) {
-                bidPriceCache.revertIfStillMine(auctionId, price, previousPrice);
-            }
             // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다.
             return rejectBid(memberId, auctionId, price, bidType);
         }
@@ -142,6 +135,11 @@ public class BidService {
 
         eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         eventPublisher.publishEvent(new AuctionBidCreated(auction.getId(), bid.getId()));
+        eventPublisher.publishEvent(new OpenBidAccepted(
+                auction.getId(),
+                price,
+                auction.getEndedAt()
+        ));
         return BidResult.from(bid);
     }
 
