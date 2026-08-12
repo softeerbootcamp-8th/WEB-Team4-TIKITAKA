@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.application.live.BidPriceCachePreempted;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -58,6 +59,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -373,7 +375,10 @@ class BidServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
         verifyNoInteractions(memberRepository, bidRepository);
-        verifyNoInteractions(eventPublisher);
+        // Redis 응답이 없어(previousPrice=null) 실제로 선점했는지 모르므로, 안전망 이벤트는
+        // 그래도 등록해둔다 - 트랜잭션이 실패로 끝나므로 리스너가 재동기화를 시도하게 된다.
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test
@@ -395,7 +400,8 @@ class BidServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
         verifyNoInteractions(memberRepository, bidRepository);
         verify(bidRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test
@@ -410,7 +416,8 @@ class BidServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
         verifyNoInteractions(memberRepository, bidRepository);
         verify(bidRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test

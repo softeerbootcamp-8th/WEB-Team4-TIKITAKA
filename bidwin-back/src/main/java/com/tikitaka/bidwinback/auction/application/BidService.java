@@ -75,9 +75,11 @@ public class BidService {
         if (bidPriceCache.isLost(previousPrice)) {
             throw new BidException(BID_PRICE_TOO_LOW);
         }
-        if (previousPrice != null) {
-            // 이 트랜잭션이 롤백되면(조건부 UPDATE 실패든, 이후 보증금 예약·저장 실패든) 캐시를
-            // DB 현재가로 재동기화해야 하므로, 커밋 여부가 정해지기 전에 미리 알려둔다.
+        if (bidType == BidType.OPEN) {
+            // previousPrice가 null이어도(키가 없었거나, Redis 예외로 결과를 모르는 경우) 등록해둔다.
+            // 특히 예외 케이스는 Redis가 SET을 실제로 실행한 뒤 응답만 못 받았을 수도 있어
+            // "안 건드렸다"고 확신할 수 없다. 되돌리기는 "내가 세팅한 값이 아직 그대로일 때만"
+            // 작동하므로, 실제로는 안 건드렸던 경우엔 그냥 안전하게 아무 일도 안 일어난다.
             eventPublisher.publishEvent(new BidPriceCachePreempted(auctionId, price));
         }
 
