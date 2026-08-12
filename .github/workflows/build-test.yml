@@ -68,6 +68,15 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v7
       # PR 코드는 주입된 값을 읽을 수 있으므로 운영 자격 증명이 아닌 테스트 전용 값만 저장한다.
