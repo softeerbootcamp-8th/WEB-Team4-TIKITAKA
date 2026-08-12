@@ -44,6 +44,19 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("auctionId") long auctionId
     );
 
+    // 입찰가 캐시(Redis)가 실패한 선점을 되돌릴 때, 커밋된 DB 현재가로 재동기화하기 위해 쓴다.
+    // current_price가 없는 기존 경매는 조건부 UPDATE와 동일한 기준(Bid 최고가, 없으면 시작가)으로 보정한다.
+    @Query(value = """
+            SELECT COALESCE(
+                    current_price,
+                    (SELECT MAX(bid.price) FROM bid WHERE bid.auction_id = auction.id),
+                    start_price
+                )
+            FROM auction
+            WHERE id = :auctionId
+            """, nativeQuery = true)
+    Optional<Long> findCurrentPriceById(@Param("auctionId") Long auctionId);
+
     // 단일 조건부 UPDATE로 입찰을 직렬화하고 최소 호가 검증과 현재가 변경을 원자적으로 처리한다.
     // current_price가 없는 기존 경매만 Bid 최고가, 입찰도 없으면 시작가를 기준으로 한다.
     // 락 대기 중 흐른 시간까지 반영하도록 statement 시작 시각이 아닌 SYSDATE(6)를 사용한다.
