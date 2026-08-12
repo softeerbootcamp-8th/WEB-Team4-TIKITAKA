@@ -35,6 +35,26 @@ services:
     networks:
       - local
 
+  redis:
+    image: redis:7.4
+    restart: unless-stopped
+    command:
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+    networks:
+      - local
+
   server:
     image: ${APP_IMAGE:-bidwin-back:local}
     build:
@@ -47,6 +67,8 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-bidwin}?connectionTimeZone=%2B09:00&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8
       DB_USERNAME: ${MYSQL_USER:-bidwin}
       DB_PASSWORD: ${MYSQL_PASSWORD:-bidwin-local}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
       MANAGEMENT_SERVER_PORT: 9090
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
@@ -69,6 +91,8 @@ services:
       - "9090"
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/api/v1/health | grep -q '\"success\":true'"]
