@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.application.live.BidPriceCachePreempted;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -56,6 +57,7 @@ public class BidService {
     private final BidRepository bidRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SealedBidRepository sealedBidRepository;
+    private final BidPriceCache bidPriceCache;
   
     @Transactional
     public BidResult place(
@@ -66,6 +68,21 @@ public class BidService {
     ) {
         validateBidUnit(price);
 
+        // Redis에서 즉시 원자적으로 승패를 가른다(비교+갱신을 한 번에). SEALED는 이 캐시 대상이 아니다.
+        Long previousPrice = bidType == BidType.OPEN
+                ? bidPriceCache.tryWinRace(auctionId, price)
+                : null;
+        if (bidPriceCache.isLost(previousPrice)) {
+            throw new BidException(BID_PRICE_TOO_LOW);
+        }
+        if (bidType == BidType.OPEN) {
+            // previousPrice가 null이어도(키가 없었거나, Redis 예외로 결과를 모르는 경우) 등록해둔다.
+            // 특히 예외 케이스는 Redis가 SET을 실제로 실행한 뒤 응답만 못 받았을 수도 있어
+            // "안 건드렸다"고 확신할 수 없다. 되돌리기는 "내가 세팅한 값이 아직 그대로일 때만"
+            // 작동하므로, 실제로는 안 건드렸던 경우엔 그냥 안전하게 아무 일도 안 일어난다.
+            eventPublisher.publishEvent(new BidPriceCachePreempted(auctionId, price));
+        }
+
         // bidType은 클라이언트가 인지한 입찰 단계일 뿐이며, 실제 단계는 DB 시각을 사용하는
         // 조건부 UPDATE가 판정한다. 단계가 바뀌어도 다른 입찰 유형으로 자동 전환하지 않는다.
         int updatedRows = switch (bidType) {
@@ -73,7 +90,8 @@ public class BidService {
             case SEALED -> tryUpdateAuctionForSealedBid(memberId, auctionId, price);
         };
         if (updatedRows != 1) {
-            // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다.
+            // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다. 이 메서드는
+            // 항상 예외를 던져 트랜잭션을 롤백시키므로, 위에서 예약해둔 캐시 재동기화도 실행된다.
             return rejectBid(memberId, auctionId, price, bidType);
         }
 
