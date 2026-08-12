@@ -42,7 +42,7 @@ server:
     mbeanregistry:
       enabled: true
     threads:
-      # t3.micro(RAM 1GiB)에서 기본값 200은 쓰레드 스택만으로 ~200MB를 차지해 부담스럽다.
+      # t4g.micro(RAM 1GiB)에서 기본값 200은 쓰레드 스택만으로 ~200MB를 차지해 부담스럽다.
       max: ${TOMCAT_THREADS_MAX:100}
   servlet:
     session:
