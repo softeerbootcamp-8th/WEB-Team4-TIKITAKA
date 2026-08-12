@@ -36,6 +36,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Redis는 보조 캐시라 응답이 없어도(먹통) 빠르게 실패해서 MySQL로 넘어가야 한다.
+      # 기본값(수십 초)대로 두면 그 시간만큼 톰캣 스레드가 묶여, 보조 캐시 장애가
+      # 입찰 API 전체 지연/고갈로 번질 수 있다.
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:300ms}
+      timeout: ${REDIS_COMMAND_TIMEOUT:300ms}
 
 server:
   tomcat:
