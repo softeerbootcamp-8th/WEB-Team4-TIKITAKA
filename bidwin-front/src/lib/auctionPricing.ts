@@ -16,13 +16,19 @@ export interface DownPricing {
 }
 
 export function computeCurrentDownPrice(pricing: DownPricing, now: number): number {
-  const elapsedDrops = Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs)
+  const elapsedDrops = Math.max(
+    0,
+    Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs),
+  )
   const price = pricing.startPrice - elapsedDrops * pricing.dropPrice
   return Math.max(price, pricing.minimumPrice)
 }
 
 export function nextDropAt(pricing: DownPricing, now: number): number {
-  const elapsedDrops = Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs)
+  const elapsedDrops = Math.max(
+    0,
+    Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs),
+  )
   return pricing.startedAt + (elapsedDrops + 1) * pricing.priceDropIntervalMs
 }
 
@@ -37,7 +43,10 @@ export interface PriceDropEntry {
  * 현재가와 내역이 어긋나지 않는다.
  */
 export function computeDropHistory(pricing: DownPricing, now: number): PriceDropEntry[] {
-  const elapsedDrops = Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs)
+  const elapsedDrops = Math.max(
+    0,
+    Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs),
+  )
   const history: PriceDropEntry[] = []
 
   for (let i = 1; i <= elapsedDrops; i++) {
