@@ -13,11 +13,14 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -80,9 +83,15 @@ public class AuthController {
             HttpServletRequest servletRequest
     ) {
         AuthMember authMember = authService.login(request);
-        HttpSession session = servletRequest.getSession();
-        servletRequest.changeSessionId();
-        session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+
+        try {
+            HttpSession session = servletRequest.getSession();
+            servletRequest.changeSessionId();
+            session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+        } catch (DataAccessException exception) {
+            // 자격 검증은 끝났지만 세션을 저장할 수 없으므로 로그인 성공으로 응답하면 안 된다.
+            throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+        }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
@@ -118,6 +127,9 @@ public class AuthController {
                 session.invalidate();
             } catch (IllegalStateException ignored) {
                 // 이미 로그아웃된 세션!
+            } catch (DataAccessException ignored) {
+                // Redis 장애로 못 지워도 로그아웃 의도는 달성된 것으로 본다.
+                // 방치된 세션은 절대 만료(48h)나 TTL로 결국 자연 정리된다.
             }
         }
 

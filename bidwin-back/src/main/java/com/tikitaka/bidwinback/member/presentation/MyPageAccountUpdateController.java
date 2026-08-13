@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -61,8 +62,15 @@ public class MyPageAccountUpdateController {
                 request.newPasswordConfirm()
         );
 
-        servletRequest.changeSessionId();
-        session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+        try {
+            servletRequest.changeSessionId();
+            session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+        } catch (DataAccessException exception) {
+            // 비밀번호는 이미 바뀌었지만(authVersion 증가) 세션을 갱신하지 못해
+            // 이 세션은 다음 요청에서 authVersion 불일치로 거부된다. 성공으로 응답하면
+            // 재로그인이 필요한 상태를 숨기게 되므로 그대로 알린다.
+            throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+        }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
