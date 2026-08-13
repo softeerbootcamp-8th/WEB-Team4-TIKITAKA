@@ -108,25 +108,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
               AND ended_at > SYSDATE(6)
               AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
               AND seller_id <> :bidderId
-              AND GREATEST(
-                    COALESCE(
-                          current_price,
-                          (
-                              SELECT MAX(bid.price)
-                              FROM bid
-                              WHERE bid.auction_id = auction.id
-                          ),
-                          start_price
-                    ),
-                    COALESCE(
-                          (
-                              SELECT MAX(sealed_bid.price)
-                              FROM sealed_bid
-                              WHERE sealed_bid.auction_id = auction.id
-                          ),
-                          start_price
-                    )
-              ) <= :price - :bidUnit
+              AND current_price <= :price - :bidUnit
             """, nativeQuery = true)
     int tryUpdateAuctionForSealedBid(
             @Param("auctionId") Long auctionId,
