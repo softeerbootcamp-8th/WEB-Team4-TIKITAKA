@@ -225,9 +225,11 @@ function AuctionDetailPage() {
         })
       },
       onBidCreated: (bid) => {
+        setHistoryError(null)
         setBidHistory((current) => mergeBidHistory(current, [bid]))
       },
       onBidHistorySnapshot: (history) => {
+        setHistoryError(null)
         setBidHistory((current) => mergeBidHistory(current, history.bidLog))
         setAuction((current) => (
           current?.auctionType === 'UP' && history.bidCount > current.bidCount
@@ -260,6 +262,20 @@ function AuctionDetailPage() {
     }
   }
 
+  function refreshBidHistory() {
+    void requestBidHistory(auctionId).then((result) => {
+      if (!result.ok) {
+        setHistoryError(result.message)
+        return
+      }
+      setHistoryError(null)
+      setBidHistory((current) => mergeBidHistory(current, result.data.bidLog))
+      setAuction((current) => current?.auctionType === 'UP'
+        ? { ...current, bidCount: Math.max(current.bidCount, result.data.bidCount) }
+        : current)
+    })
+  }
+
   async function handleBid(price: number, bidType: BidType) {
     if (!ensureAuthenticated() || pendingAction !== null) return false
 
@@ -282,7 +298,12 @@ function AuctionDetailPage() {
       setHasSubmittedSealedBid(true)
       showToast('밀봉 입찰을 제출했어요. 마감 후 결과가 공개됩니다.', 'success')
     } else {
-      showToast(`${formatWon(result.data.price)}으로 입찰했어요.`, 'success')
+      const acceptedPrice = result.data.price
+      setAuction((current) => current?.auctionType === 'UP'
+        ? { ...current, currentPrice: Math.max(current.currentPrice, acceptedPrice) }
+        : current)
+      refreshBidHistory()
+      showToast(`${formatWon(acceptedPrice)}으로 입찰했어요.`, 'success')
     }
     return true
   }
@@ -699,7 +720,7 @@ function UpBidPanel({
   const busy = pendingAction !== null
 
   function handleChip(increment: number) {
-    setAmount(auction.currentPrice + increment)
+    setAmount((current) => Math.max(current, auction.currentPrice) + increment)
     setInputError(null)
     onClearError()
   }
