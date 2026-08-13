@@ -3,10 +3,12 @@ package com.tikitaka.bidwinback.member.domain.repository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
@@ -30,7 +32,10 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     boolean existsByNickname(String nickname);
 
     // 잔액 확인과 요청 금액 잠금을 한 UPDATE로 처리한다.
+    // 입찰/즉시구매 흐름이 경매 행과 회원 행을 서로 반대 순서로 잠글 수 있어, 순환 대기 상황에서
+    // 오래 매달리지 않고 빠르게 실패하도록 타임아웃을 짧게 둔다.
     @Modifying
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
             UPDATE member
             SET total_point = total_point - :amount,

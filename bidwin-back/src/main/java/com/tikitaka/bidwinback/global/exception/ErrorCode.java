@@ -300,6 +300,11 @@ public enum ErrorCode {
             "DEPOSIT_409_2",
             "보증금 예약 금액이 기대한 금액과 일치하지 않습니다."
     ),
+    DEPOSIT_CONCURRENT_CONFLICT(
+            HttpStatus.CONFLICT,
+            "DEPOSIT_409_3",
+            "보증금 처리 중 다른 요청과 충돌했습니다. 잠시 후 다시 시도해주세요."
+    ),
 
     // Trade / settlement
     TRADE_NOT_FOUND(

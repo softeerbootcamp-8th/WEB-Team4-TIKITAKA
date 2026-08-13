@@ -23,6 +23,8 @@ import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -87,21 +89,13 @@ public class BuyNowTransactionService {
         }
 
         // 잔액 확인과 전액 잠금을 한 UPDATE로 처리해 동시 구매의 초과 사용을 막는다.
-        int lockedPoints = memberRepository.movePointToLockedIfEnough(
-                command.memberId(),
-                command.finalPrice()
-        );
-
+        int lockedPoints = lockDepositPoint(command.memberId(), command.finalPrice());
         if (lockedPoints != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
 
         // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
-        int completed = auctionRepository.completeForBuyNow(
-                command.auctionId(),
-                command.memberId(),
-                command.purchasedAt()
-        );
+        int completed = completeForBuyNow(command);
         if (completed != 1) {
             // 검증 후 조건부 UPDATE 전에 마감 경계를 넘었는지 최신 DB 시각으로 다시 확인한다.
             validateAuction(auction, auctionRepository.currentDatabaseTime());
@@ -141,6 +135,30 @@ public class BuyNowTransactionService {
         }
 
         return BuyNowResult.from(trade);
+    }
+
+    // 입찰 흐름은 경매 행을 먼저 잠근 뒤 회원 행을 잠그는 반대 순서라 드물게 순환 대기가
+    // 날 수 있다. 그때도 500이 아니라 기존 동시성 충돌 응답으로 처리되도록 변환한다.
+    private int lockDepositPoint(Long memberId, long amount) {
+        try {
+            return memberRepository.movePointToLockedIfEnough(memberId, amount);
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_TRADE_CONFLICT);
+        }
+    }
+
+    // 이 UPDATE에도 짧은 쿼리 타임아웃이 걸려 있어, 락 대기가 길어지면 completed != 1과
+    // 같은 취지의 응답을 주도록 여기서도 동일하게 변환한다.
+    private int completeForBuyNow(BuyNowCommand command) {
+        try {
+            return auctionRepository.completeForBuyNow(
+                    command.auctionId(),
+                    command.memberId(),
+                    command.purchasedAt()
+            );
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_TRADE_CONFLICT);
+        }
     }
 
     private InstantPurchaseRequest findRequestForUpdate(

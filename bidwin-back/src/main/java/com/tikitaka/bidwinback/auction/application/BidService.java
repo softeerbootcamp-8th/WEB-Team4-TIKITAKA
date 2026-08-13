@@ -120,10 +120,7 @@ public class BidService {
                 auction.getStartPrice() / DEPOSIT_RATE_DENOMINATOR,
                 DEPOSIT_RATE_NUMERATOR
         );
-        int lockedPoints = memberRepository.movePointToLockedIfEnough(
-                memberId,
-                depositAmount
-        );
+        int lockedPoints = lockDepositPoint(memberId, depositAmount);
         if (lockedPoints != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
@@ -195,6 +192,16 @@ public class BidService {
                     price,
                     BID_UNIT
             );
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_BID_CONFLICT);
+        }
+    }
+
+    // 즉시구매 흐름은 회원 행을 먼저 잠근 뒤 경매 행을 잠그는 반대 순서라 드물게 순환 대기가
+    // 날 수 있다. 그때도 500이 아니라 기존 동시성 충돌 응답으로 처리되도록 변환한다.
+    private int lockDepositPoint(Long memberId, long depositAmount) {
+        try {
+            return memberRepository.movePointToLockedIfEnough(memberId, depositAmount);
         } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
             throw new BidException(CONCURRENT_BID_CONFLICT);
         }

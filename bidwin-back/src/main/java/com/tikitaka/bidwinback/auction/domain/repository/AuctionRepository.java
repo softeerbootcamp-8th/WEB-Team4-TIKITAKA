@@ -154,7 +154,10 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     Optional<Auction> findWithSellerById(@Param("auctionId") Long auctionId);
 
     // 경매 상태·마감·판매자를 DB에서 다시 검사하고 한 요청만 완료 처리한다.
+    // 즉시구매 흐름은 회원 행을 먼저 잠근 뒤 이 경매 행을 잠그는데, 입찰 흐름은 반대 순서이므로
+    // 순환 대기 상황에서 오래 매달리지 않고 빠르게 실패하도록 타임아웃을 짧게 둔다.
     @Modifying
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
             UPDATE auction
             SET status = 'COMPLETED',
