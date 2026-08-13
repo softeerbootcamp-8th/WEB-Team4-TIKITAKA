@@ -784,8 +784,12 @@ function UpBidPanel({
       {!ended && (
         <>
           {sealedBidActive && (
-            <p className="rounded-md bg-primary-tint p-sm text-xs leading-relaxed text-primary">
-              입찰 금액은 마감 전까지 공개되지 않으며 한 번만 제출할 수 있어요.
+            <p
+              role="status"
+              className="rounded-md bg-primary-tint p-sm text-xs leading-relaxed text-primary"
+            >
+              현재 밀봉입찰 상태입니다. 입찰 금액은 마감 전까지 공개되지 않으며,
+              단 1회만 입찰할 수 있고 즉시구매는 이용할 수 없어요.
             </p>
           )}
 
