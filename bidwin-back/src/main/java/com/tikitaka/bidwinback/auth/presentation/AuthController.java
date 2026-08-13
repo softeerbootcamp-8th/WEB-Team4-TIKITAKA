@@ -74,6 +74,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
+    @PostMapping("/signups/email/bypass")
+    public ResponseEntity<ApiResponse<Void>> bypassEmailVerification(
+            @Valid @RequestBody EmailVerificationSendRequest request
+    ) {
+        authService.bypassEmailVerification(request);
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<Void>> login(
             @Valid @RequestBody LoginRequest request,
