@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
@@ -57,7 +58,15 @@ public class SseHub {
             Collection<SseChannel> channels,
             Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages
     ) {
-        return subscribe(channels, new SseEmitter(timeoutMs), initialMessages);
+        Set<SseChannel> subscriptions = reserveSubscriptions(channels);
+        SseEmitter emitter;
+        try {
+            emitter = new SseEmitter(jitteredTimeoutMs());
+        } catch (RuntimeException | Error exception) {
+            connectionPermits.release();
+            throw exception;
+        }
+        return subscribe(subscriptions, emitter, initialMessages);
     }
 
     SseEmitter subscribe(
@@ -65,16 +74,26 @@ public class SseHub {
             SseEmitter emitter,
             Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages
     ) {
-        Set<SseChannel> subscriptions = new LinkedHashSet<>(channels);
-        validateSubscriptions(subscriptions);
-        SseConnection connection = new SseConnection(
-                emitter,
-                reconnectTimeMs,
-                maxPendingMessagesPerConnection,
-                closed -> unsubscribe(subscriptions, closed)
-        );
-        // 검사와 등록 사이의 경쟁으로 상한을 넘지 않도록 연결 자리를 먼저 원자적으로 예약한다.
-        reserveConnection();
+        return subscribe(reserveSubscriptions(channels), emitter, initialMessages);
+    }
+
+    private SseEmitter subscribe(
+            Set<SseChannel> subscriptions,
+            SseEmitter emitter,
+            Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages
+    ) {
+        SseConnection connection;
+        try {
+            connection = new SseConnection(
+                    emitter,
+                    reconnectTimeMs,
+                    maxPendingMessagesPerConnection,
+                    closed -> unsubscribe(subscriptions, closed)
+            );
+        } catch (RuntimeException | Error exception) {
+            connectionPermits.release();
+            throw exception;
+        }
 
         try {
             // snapshot 조회 중 발행된 변경도 받도록 색인과 writer를 먼저 활성화한다.
@@ -100,7 +119,7 @@ public class SseHub {
                 connection.send(message);
             });
             return emitter;
-        } catch (RuntimeException exception) {
+        } catch (RuntimeException | Error exception) {
             connection.close();
             throw exception;
         }
@@ -163,14 +182,17 @@ public class SseHub {
         }
     }
 
-    // 초과분은 gateway가 아닌 애플리케이션에서도 막아, 반복 재연결이 서버 자원을 고갈시키지 못하게 한다.
-    private void reserveConnection() {
+    private Set<SseChannel> reserveSubscriptions(Collection<SseChannel> channels) {
+        Set<SseChannel> subscriptions = new LinkedHashSet<>(channels);
+        validateSubscriptions(subscriptions);
+
         if (!connectionPermits.tryAcquire()) {
             throw new SseException(
                     SSE_CONNECTION_LIMIT_EXCEEDED,
                     "전체 SSE 연결 상한(" + maxConnections + ")을 초과했습니다."
             );
         }
+        return subscriptions;
     }
 
     private long jitteredTimeoutMs() {
