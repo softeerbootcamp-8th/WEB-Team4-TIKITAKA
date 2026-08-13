@@ -1,7 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
 import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Expression;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
@@ -34,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -60,6 +60,16 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ) * {5}
             )
             """;
+    private static final Comparator<AuctionColumnSortCandidate> LATEST_ORDER =
+            Comparator.comparing(AuctionColumnSortCandidate::sortAt)
+                    .reversed()
+                    .thenComparing(
+                            Comparator.comparingLong(AuctionColumnSortCandidate::auctionId)
+                                    .reversed()
+                    );
+    private static final Comparator<AuctionColumnSortCandidate> DEADLINE_ORDER =
+            Comparator.comparing(AuctionColumnSortCandidate::sortAt)
+                    .thenComparingLong(AuctionColumnSortCandidate::auctionId);
     private static final Comparator<DownAuctionPriceCandidateDetails> DOWN_START_PRICE_ORDER =
             Comparator.comparingLong(DownAuctionPriceCandidateDetails::startPrice)
                     .reversed()
@@ -118,8 +128,11 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             int limit
     ) {
-        List<Tuple> prices = queryFactory
-                .select(auction.id, auction.currentPrice)
+        return queryFactory
+                .select(new QUpAuctionPriceSnapshotDetails(
+                        auction.id,
+                        auction.currentPrice
+                ))
                 .from(auction)
                 .where(
                         searchPredicate(condition),
@@ -127,23 +140,9 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 )
                 .orderBy(upPriceOrderBy(condition.sort()))
                 .limit(limit)
-                .fetch();
-        if (prices.isEmpty()) {
-            return List.of();
-        }
-
-        return prices.stream()
-                .map(tuple -> {
-                    long auctionId = requireValue(tuple.get(auction.id), "auctionId");
-                    long currentPrice = requireValue(
-                            tuple.get(auction.currentPrice),
-                            "currentPrice"
-                    );
-                    return new AuctionPriceSnapshot(
-                            auctionId,
-                            currentPrice
-                    );
-                })
+                .fetch()
+                .stream()
+                .map(UpAuctionPriceSnapshotDetails::toSnapshot)
                 .toList();
     }
 
@@ -181,12 +180,13 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionPriceCursor cursor,
             int limit
     ) {
-
-        List<Long> fetch = queryFactory
+        // 최저가는 하위 테이블에만 있으므로 down_auction의 경계 인덱스부터 읽어야
+        // 활성 경매 필터를 위한 auction 조인 전에 LIMIT을 향해 순서대로 스캔할 수 있다.
+        List<Long> pageCandidateIds = queryFactory
                 .select(downAuction.id)
                 .from(downAuction)
                 .where(
-                        downSearchPredicate(condition),
+                        downAuctionSearchPredicate(condition),
                         minimumPriceCursorAfter(cursor)
                 )
                 .orderBy(
@@ -198,20 +198,9 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         "idx_down_auction_minimum_price_id")
                 .fetch();
 
-        // 최저가는 하위 테이블에만 있으므로 down_auction의 경계 인덱스부터 읽어야
-        // 활성 경매 필터를 위한 auction 조인 전에 LIMIT을 향해 순서대로 스캔할 수 있다.
-        return queryFactory
-                .select(new QDownAuctionPriceCandidateDetails(
-                        downAuction.id,
-                        downAuction.startPrice,
-                        downAuction.minimumPrice,
-                        downAuction.startedAt,
-                        downAuction.dropPrice,
-                        downAuction.priceDropInterval
-                ))
-                .from(downAuction)
+        return candidateQueryFromDownAuction()
                 .where(
-                        downAuction.id.in(fetch)
+                        downAuction.id.in(pageCandidateIds)
                 )
                 .orderBy(
                         downAuction.minimumPrice.asc(),
@@ -224,6 +213,18 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor
     ) {
+        return candidateQueryFromDownAuction()
+                .where(
+                        downAuctionSearchPredicate(condition),
+                        downAuction.minimumPrice.eq(cursor.priceBound()),
+                        downAuction.id.lt(cursor.auctionId())
+                )
+                .orderBy(downAuction.id.desc())
+                .fetch();
+    }
+
+    // down_auction만 읽으므로 최저가 인덱스가 스캔을 주도한다.
+    private JPAQuery<DownAuctionPriceCandidateDetails> candidateQueryFromDownAuction() {
         return queryFactory
                 .select(new QDownAuctionPriceCandidateDetails(
                         downAuction.id,
@@ -233,14 +234,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.dropPrice,
                         downAuction.priceDropInterval
                 ))
-                .from(downAuction)
-                .where(
-                        downSearchPredicate(condition),
-                        downAuction.minimumPrice.eq(cursor.priceBound()),
-                        downAuction.id.lt(cursor.auctionId())
-                )
-                .orderBy(downAuction.id.desc())
-                .fetch();
+                .from(downAuction);
     }
 
     private List<DownAuctionPriceCandidateDetails> findDownCandidatesByStartPrice(
@@ -248,34 +242,26 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionPriceCursor cursor,
             int limit
     ) {
-        // QueryDSL JPA는 UNION ALL을 지원하지 않으므로 각 분기의 Top-K를 전역 순서로 병합한다.
-        List<DownAuctionPriceCandidateDetails> unfinished = findDownCandidatesByStartPrice(
+        return mergeAcrossCompletionStates(
                 condition,
-                cursor,
                 limit,
-                auction.completedAt.isNull()
-        );
-        List<DownAuctionPriceCandidateDetails> completedAfterSnapshot =
-                findDownCandidatesByStartPrice(
+                (completedAtPredicate, branchLimit) -> findDownStartPriceCandidatesInBranch(
                         condition,
                         cursor,
-                        limit,
-                        auction.completedAt.gt(condition.asOf())
-                );
-
-        return Stream.concat(unfinished.stream(), completedAfterSnapshot.stream())
-                .sorted(DOWN_START_PRICE_ORDER)
-                .limit(limit)
-                .toList();
+                        branchLimit,
+                        completedAtPredicate
+                ),
+                DOWN_START_PRICE_ORDER
+        );
     }
 
-    private List<DownAuctionPriceCandidateDetails> findDownCandidatesByStartPrice(
+    private List<DownAuctionPriceCandidateDetails> findDownStartPriceCandidatesInBranch(
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor,
-            int limit,
+            long branchLimit,
             Predicate completedAtPredicate
     ) {
-        return downStartPriceCandidateQuery(
+        return candidateQueryFromAuction(
                 searchPredicate(condition, completedAtPredicate)
         )
                 .where(
@@ -285,7 +271,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         auction.startPrice.desc(),
                         auction.id.desc()
                 )
-                .limit(limit)
+                .limit(branchLimit)
                 .fetch();
     }
 
@@ -293,7 +279,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor
     ) {
-        return downStartPriceCandidateQuery(searchPredicate(condition))
+        return candidateQueryFromAuction(searchPredicate(condition))
                 .where(
                         auction.startPrice.eq(cursor.priceBound()),
                         auction.id.lt(cursor.auctionId())
@@ -302,7 +288,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .fetch();
     }
 
-    private JPAQuery<DownAuctionPriceCandidateDetails> downStartPriceCandidateQuery(
+    // auction을 읽고 down_auction을 조인하므로 시작가 인덱스가 스캔을 주도한다.
+    private JPAQuery<DownAuctionPriceCandidateDetails> candidateQueryFromAuction(
             Predicate searchPredicate
     ) {
         return queryFactory
@@ -325,9 +312,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private List<DownAuctionPriceCandidate> toDownPriceCandidates(
             List<DownAuctionPriceCandidateDetails> details
     ) {
-        if (details.isEmpty()) {
-            return List.of();
-        }
         return details.stream()
                 .map(DownAuctionPriceCandidateDetails::toCandidate)
                 .toList();
@@ -344,7 +328,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         List<Long> auctionIds = snapshots.stream()
                 .map(AuctionPriceSnapshot::auctionId)
                 .toList();
-        Map<Long, AuctionBidSummary> bidSummaries = bidSummariesByAuctionId(
+        Map<Long, AuctionBidSummary> bidSummaries = findBidSummariesByAuctionId(
                 auctionIds,
                 asOf
         );
@@ -381,6 +365,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .toList();
     }
 
+    // 최저가 오름차순이므로 커서 다음 페이지는 더 큰 최저가 쪽이다.
     private BooleanExpression minimumPriceCursorAfter(AuctionPriceCursor cursor) {
         if (cursor == null) {
             return null;
@@ -390,6 +375,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         .and(downAuction.id.lt(cursor.auctionId())));
     }
 
+    // 시작가 내림차순이므로 커서 다음 페이지는 더 작은 시작가 쪽이다.
     private BooleanExpression startPriceCursorAfter(AuctionPriceCursor cursor) {
         if (cursor == null) {
             return null;
@@ -414,7 +400,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         };
     }
 
-    private Map<Long, AuctionBidSummary> bidSummariesByAuctionId(
+    private Map<Long, AuctionBidSummary> findBidSummariesByAuctionId(
             List<Long> auctionIds,
             LocalDateTime asOf
     ) {
@@ -431,22 +417,124 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long offset,
             int limit
     ) {
+        ColumnSortSpec sortSpec = columnSortSpec(condition.sort());
+        if (condition.auctionType() == null) {
+            return findPageByColumnSortAcrossTypes(
+                    condition,
+                    offset,
+                    limit,
+                    sortSpec
+            );
+        }
+
+        // 정렬 인덱스에서 페이지 후보만 먼저 고르고, 집계 쿼리는 선택된 ID에만 수행한다.
+        List<Long> auctionIds = mergeAcrossCompletionStates(
+                condition,
+                offset,
+                limit,
+                (completedAtPredicate, branchLimit) -> findColumnSortCandidatesInBranch(
+                        condition,
+                        completedAtPredicate,
+                        branchLimit,
+                        sortSpec
+                ),
+                sortSpec.comparator()
+        )
+                .stream()
+                .map(AuctionColumnSortCandidate::auctionId)
+                .toList();
+        return findMetricsInPageOrder(auctionIds, condition.asOf());
+    }
+
+    private List<AuctionListMetrics> findPageByColumnSortAcrossTypes(
+            AuctionListSearchCondition condition,
+            long offset,
+            int limit,
+            ColumnSortSpec sortSpec
+    ) {
+        // auction_type이 정해지지 않으면 유형별 인덱스 결과를 한 번에 정렬할 수 없어 OFFSET을 사용한다.
         List<Long> auctionIds = queryFactory
                 .select(auction.id)
                 .from(auction)
                 .where(searchPredicate(condition))
-                .orderBy(columnOrderBy(condition.sort()))
+                .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
                 .offset(offset)
                 .limit(limit)
                 .fetch();
+        return findMetricsInPageOrder(auctionIds, condition.asOf());
+    }
+
+    private List<AuctionColumnSortCandidate> findColumnSortCandidatesInBranch(
+            AuctionListSearchCondition condition,
+            Predicate completedAtPredicate,
+            long branchLimit,
+            ColumnSortSpec sortSpec
+    ) {
+        return queryFactory
+                .select(new QAuctionColumnSortCandidate(
+                        auction.id,
+                        sortSpec.sortExpression()
+                ))
+                .from(auction)
+                .where(searchPredicate(condition, completedAtPredicate))
+                .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
+                .limit(branchLimit)
+                // completed_at 분기별로 정렬에 맞는 복합 인덱스를 사용한다.
+                .setHint(
+                        HibernateHints.HINT_QUERY_DATABASE,
+                        sortSpec.indexHint()
+                )
+                .fetch();
+    }
+
+    private <T> List<T> mergeAcrossCompletionStates(
+            AuctionListSearchCondition condition,
+            int limit,
+            BiFunction<Predicate, Long, List<T>> branchQuery,
+            Comparator<T> comparator
+    ) {
+        return mergeAcrossCompletionStates(condition, 0, limit, branchQuery, comparator);
+    }
+
+    private <T> List<T> mergeAcrossCompletionStates(
+            AuctionListSearchCondition condition,
+            long offset,
+            int limit,
+            BiFunction<Predicate, Long, List<T>> branchQuery,
+            Comparator<T> comparator
+    ) {
+        // 활성 조건의 OR을 인덱스로 처리하기 위해 completed_at IS NULL / > asOf로 나눈다.
+        // QueryDSL JPA가 UNION ALL을 지원하지 않으므로 각 분기에서 offset + limit만큼 읽고 병합한다.
+        long branchLimit = Math.addExact(offset, limit);
+        List<T> notYetCompleted = branchQuery.apply(
+                auction.completedAt.isNull(),
+                branchLimit
+        );
+        List<T> completedAfterAsOf = branchQuery.apply(
+                auction.completedAt.gt(condition.asOf()),
+                branchLimit
+        );
+
+        return Stream.concat(notYetCompleted.stream(), completedAfterAsOf.stream())
+                .sorted(comparator)
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    private List<AuctionListMetrics> findMetricsInPageOrder(
+            List<Long> auctionIds,
+            LocalDateTime asOf
+    ) {
         if (auctionIds.isEmpty()) {
             return List.of();
         }
 
         Map<Long, AuctionListMetrics> metricsByAuctionId = findMetricsByAuctionId(
                 auctionIds,
-                condition.asOf()
+                asOf
         );
+        // IN 조회 결과는 순서를 보장하지 않으므로 후보 쿼리가 정한 페이지 순서로 복원한다.
         return auctionIds.stream()
                 .map(auctionId -> {
                     AuctionListMetrics metrics = metricsByAuctionId.get(auctionId);
@@ -532,7 +620,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .and(titleContains(auction.title, condition.keyword()));
     }
 
-    private Predicate downSearchPredicate(AuctionListSearchCondition condition) {
+    private Predicate downAuctionSearchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(downAuction.startedAt.loe(condition.asOf()))
                 .and(downAuction.completedAt.isNull()
@@ -563,16 +651,22 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         };
     }
 
-    private OrderSpecifier<?>[] columnOrderBy(AuctionSort sort) {
+    private ColumnSortSpec columnSortSpec(AuctionSort sort) {
         return switch (sort) {
-            case DEADLINE -> new OrderSpecifier<?>[]{
+            case DEADLINE -> new ColumnSortSpec(
+                    auction.endedAt,
                     auction.endedAt.asc(),
-                    auction.id.asc()
-            };
-            case LATEST -> new OrderSpecifier<?>[]{
+                    auction.id.asc(),
+                    DEADLINE_ORDER,
+                    "idx_auction_snapshot_deadline"
+            );
+            case LATEST -> new ColumnSortSpec(
+                    auction.createdAt,
                     auction.createdAt.desc(),
-                    auction.id.desc()
-            };
+                    auction.id.desc(),
+                    LATEST_ORDER,
+                    "idx_auction_snapshot_latest"
+            );
             case RECOMMENDED, PRICE_LOW, PRICE_HIGH ->
                     throw new IllegalArgumentException("컬럼 정렬이 아닙니다: " + sort);
         };
@@ -652,8 +746,11 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     private Map<Long, String> findThumbnailKeysByAuctionId(List<Long> auctionIds) {
         QImage firstImage = new QImage("firstImage");
-        List<Tuple> tuples = queryFactory
-                .select(image.auction.id, image.objectKey)
+        return queryFactory
+                .select(new QAuctionThumbnailDetails(
+                        image.auction.id,
+                        image.objectKey
+                ))
                 .from(image)
                 .where(
                         image.auction.id.in(auctionIds),
@@ -664,12 +761,11 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                                         .where(firstImage.auction.id.eq(image.auction.id))
                         )
                 )
-                .fetch();
-
-        return tuples.stream()
+                .fetch()
+                .stream()
                 .collect(Collectors.toMap(
-                        tuple -> requireValue(tuple.get(image.auction.id), "auctionId"),
-                        tuple -> requireValue(tuple.get(image.objectKey), "thumbnailObjectKey")
+                        AuctionThumbnailDetails::auctionId,
+                        AuctionThumbnailDetails::objectKey
                 ));
     }
 
@@ -684,17 +780,21 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         return details.toRow(metrics, thumbnailObjectKey);
     }
 
-    private static <T> T requireValue(T value, String fieldName) {
-        if (value == null) {
-            throw new IllegalStateException("경매 목록 조회 결과에 " + fieldName + "이(가) 없습니다.");
-        }
-        return value;
-    }
-
     private record AuctionListMetricExpressions(
             NumberExpression<Long> currentPrice,
             NumberExpression<Long> bidCount,
             Expression<?>[] groupByKeys
     ) {
     }
+
+    // DB의 분기별 정렬과 애플리케이션의 병합 정렬은 같은 키와 방향을 사용해야 한다.
+    private record ColumnSortSpec(
+            Expression<LocalDateTime> sortExpression,
+            OrderSpecifier<?> sortOrder,
+            OrderSpecifier<?> idOrder,
+            Comparator<AuctionColumnSortCandidate> comparator,
+            String indexHint
+    ) {
+    }
+
 }
