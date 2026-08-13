@@ -376,26 +376,6 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
-    void 이메일_인증_우회는_세션_없이_요청할_수_있다()
-            throws ServletException, IOException {
-        // given
-        MockHttpServletRequest request = new MockHttpServletRequest(
-                HttpMethod.POST.name(),
-                "/api/v1/auth/signups/email/bypass"
-        );
-        AtomicBoolean filterChainInvoked = new AtomicBoolean();
-
-        // when
-        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
-                filterChainInvoked.set(true)
-        );
-
-        // then
-        assertThat(filterChainInvoked).isTrue();
-        verifyNoInteractions(sessionAuthService);
-    }
-
-    @Test
     void 인증번호_확인은_세션_없이_요청할_수_있다() throws ServletException, IOException {
         // given
         MockHttpServletRequest request = new MockHttpServletRequest(

@@ -156,26 +156,6 @@ class AuthControllerExceptionTest {
     }
 
     @Test
-    void 이메일_인증_우회_요청의_이메일_형식이_올바르지_않으면_400을_응답한다()
-            throws Exception {
-        // given
-        String request = """
-                {
-                  "email": "invalid-email"
-                }
-                """;
-
-        // when & then
-        mockMvc.perform(post("/api/v1/auth/signups/email/bypass")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(request))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
-        verifyNoInteractions(authService);
-    }
-
-    @Test
     void 비밀번호_재설정_요청을_접수하면_202를_응답한다() throws Exception {
         mockMvc.perform(post("/api/v1/auth/password-resets")
                         .contentType(MediaType.APPLICATION_JSON)

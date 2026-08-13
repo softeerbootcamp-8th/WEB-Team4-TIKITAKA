@@ -4,7 +4,6 @@ import com.tikitaka.bidwinback.auth.application.AuthService;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.AvailabilityResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationRequest;
-import com.tikitaka.bidwinback.auth.presentation.dto.request.EmailVerificationSendRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.LoginRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilityRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
@@ -145,25 +144,6 @@ class AuthControllerTest {
                 () -> assertTrue(result.getBody().success())
         );
         verify(authService).verifyEmail(request);
-    }
-
-    @Test
-    void 이메일_인증을_우회하면_회원을_활성화하고_200을_응답한다() {
-        // given
-        AuthService authService = mock(AuthService.class);
-        EmailVerificationSendRequest request =
-                new EmailVerificationSendRequest("member@example.com");
-
-        // when
-        ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).bypassEmailVerification(request);
-
-        // then
-        assertAll(
-                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
-                () -> assertTrue(result.getBody().success())
-        );
-        verify(authService).bypassEmailVerification(request);
     }
 
     @Test

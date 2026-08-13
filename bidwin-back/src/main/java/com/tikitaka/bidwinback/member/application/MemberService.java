@@ -15,7 +15,6 @@ import java.util.Optional;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.EMAIL_VERIFICATION_PENDING;
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.EMAIL_UNIQUE_CONSTRAINT;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.NICKNAME_UNIQUE_CONSTRAINT;
@@ -125,22 +124,6 @@ public class MemberService {
     @Transactional(readOnly = true)
     public Optional<Member> findByEmail(String email) {
         return memberRepository.findByEmail(email);
-    }
-
-    @Transactional
-    public void activateByEmail(String email) {
-        Member member = memberRepository.findByEmail(email)
-                .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
-        if (member.getStatus() == MemberStatus.ACTIVE) {
-            return;
-        }
-        if (member.getStatus() != MemberStatus.PENDING) {
-            throw new MemberException(
-                    MEMBER_NOT_ACTIVE,
-                    "이메일 인증 우회 대상이 아닌 회원입니다."
-            );
-        }
-        member.activate();
     }
 
     @Transactional(readOnly = true)

@@ -79,10 +79,6 @@ public class AuthService {
         emailVerificationTokenService.verify(request.token());
     }
 
-    public void bypassEmailVerification(EmailVerificationSendRequest request) {
-        memberService.activateByEmail(request.email());
-    }
-
     public AuthMember login(LoginRequest request) {
         Member member = memberService.findByEmail(request.email())
                 .orElseThrow(() -> new AuthException(ErrorCode.INVALID_CREDENTIALS));

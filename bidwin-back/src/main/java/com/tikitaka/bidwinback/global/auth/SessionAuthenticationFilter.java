@@ -32,7 +32,6 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/*/verify"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/email/send"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/email/confirm"),
-            PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/email/bypass"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/login"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/password-resets/confirm")

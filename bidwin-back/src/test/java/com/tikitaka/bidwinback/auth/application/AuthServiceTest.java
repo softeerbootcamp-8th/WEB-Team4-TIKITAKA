@@ -246,64 +246,6 @@ class AuthServiceTest {
         verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
     }
 
-    @Test
-    void 이메일_인증을_우회하면_가입_대기_회원이_활성화된다() {
-        // given
-        Member member = Member.builder()
-                .email("member@example.com")
-                .password("encoded-password")
-                .name("홍길동")
-                .phoneNumber("01012345678")
-                .nickname("티키타카")
-                .build();
-        when(memberRepository.findByEmail(member.getEmail())).thenReturn(Optional.of(member));
-
-        // when
-        authService.bypassEmailVerification(
-                new EmailVerificationSendRequest(member.getEmail())
-        );
-
-        // then
-        assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
-    }
-
-    @Test
-    void 존재하지_않는_회원은_이메일_인증을_우회할_수_없다() {
-        // given
-        EmailVerificationSendRequest request =
-                new EmailVerificationSendRequest("unknown@example.com");
-        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.empty());
-
-        // when & then
-        assertThatExceptionOfType(MemberException.class)
-                .isThrownBy(() -> authService.bypassEmailVerification(request))
-                .extracting(MemberException::getErrorCode)
-                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-    }
-
-    @Test
-    void 정지된_회원은_이메일_인증_우회로_활성화되지_않는다() {
-        // given
-        Member member = Member.builder()
-                .email("member@example.com")
-                .password("encoded-password")
-                .name("홍길동")
-                .phoneNumber("01012345678")
-                .nickname("티키타카")
-                .status(MemberStatus.BANNED)
-                .build();
-        EmailVerificationSendRequest request =
-                new EmailVerificationSendRequest(member.getEmail());
-        when(memberRepository.findByEmail(member.getEmail())).thenReturn(Optional.of(member));
-
-        // when & then
-        assertThatExceptionOfType(MemberException.class)
-                .isThrownBy(() -> authService.bypassEmailVerification(request))
-                .extracting(MemberException::getErrorCode)
-                .isEqualTo(ErrorCode.MEMBER_NOT_ACTIVE);
-        assertThat(member.getStatus()).isEqualTo(MemberStatus.BANNED);
-    }
-
     private SignUpRequest createSignUpRequest() {
         return new SignUpRequest(
                 "member@example.com",
