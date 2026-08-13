@@ -70,29 +70,49 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
     @Transactional
     public void transferToSeller(Long auctionId, Long buyerId, Long sellerId, long expectedAmount) {
         settle(auctionId, buyerId, expectedAmount, DepositStatus.USED);
-
-        int deducted = memberRepository.forfeitLockedPoint(buyerId, expectedAmount);
-        if (deducted != 1) {
-            throw new IllegalStateException("보증금 정산 중 구매자 잠금 포인트를 차감하지 못했습니다.");
-        }
-        int credited = memberRepository.creditPoint(sellerId, expectedAmount);
-        if (credited != 1) {
-            throw new IllegalStateException("보증금 정산 중 판매자 잔액을 지급하지 못했습니다.");
-        }
+        settleMemberPoints(buyerId, sellerId, expectedAmount,
+                "보증금 정산 중 구매자 잠금 포인트를 차감하지 못했습니다.",
+                "보증금 정산 중 판매자 잔액을 지급하지 못했습니다.");
     }
 
     @Override
     @Transactional
     public void forfeit(Long auctionId, Long buyerId, Long sellerId, long expectedAmount) {
         settle(auctionId, buyerId, expectedAmount, DepositStatus.FORFEITED);
+        settleMemberPoints(buyerId, sellerId, expectedAmount,
+                "보증금 몰수 중 잠금 포인트를 차감하지 못했습니다.",
+                "보증금 몰수 중 판매자 잔액을 지급하지 못했습니다.");
+    }
 
-        int forfeited = memberRepository.forfeitLockedPoint(buyerId, expectedAmount);
-        if (forfeited != 1) {
-            throw new IllegalStateException("보증금 몰수 중 잠금 포인트를 차감하지 못했습니다.");
+    // 구매자·판매자 회원 행을 항상 ID가 작은 쪽부터 잠가, 서로 반대 역할로 얽힌 다른 거래의
+    // 정산과 동시에 실행돼도 순환 대기(데드락)가 생기지 않게 한다.
+    private void settleMemberPoints(
+            Long buyerId,
+            Long sellerId,
+            long expectedAmount,
+            String buyerFailureMessage,
+            String sellerFailureMessage
+    ) {
+        if (buyerId < sellerId) {
+            forfeitBuyerPoint(buyerId, expectedAmount, buyerFailureMessage);
+            creditSellerPoint(sellerId, expectedAmount, sellerFailureMessage);
+        } else {
+            creditSellerPoint(sellerId, expectedAmount, sellerFailureMessage);
+            forfeitBuyerPoint(buyerId, expectedAmount, buyerFailureMessage);
         }
+    }
+
+    private void forfeitBuyerPoint(Long buyerId, long expectedAmount, String failureMessage) {
+        int deducted = memberRepository.forfeitLockedPoint(buyerId, expectedAmount);
+        if (deducted != 1) {
+            throw new IllegalStateException(failureMessage);
+        }
+    }
+
+    private void creditSellerPoint(Long sellerId, long expectedAmount, String failureMessage) {
         int credited = memberRepository.creditPoint(sellerId, expectedAmount);
         if (credited != 1) {
-            throw new IllegalStateException("보증금 몰수 중 판매자 잔액을 지급하지 못했습니다.");
+            throw new IllegalStateException(failureMessage);
         }
     }
 

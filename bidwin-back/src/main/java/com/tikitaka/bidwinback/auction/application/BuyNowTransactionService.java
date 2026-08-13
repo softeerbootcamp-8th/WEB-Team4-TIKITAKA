@@ -23,6 +23,8 @@ import com.tikitaka.bidwinback.member.domain.exception.MemberException;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -87,11 +89,7 @@ public class BuyNowTransactionService {
         }
 
         // 잔액 확인과 전액 잠금을 한 UPDATE로 처리해 동시 구매의 초과 사용을 막는다.
-        int lockedPoints = memberRepository.movePointToLockedIfEnough(
-                command.memberId(),
-                command.finalPrice()
-        );
-
+        int lockedPoints = lockDepositPoint(command.memberId(), command.finalPrice());
         if (lockedPoints != 1) {
             throw new BidException(INSUFFICIENT_DEPOSIT);
         }
@@ -141,6 +139,16 @@ public class BuyNowTransactionService {
         }
 
         return BuyNowResult.from(trade);
+    }
+
+    // 입찰 흐름은 경매 행을 먼저 잠근 뒤 회원 행을 잠그는 반대 순서라 드물게 순환 대기가
+    // 날 수 있다. 그때도 500이 아니라 기존 동시성 충돌 응답으로 처리되도록 변환한다.
+    private int lockDepositPoint(Long memberId, long amount) {
+        try {
+            return memberRepository.movePointToLockedIfEnough(memberId, amount);
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_TRADE_CONFLICT);
+        }
     }
 
     private InstantPurchaseRequest findRequestForUpdate(
