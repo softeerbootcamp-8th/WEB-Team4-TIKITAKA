@@ -173,4 +173,10 @@ public class SseHub {
         }
     }
 
+    private long jitteredTimeoutMs() {
+        // 만료된 연결의 재구독이 한순간에 몰리지 않도록 기본 timeout을 ±10% 분산한다.
+        long jitter = timeoutMs / 10;
+        return timeoutMs + ThreadLocalRandom.current().nextLong(-jitter, jitter + 1);
+    }
+
 }

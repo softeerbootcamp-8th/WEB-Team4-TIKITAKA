@@ -217,6 +217,28 @@ class SseHubTest {
     }
 
     @Test
+    void 연결마다_타임아웃을_jitter_범위_안에서_분산한다() {
+        // given
+        long timeoutMs = 300_000L;
+        SseHub hub = hub(1, 20);
+
+        // when
+        List<Long> timeouts = new ArrayList<>();
+        for (int index = 0; index < 20; index++) {
+            timeouts.add(hub.subscribe(
+                    List.of(channel("auction", Integer.toString(index))),
+                    List::of
+            ).getTimeout());
+        }
+
+        // then
+        assertThat(timeouts)
+                .allMatch(timeout -> timeout >= timeoutMs * 9 / 10)
+                .allMatch(timeout -> timeout <= timeoutMs * 11 / 10);
+        assertThat(timeouts).anyMatch(timeout -> timeout != timeoutMs);
+    }
+
+    @Test
     void 동시에_구독해도_설정한_전체_연결_상한을_넘지_않는다() throws Exception {
         // given
         int maxConnections = 3;
