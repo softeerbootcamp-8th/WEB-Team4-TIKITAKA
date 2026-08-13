@@ -95,11 +95,7 @@ public class BuyNowTransactionService {
         }
 
         // 요구사항: 동시 구매 시 DB 조건부 갱신에 성공한 한 요청만 낙찰된다.
-        int completed = auctionRepository.completeForBuyNow(
-                command.auctionId(),
-                command.memberId(),
-                command.purchasedAt()
-        );
+        int completed = completeForBuyNow(command);
         if (completed != 1) {
             // 검증 후 조건부 UPDATE 전에 마감 경계를 넘었는지 최신 DB 시각으로 다시 확인한다.
             validateAuction(auction, auctionRepository.currentDatabaseTime());
@@ -146,6 +142,20 @@ public class BuyNowTransactionService {
     private int lockDepositPoint(Long memberId, long amount) {
         try {
             return memberRepository.movePointToLockedIfEnough(memberId, amount);
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new BidException(CONCURRENT_TRADE_CONFLICT);
+        }
+    }
+
+    // 이 UPDATE에도 짧은 쿼리 타임아웃이 걸려 있어, 락 대기가 길어지면 completed != 1과
+    // 같은 취지의 응답을 주도록 여기서도 동일하게 변환한다.
+    private int completeForBuyNow(BuyNowCommand command) {
+        try {
+            return auctionRepository.completeForBuyNow(
+                    command.auctionId(),
+                    command.memberId(),
+                    command.purchasedAt()
+            );
         } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
             throw new BidException(CONCURRENT_TRADE_CONFLICT);
         }

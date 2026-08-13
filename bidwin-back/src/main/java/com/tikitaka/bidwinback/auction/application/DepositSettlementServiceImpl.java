@@ -6,11 +6,14 @@ import com.tikitaka.bidwinback.auction.domain.exception.DepositException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepository;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_ALREADY_SETTLED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_AMOUNT_MISMATCH;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_CONCURRENT_CONFLICT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 
@@ -43,7 +46,7 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
         }
 
         long delta = targetAmount - current;
-        if (memberRepository.movePointToLockedIfEnough(buyerId, delta) != 1) {
+        if (lockDepositPoint(buyerId, delta) != 1) {
             throw new DepositException(INSUFFICIENT_DEPOSIT);
         }
 
@@ -53,6 +56,16 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
             throw new DepositException(DEPOSIT_ALREADY_SETTLED);
         }
         return new DepositFundingResult(current, targetAmount, delta);
+    }
+
+    // 이 쿼리엔 짧은 쿼리 타임아웃이 걸려 있어(입찰/즉시구매와 같은 회원 행을 다툴 수 있음),
+    // 락 대기가 길어지면 500 대신 재시도 가능한 충돌 응답으로 변환한다.
+    private int lockDepositPoint(Long buyerId, long amount) {
+        try {
+            return memberRepository.movePointToLockedIfEnough(buyerId, amount);
+        } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
+            throw new DepositException(DEPOSIT_CONCURRENT_CONFLICT);
+        }
     }
 
     @Override
