@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.server.PathContainer;
 import org.springframework.web.cors.CorsUtils;
@@ -98,12 +99,13 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
      * 응답 변환은 AuthExceptionFilter가 담당하므로 인증 실패는 예외로만 알린다.
      */
     private AuthMember resolveAuthMember(HttpServletRequest request) {
-        HttpSession session = request.getSession(false);
-        if (session == null) {
-            throw new AuthException(ErrorCode.UNAUTHENTICATED);
-        }
-
         try {
+            // getSession(false)와 getAttribute() 모두 이제 Redis 조회이므로 장애/손상 가능성을 함께 다룬다.
+            HttpSession session = request.getSession(false);
+            if (session == null) {
+                throw new AuthException(ErrorCode.UNAUTHENTICATED);
+            }
+
             Object attribute = session.getAttribute(AuthConstant.SESSION_KEY);
             if (!(attribute instanceof AuthMember authMember)) {
                 // 인증 스냅샷이 아닌 값이 담긴 세션은 신뢰할 수 없으므로 함께 폐기한다.
@@ -119,6 +121,12 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             session.invalidate();
         } catch (IllegalStateException ignored) {
             // 로그아웃과 동시에 처리 중인 요청은 인증되지 않은 요청
+        } catch (SerializationException ignored) {
+            // Redis에 저장된 세션 데이터가 현재 AuthMember 구조와 맞지 않아 읽을 수 없다.
+            // 재시도해도 복구되지 않으므로 세션이 없는 것과 동일하게 처리한다.
+        } catch (DataAccessException exception) {
+            // 세션 조회 자체가 불가능한 상태(Redis 장애)이므로 401로 오인하게 하지 않는다.
+            throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
 
         throw new AuthException(ErrorCode.UNAUTHENTICATED);
