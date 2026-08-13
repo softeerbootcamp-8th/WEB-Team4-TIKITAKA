@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Button from '../../components/ui/Button'
 import { useAuctionEvents } from '../../hooks/useAuctionEvents'
+import { useServerClock } from '../../hooks/useServerClock'
 import { useToast } from '../../hooks/useToast'
 import { requestAuctionCategories, requestAuctionList } from '../../lib/api/auctions'
 import type { AuctionCategoryOption, AuctionListResponse } from '../../lib/api/auctions'
@@ -52,6 +53,7 @@ function AuctionListPage() {
   const [bookmarks, setBookmarks] = useState<ReadonlySet<number>>(() => new Set())
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const serverOffsetMs = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -230,7 +232,7 @@ function AuctionListPage() {
                   <AuctionCard
                     key={auction.auctionId}
                     auction={auction}
-                    serverTime={response.serverTime}
+                    serverOffsetMs={serverOffsetMs}
                     isBookmarked={bookmarks.has(auction.auctionId)}
                     onToggleBookmark={toggleBookmark}
                   />

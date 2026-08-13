@@ -25,6 +25,7 @@ import { useAuctionEvents } from '../../../hooks/useAuctionEvents'
 import { useAuth } from '../../../hooks/useAuth'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
+import { useServerClock } from '../../../hooks/useServerClock'
 import { useToast } from '../../../hooks/useToast'
 import {
   requestAuctionDetail,
@@ -113,7 +114,6 @@ function AuctionDetailPage() {
   const [auction, setAuction] = useState<AuctionDetail | null>(null)
   const [bidHistory, setBidHistory] = useState<BidHistoryItem[]>([])
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [serverOffsetMs, setServerOffsetMs] = useState(0)
   const [isLoading, setIsLoading] = useState(validAuctionId)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(!validAuctionId)
@@ -129,6 +129,7 @@ function AuctionDetailPage() {
   const { showToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
+  const serverOffsetMs = useServerClock(auction?.serverTime)
 
   useEffect(() => {
     if (!validAuctionId) {
@@ -139,7 +140,6 @@ function AuctionDetailPage() {
 
     const controller = new AbortController()
     let active = true
-    const requestedAt = Date.now()
 
     setIsLoading(true)
     setLoadError(null)
@@ -163,11 +163,7 @@ function AuctionDetailPage() {
         return
       }
 
-      const receivedAt = Date.now()
       setAuction(detailResult.data)
-      setServerOffsetMs(
-        detailResult.data.serverTime - Math.round((requestedAt + receivedAt) / 2),
-      )
 
       if (historyResult.ok) {
         setBidHistory((current) => mergeBidHistory(current, historyResult.data.bidLog))
@@ -808,7 +804,7 @@ function DownBuyPanel({
   onClearError,
   onBuyNow,
 }: DownBuyPanelProps) {
-  const clock = useDownAuctionClock(auction)
+  const clock = useDownAuctionClock(auction, serverOffsetMs)
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const ended = deadline.isEnded || auction.status !== 'OPEN'
   const currentPrice = ended && auction.finalPrice !== null
@@ -995,7 +991,7 @@ function PriceDropTimeline({
   serverOffsetMs: number
 }) {
   // 진행 중에는 매 tick마다 새 하락 내역이 즉시 추가되도록 재렌더링한다.
-  useDownAuctionClock(auction)
+  useDownAuctionClock(auction, serverOffsetMs)
   const completedAt = auction.finalPrice === null
     ? null
     : auction.startedAt

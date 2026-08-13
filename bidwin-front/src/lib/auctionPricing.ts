@@ -8,11 +8,6 @@ export interface DownPricing {
   dropPrice: number
   priceDropIntervalMs: number
   startedAt: number
-  /**
-   * 서버가 응답을 만든 시각(epoch ms). 클라이언트 시계가 서버와 어긋나도 현재가를
-   * 서버 기준으로 계산하기 위한 값이다. 값이 없으면 오프셋 없이 로컬 시계를 쓴다.
-   */
-  serverTime?: number
 }
 
 export function computeCurrentDownPrice(pricing: DownPricing, now: number): number {
