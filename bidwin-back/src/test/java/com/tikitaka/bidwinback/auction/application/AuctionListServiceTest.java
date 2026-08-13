@@ -128,6 +128,26 @@ class AuctionListServiceTest {
     }
 
     @Test
+    void 추천순은_요청_asOf를_무시하고_DB_현재시각을_사용한다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.RECOMMENDED, null, 1, 16, AS_OF)
+        );
+
+        assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(SERVER_TIME));
+        verify(auctionListQueryRepository).count(
+                eq(new AuctionListSearchCondition(
+                        null,
+                        AuctionSort.RECOMMENDED,
+                        null,
+                        SERVER_TIME
+                ))
+        );
+    }
+
+    @Test
     void 전체_개수로_totalPages를_계산하고_페이지_크기만큼_조회한다() {
         when(auctionListQueryRepository.count(any())).thenReturn(3L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(2)))

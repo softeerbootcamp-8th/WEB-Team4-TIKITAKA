@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
@@ -35,7 +36,9 @@ public class AuctionListService {
     @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
         LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        LocalDateTime asOf = query.asOf() != null ? query.asOf() : serverTime;
+        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
+                ? serverTime
+                : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
 
         AuctionListSearchCondition condition = new AuctionListSearchCondition(

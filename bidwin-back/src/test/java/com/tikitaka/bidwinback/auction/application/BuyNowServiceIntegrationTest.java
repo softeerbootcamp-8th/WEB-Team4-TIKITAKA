@@ -457,6 +457,7 @@ class BuyNowServiceIntegrationTest {
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM bid WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
+            assertThat(findAuctionBidCount(entityManager, auctionId)).isEqualTo(1L);
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
                     .isEqualTo(expectedRequestLogCount);
@@ -524,6 +525,7 @@ class BuyNowServiceIntegrationTest {
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM bid WHERE auction_id = :id", auctionId))
                     .isZero();
+            assertThat(findAuctionBidCount(entityManager, auctionId)).isZero();
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM instant_purchase_request WHERE auction_id = :id", auctionId))
                     .isZero();
@@ -731,6 +733,17 @@ class BuyNowServiceIntegrationTest {
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
         return revision.longValue();
+    }
+
+    private long findAuctionBidCount(EntityManager entityManager, Long auctionId) {
+        Number bidCount = (Number) entityManager.createNativeQuery("""
+                        SELECT bid_count
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return bidCount.longValue();
     }
                                                                    
     private String findAuctionStatus(Long auctionId) {

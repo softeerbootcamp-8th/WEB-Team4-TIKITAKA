@@ -77,6 +77,10 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "current_price")
     private Long currentPrice;
 
+    // 추천순 조회가 전체 입찰을 매번 집계하지 않도록 Bid 행 수를 누적한다.
+    @Column(name = "bid_count", nullable = false)
+    private long bidCount;
+
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
 
