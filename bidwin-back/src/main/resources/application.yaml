@@ -39,8 +39,14 @@ spring:
       # Redis는 보조 캐시라 응답이 없어도(먹통) 빠르게 실패해서 MySQL로 넘어가야 한다.
       # 기본값(수십 초)대로 두면 그 시간만큼 톰캣 스레드가 묶여, 보조 캐시 장애가
       # 입찰 API 전체 지연/고갈로 번질 수 있다.
+      # 세션 저장소도 같은 커넥션 설정을 공유하므로, 세션 조회도 동일하게 빠르게 실패한다.
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:300ms}
       timeout: ${REDIS_COMMAND_TIMEOUT:300ms}
+  session:
+    store-type: redis
+    # 유휴 만료. 활동이 없으면 이 시간 뒤 자동 로그아웃(Redis TTL로 처리).
+    # 절대 만료(로그인 후 경과 시간)는 SessionAuthenticationFilter가 별도로 검사한다.
+    timeout: ${SESSION_IDLE_TIMEOUT:3h}
 
 server:
   tomcat:
@@ -53,6 +59,9 @@ server:
     session:
       tracking-modes: cookie
       cookie:
+        # Spring Session 도입 전과 쿠키 이름을 동일하게 유지한다
+        # (기본값 SESSION으로 바뀌면 기존 클라이언트/인프라 설정이 깨질 수 있음).
+        name: JSESSIONID
         secure: ${SESSION_COOKIE_SECURE:true}
         http-only: true
         same-site: lax
