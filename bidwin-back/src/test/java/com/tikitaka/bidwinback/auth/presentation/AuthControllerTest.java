@@ -12,11 +12,18 @@ import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.AuthMemberFixture;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.session.SessionRepository;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +38,8 @@ import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
 
+    private final SessionRepository<?> sessionRepository = mock(SessionRepository.class);
+
     @Test
     void 이메일이_사용_가능하면_확인_결과와_200을_응답한다() {
         AuthService authService = mock(AuthService.class);
@@ -40,7 +49,7 @@ class AuthControllerTest {
         when(authService.checkEmailAvailability(request)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<AvailabilityResponse>> result =
-                new AuthController(authService).verifyEmail(request);
+                new AuthController(authService, sessionRepository).verifyEmail(request);
 
         assertAll(
                 () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
@@ -56,7 +65,7 @@ class AuthControllerTest {
         when(authService.checkNicknameAvailability(request)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<AvailabilityResponse>> result =
-                new AuthController(authService).verifyNickname(request);
+                new AuthController(authService, sessionRepository).verifyNickname(request);
 
         assertAll(
                 () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
@@ -78,7 +87,7 @@ class AuthControllerTest {
         when(authService.signup(request)).thenReturn(expected);
 
         ResponseEntity<ApiResponse<SignUpResponse>> result =
-                new AuthController(authService).signup(request);
+                new AuthController(authService, sessionRepository).signup(request);
 
         assertAll(
                 () -> assertEquals(HttpStatus.CREATED, result.getStatusCode()),
@@ -98,7 +107,7 @@ class AuthControllerTest {
 
         // when
         ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).login(request, servletRequest);
+                new AuthController(authService, sessionRepository).login(request, servletRequest);
 
         // then
         assertAll(
@@ -116,9 +125,56 @@ class AuthControllerTest {
     }
 
     @Test
+    void 로그인_시_기존_세션이_손상되어_있으면_지우고_재시도한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        AuthMember authMember = AuthMemberFixture.of(1L);
+        when(authService.login(request)).thenReturn(authMember);
+
+        HttpServletRequest servletRequest = mock(HttpServletRequest.class);
+        HttpSession newSession = mock(HttpSession.class);
+        when(servletRequest.getSession())
+                .thenThrow(new SerializationException("손상된 세션"))
+                .thenReturn(newSession);
+        when(servletRequest.getRequestedSessionId()).thenReturn("corrupted-id");
+
+        // when
+        ResponseEntity<ApiResponse<Void>> result =
+                new AuthController(authService, sessionRepository).login(request, servletRequest);
+
+        // then
+        assertAll(
+                () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
+                () -> verify(sessionRepository).deleteById("corrupted-id"),
+                () -> verify(newSession).setAttribute(AuthConstant.SESSION_KEY, authMember)
+        );
+    }
+
+    @Test
+    void 로그인_시_세션_저장에_실패하면_인증_불가로_응답한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        AuthMember authMember = AuthMemberFixture.of(1L);
+        when(authService.login(request)).thenReturn(authMember);
+
+        HttpServletRequest servletRequest = mock(HttpServletRequest.class);
+        when(servletRequest.getSession()).thenThrow(new DataAccessException("Redis 장애") {
+        });
+
+        // when & then
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> new AuthController(authService, sessionRepository).login(request, servletRequest)
+        );
+        assertEquals(ErrorCode.AUTHENTICATION_UNAVAILABLE, exception.getErrorCode());
+    }
+
+    @Test
     void 세션_확인_컨트롤러는_성공_응답을_반환한다() {
         // given
-        AuthController controller = new AuthController(mock(AuthService.class));
+        AuthController controller = new AuthController(mock(AuthService.class), sessionRepository);
 
         // when
         ResponseEntity<ApiResponse<Void>> result = controller.session();
@@ -137,7 +193,7 @@ class AuthControllerTest {
                 new EmailVerificationRequest("raw-email-verification-token");
 
         ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).confirmEmail(request);
+                new AuthController(authService, sessionRepository).confirmEmail(request);
 
         assertAll(
                 () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
@@ -156,7 +212,7 @@ class AuthControllerTest {
         );
 
         ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).resetPassword(request);
+                new AuthController(authService, sessionRepository).resetPassword(request);
 
         assertAll(
                 () -> assertEquals(HttpStatus.OK, result.getStatusCode()),
@@ -175,7 +231,7 @@ class AuthControllerTest {
 
         // when
         ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).logout(servletRequest);
+                new AuthController(authService, sessionRepository).logout(servletRequest);
 
         // then
         assertAll(
@@ -199,7 +255,7 @@ class AuthControllerTest {
 
         // when
         ResponseEntity<ApiResponse<Void>> result =
-                new AuthController(authService).logout(servletRequest);
+                new AuthController(authService, sessionRepository).logout(servletRequest);
 
         // then
         assertEquals(HttpStatus.OK, result.getStatusCode());

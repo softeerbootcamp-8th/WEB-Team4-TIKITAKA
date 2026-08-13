@@ -21,8 +21,10 @@ import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.session.SessionRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final SessionRepository<?> sessionRepository;
 
     @PostMapping("/signups/email/verify")
     public ResponseEntity<ApiResponse<AvailabilityResponse>> verifyEmail(
@@ -85,15 +88,37 @@ public class AuthController {
         AuthMember authMember = authService.login(request);
 
         try {
-            HttpSession session = servletRequest.getSession();
-            servletRequest.changeSessionId();
-            session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+            establishSession(servletRequest, authMember);
+        } catch (SerializationException exception) {
+            // 로그인은 공개 경로라 SessionAuthenticationFilter를 거치지 않는다. 클라이언트가
+            // 들고 있던 기존 쿠키가 가리키는 세션이 손상되어 있으면 getSession()이 역직렬화
+            // 단계에서 바로 이 예외를 던진다. 손상된 세션을 지우지 않으면 재로그인해도 같은
+            // 손상된 데이터를 계속 읽어 TTL이 끝날 때까지 로그인이 안 되므로, 지우고 재시도한다.
+            discardCorruptedSession(servletRequest);
+            try {
+                establishSession(servletRequest, authMember);
+            } catch (DataAccessException | SerializationException retryException) {
+                throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+            }
         } catch (DataAccessException exception) {
             // 자격 검증은 끝났지만 세션을 저장할 수 없으므로 로그인 성공으로 응답하면 안 된다.
             throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    private void establishSession(HttpServletRequest servletRequest, AuthMember authMember) {
+        HttpSession session = servletRequest.getSession();
+        servletRequest.changeSessionId();
+        session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+    }
+
+    private void discardCorruptedSession(HttpServletRequest servletRequest) {
+        String requestedSessionId = servletRequest.getRequestedSessionId();
+        if (requestedSessionId != null) {
+            sessionRepository.deleteById(requestedSessionId);
+        }
     }
 
     @GetMapping("/session")
