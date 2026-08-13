@@ -709,6 +709,7 @@ function UpBidPanel({
   const nextMinBid = auction.currentPrice + BID_UNIT
   const [amount, setAmount] = useState(nextMinBid)
   const [inputError, setInputError] = useState<string | null>(null)
+  const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const ended = deadline.isEnded || !isOngoing(auction.status)
   const sealedBidActive = !ended && sealedStart.isEnded
   const canBuyNow = (
@@ -829,15 +830,30 @@ function UpBidPanel({
           </Button>
 
           {canBuyNow && (
-            <Button
-              variant="secondary"
-              onClick={onBuyNow}
-              disabled={busy || authPending}
-            >
-              {pendingAction === 'buy'
-                ? '구매 처리 중…'
-                : `즉시구매 ${formatWon(auction.buyNowPrice!)}`}
-            </Button>
+            <div className="flex flex-col gap-sm">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  onClearError()
+                  void onBuyNow()
+                }}
+                disabled={busy || authPending || !buyNowConfirmed}
+              >
+                {pendingAction === 'buy'
+                  ? '구매 처리 중…'
+                  : `즉시구매 ${formatWon(auction.buyNowPrice!)}`}
+              </Button>
+              <label className="flex cursor-pointer items-start gap-xs text-xs leading-relaxed text-body">
+                <input
+                  type="checkbox"
+                  checked={buyNowConfirmed}
+                  onChange={(event) => setBuyNowConfirmed(event.target.checked)}
+                  disabled={busy || authPending}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                상품과 즉시구매 가격을 확인했으며 구매에 동의합니다.
+              </label>
+            </div>
           )}
         </>
       )}
@@ -864,6 +880,7 @@ function DownBuyPanel({
   onClearError,
   onBuyNow,
 }: DownBuyPanelProps) {
+  const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const clock = useDownAuctionClock(auction, serverOffsetMs)
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const ended = deadline.isEnded || auction.status !== 'OPEN'
@@ -927,12 +944,22 @@ function DownBuyPanel({
               onClearError()
               void onBuyNow()
             }}
-            disabled={pendingAction !== null || authPending}
+            disabled={pendingAction !== null || authPending || !buyNowConfirmed}
           >
             {pendingAction === 'buy'
               ? '구매 처리 중…'
               : `${formatWon(currentPrice)}에 구매하기`}
           </Button>
+          <label className="flex cursor-pointer items-start gap-xs text-xs leading-relaxed text-body">
+            <input
+              type="checkbox"
+              checked={buyNowConfirmed}
+              onChange={(event) => setBuyNowConfirmed(event.target.checked)}
+              disabled={pendingAction !== null || authPending}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            상품과 현재 가격을 확인했으며 구매에 동의합니다.
+          </label>
           {actionError && <p className="text-sm text-down">{actionError}</p>}
           <p className="text-center text-xs text-muted">
             서버의 구매 확정 시각에 계산된 가격으로 선착순 거래가 확정됩니다.
