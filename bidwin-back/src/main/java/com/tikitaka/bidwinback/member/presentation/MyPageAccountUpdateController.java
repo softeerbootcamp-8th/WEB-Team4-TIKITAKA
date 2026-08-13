@@ -55,20 +55,23 @@ public class MyPageAccountUpdateController {
             throw new AuthException(ErrorCode.UNAUTHENTICATED);
         }
 
-        AuthMember refreshedAuth = passwordChangeService.change(
-                authMember,
-                request.currentPassword(),
-                request.newPassword(),
-                request.newPasswordConfirm()
-        );
-
         try {
-            servletRequest.changeSessionId();
-            session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+            // 세션 갱신을 비밀번호 변경과 같은 트랜잭션 안에서 수행한다(콜백으로 전달).
+            // 세션 갱신이 실패하면 이 예외가 트랜잭션을 롤백시켜, 비밀번호만 바뀌고
+            // 세션은 예전 상태로 남는 부분 성공을 막는다.
+            passwordChangeService.change(
+                    authMember,
+                    request.currentPassword(),
+                    request.newPassword(),
+                    request.newPasswordConfirm(),
+                    refreshedAuth -> {
+                        servletRequest.changeSessionId();
+                        session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+                    }
+            );
         } catch (DataAccessException exception) {
-            // 비밀번호는 이미 바뀌었지만(authVersion 증가) 세션을 갱신하지 못해
-            // 이 세션은 다음 요청에서 authVersion 불일치로 거부된다. 성공으로 응답하면
-            // 재로그인이 필요한 상태를 숨기게 되므로 그대로 알린다.
+            // 세션 갱신 실패로 비밀번호 변경 자체도 함께 롤백됐으므로, 재시도하면
+            // 현재(원래) 비밀번호로 다시 시도하게 된다 - 부분 성공 상태가 아니다.
             throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
 

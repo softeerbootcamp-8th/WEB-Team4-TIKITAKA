@@ -23,8 +23,11 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -108,11 +111,16 @@ class MyPageAccountUpdateControllerTest {
         MockHttpSession session = authenticatedSession(currentAuth);
         String previousSessionId = session.getId();
         when(passwordChangeService.change(
-                currentAuth,
-                "current-password!",
-                "new-password!",
-                "new-password!"
-        )).thenReturn(refreshedAuth);
+                eq(currentAuth),
+                eq("current-password!"),
+                eq("new-password!"),
+                eq("new-password!"),
+                any()
+        )).thenAnswer(invocation -> {
+            Consumer<AuthMember> onPasswordChanged = invocation.getArgument(4);
+            onPasswordChanged.accept(refreshedAuth);
+            return refreshedAuth;
+        });
 
         mockMvc.perform(patch("/api/v1/mypage/password")
                         .session(session)

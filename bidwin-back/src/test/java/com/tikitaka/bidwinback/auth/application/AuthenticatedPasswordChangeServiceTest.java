@@ -68,19 +68,46 @@ class AuthenticatedPasswordChangeServiceTest {
         when(passwordHasher.matches("current!", "encoded-current")).thenReturn(true);
         when(passwordHasher.hash("new-password!")).thenReturn("encoded-new");
 
+        java.util.List<AuthMember> notified = new java.util.ArrayList<>();
         AuthMember result = service.change(
                 currentAuth,
                 "current!",
                 "new-password!",
-                "new-password!"
+                "new-password!",
+                notified::add
         );
 
         assertThat(result).isEqualTo(new AuthMember(1L, 4L, loggedInAt));
+        assertThat(notified).containsExactly(result);
         verify(member).changePassword("encoded-new");
         verify(passwordResetTokenRepository).revokeAllActiveByMemberId(
                 1L,
                 LocalDateTime.ofInstant(NOW, ZoneId.systemDefault())
         );
+    }
+
+    @Test
+    void 세션_갱신_콜백이_실패하면_그대로_예외를_전파해_트랜잭션을_롤백시킨다() {
+        AuthMember currentAuth = AuthMemberFixture.of(1L, 3L, Instant.parse("2026-08-06T10:00:00Z"));
+        Member member = org.mockito.Mockito.mock(Member.class);
+        when(member.getId()).thenReturn(1L);
+        when(member.getStatus()).thenReturn(MemberStatus.ACTIVE);
+        when(member.getPassword()).thenReturn("encoded-current");
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
+        when(passwordHasher.matches("current!", "encoded-current")).thenReturn(true);
+        when(passwordHasher.hash("new-password!")).thenReturn("encoded-new");
+        org.springframework.dao.DataAccessException sessionFailure =
+                new org.springframework.dao.DataAccessResourceFailureException("Redis 장애");
+
+        assertThatExceptionOfType(org.springframework.dao.DataAccessException.class)
+                .isThrownBy(() -> service.change(
+                        currentAuth,
+                        "current!",
+                        "new-password!",
+                        "new-password!",
+                        auth -> { throw sessionFailure; }
+                ))
+                .isSameAs(sessionFailure);
     }
 
     @Test
@@ -92,7 +119,8 @@ class AuthenticatedPasswordChangeServiceTest {
                         currentAuth,
                         "current!",
                         "new-password!",
-                        "different-password!"
+                        "different-password!",
+                        auth -> { }
                 ))
                 .extracting(AuthException::getErrorCode)
                 .isEqualTo(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
@@ -113,7 +141,8 @@ class AuthenticatedPasswordChangeServiceTest {
                         currentAuth,
                         "wrong!",
                         "new-password!",
-                        "new-password!"
+                        "new-password!",
+                        auth -> { }
                 ))
                 .extracting(AuthException::getErrorCode)
                 .isEqualTo(ErrorCode.CURRENT_PASSWORD_MISMATCH);
@@ -136,7 +165,8 @@ class AuthenticatedPasswordChangeServiceTest {
                         currentAuth,
                         "same-password!",
                         "same-password!",
-                        "same-password!"
+                        "same-password!",
+                        auth -> { }
                 ))
                 .extracting(AuthException::getErrorCode)
                 .isEqualTo(ErrorCode.NEW_PASSWORD_SAME_AS_CURRENT);
