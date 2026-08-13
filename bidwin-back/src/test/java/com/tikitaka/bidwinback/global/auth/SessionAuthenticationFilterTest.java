@@ -31,7 +31,7 @@ class SessionAuthenticationFilterTest {
 
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
     // 필터가 상수로 고정한 절대 만료와 동일한 값이어야 만료 경계를 검증할 수 있다.
-    private static final Duration ABSOLUTE_LIFETIME = Duration.ofHours(24);
+    private static final Duration ABSOLUTE_LIFETIME = Duration.ofHours(48);
 
     private final SessionAuthService sessionAuthService = mock(SessionAuthService.class);
     private final SessionAuthenticationFilter filter =
