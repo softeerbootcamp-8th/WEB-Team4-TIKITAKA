@@ -182,6 +182,10 @@ export function requestAuctionList(
   return getJson<AuctionListResponse>(`${API_PATH}?${params.toString()}`, signal)
 }
 
+export function requestAuctionClock(signal?: AbortSignal): Promise<ApiResult<number>> {
+  return getJson<number>(`${API_PATH}/clock`, signal)
+}
+
 export function requestAuctionDetail(
   auctionId: number,
   signal?: AbortSignal,
