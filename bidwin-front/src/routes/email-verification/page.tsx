@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import {
   requestEmailVerification,
+  requestEmailVerificationBypass,
   requestEmailVerificationConfirm,
 } from '../../lib/api/auth'
 
@@ -29,6 +30,7 @@ function EmailVerificationPage() {
   const email = state?.email
   const token = searchParams.get('token')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isBypassing, setIsBypassing] = useState(false)
   const [isComplete, setIsComplete] = useState(state?.verified === true)
   const [sendError, setSendError] = useState(state?.initialSendError)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +49,22 @@ function EmailVerificationPage() {
     setIsSubmitting(true)
     const result = await requestEmailVerificationConfirm(token)
     setIsSubmitting(false)
+
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+
+    setIsComplete(true)
+    navigate(ROUTE.emailVerification, { replace: true, state: { verified: true } })
+  }
+
+  async function bypassVerification() {
+    if (!email || isBypassing) return
+    setError(null)
+    setIsBypassing(true)
+    const result = await requestEmailVerificationBypass(email)
+    setIsBypassing(false)
 
     if (!result.ok) {
       setError(result.message)
@@ -157,13 +175,23 @@ function EmailVerificationPage() {
         startWithCooldown={!sendError}
         onResend={resendVerification}
         footer={
-          <button
-            type="button"
-            onClick={() => navigate(ROUTE.login)}
-            className="text-sm font-medium text-muted hover:text-body"
-          >
-            로그인 화면으로 돌아가기
-          </button>
+          <div className="flex flex-col items-center gap-xs">
+            <Button
+              variant="tertiary"
+              onClick={bypassVerification}
+              disabled={isBypassing}
+            >
+              {isBypassing ? '인증 우회 중…' : '이메일 인증 우회'}
+            </Button>
+            {error && <p role="alert" className="text-sm text-down">{error}</p>}
+            <button
+              type="button"
+              onClick={() => navigate(ROUTE.login)}
+              className="text-sm font-medium text-muted hover:text-body"
+            >
+              로그인 화면으로 돌아가기
+            </button>
+          </div>
         }
       />
     </main>
