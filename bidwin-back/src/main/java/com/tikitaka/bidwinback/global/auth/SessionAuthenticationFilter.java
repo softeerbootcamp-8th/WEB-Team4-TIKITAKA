@@ -41,6 +41,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             PathPatternParser.defaultInstance.parse("/api/v1/health"),
             PathPatternParser.defaultInstance.parse("/actuator/health"),
             PathPatternParser.defaultInstance.parse("/actuator/prometheus"),
+            PathPatternParser.defaultInstance.parse("/api/v1/categories"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions/*"),
             PathPatternParser.defaultInstance.parse("/api/v1/auctions/*/bids"),
