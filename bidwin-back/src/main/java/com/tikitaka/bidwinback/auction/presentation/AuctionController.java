@@ -3,7 +3,9 @@ package com.tikitaka.bidwinback.auction.presentation;
 import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
+import com.tikitaka.bidwinback.auction.application.AuctionListQuery.StatusFilter;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auctions")
@@ -67,6 +70,8 @@ public class AuctionController {
             @RequestParam(required = false) String auctionType,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) List<String> category,
             @RequestParam(required = false, defaultValue = "" + FIRST_PAGE) int page,
             @RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
             @RequestParam(required = false) Long asOf
@@ -75,6 +80,8 @@ public class AuctionController {
                 parseAuctionType(auctionType),
                 AuctionSort.from(sort),
                 blankToNull(keyword),
+                parseStatus(status),
+                parseCategories(category),
                 page,
                 size,
                 asOf != null ? toLocalDateTime(asOf) : null
@@ -82,6 +89,34 @@ public class AuctionController {
 
         AuctionListResponse response = auctionListService.getList(query);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    private StatusFilter parseStatus(String rawStatus) {
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return null;
+        }
+        try {
+            return StatusFilter.valueOf(rawStatus);
+        } catch (IllegalArgumentException exception) {
+            throw new AuctionException(ErrorCode.INVALID_INPUT_VALUE, "지원하지 않는 경매 상태 필터입니다.");
+        }
+    }
+
+    private List<AuctionCategory> parseCategories(List<String> rawCategories) {
+        if (rawCategories == null) {
+            return List.of();
+        }
+        return rawCategories.stream()
+                .map(this::parseCategory)
+                .toList();
+    }
+
+    private AuctionCategory parseCategory(String rawCategory) {
+        try {
+            return AuctionCategory.valueOf(rawCategory);
+        } catch (IllegalArgumentException exception) {
+            throw new AuctionException(ErrorCode.INVALID_INPUT_VALUE, "지원하지 않는 카테고리 필터입니다.");
+        }
     }
 
     private AuctionType parseAuctionType(String rawAuctionType) {

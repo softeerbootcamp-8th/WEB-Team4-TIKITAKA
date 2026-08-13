@@ -248,7 +248,7 @@ class AuctionListServiceTest {
             int size,
             LocalDateTime asOf
     ) {
-        return new AuctionListQuery(type, sort, keyword, page, size, asOf);
+        return new AuctionListQuery(type, sort, keyword, null, List.of(), page, size, asOf);
     }
 
     private AuctionListRow upRow(long id, String thumbnailObjectKey, long currentPrice, long bidCount) {
