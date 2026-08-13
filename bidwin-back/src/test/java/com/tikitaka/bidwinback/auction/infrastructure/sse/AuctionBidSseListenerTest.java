@@ -6,19 +6,22 @@ import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryReveale
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.global.sse.SseHub;
+import com.tikitaka.bidwinback.global.sse.SseMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class AuctionBidSseListenerTest {
@@ -37,7 +40,8 @@ class AuctionBidSseListenerTest {
     }
 
     @Test
-    void 구독자가_있으면_커밋된_입찰_한_건을_발행한다() {
+    void 구독자가_있으면_현재_경매_식별자와_커밋된_입찰을_발행한다() {
+        // given
         BidHistoryItemResponse bid = new BidHistoryItemResponse(
                 "BID:9",
                 "입**자",
@@ -47,9 +51,16 @@ class AuctionBidSseListenerTest {
         when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(true);
         when(bidHistoryService.getPublishedBid(1L, 9L)).thenReturn(bid);
 
+        // when
         listener.publishBid(new AuctionBidCreated(1L, 9L));
 
-        verify(sseHub).publish(AuctionSseMessages.bidCreated(1L, 9L, bid));
+        // then
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<SseMessage<AuctionSseMessages.BidCreatedPayload>> message =
+                ArgumentCaptor.forClass(SseMessage.class);
+        verify(sseHub).publish(message.capture());
+        assertThat(message.getValue().data().auctionId()).isEqualTo(1L);
+        assertThat(message.getValue().data().entryId()).isEqualTo("BID:9");
     }
 
     @Test

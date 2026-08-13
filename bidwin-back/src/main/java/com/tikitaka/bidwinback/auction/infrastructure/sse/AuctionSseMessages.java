@@ -29,7 +29,7 @@ public final class AuctionSseMessages {
         );
     }
 
-    public static SseMessage<BidHistoryItemResponse> bidCreated(
+    public static SseMessage<BidCreatedPayload> bidCreated(
             long auctionId,
             long bidId,
             BidHistoryItemResponse bid
@@ -38,7 +38,13 @@ public final class AuctionSseMessages {
                 channel(auctionId),
                 BID_CREATED_EVENT,
                 bidId,
-                bid
+                new BidCreatedPayload(
+                        auctionId,
+                        bid.entryId(),
+                        bid.bidder(),
+                        bid.amount(),
+                        bid.biddedAt()
+                )
         );
     }
 
@@ -53,5 +59,14 @@ public final class AuctionSseMessages {
                 revision,
                 history
         );
+    }
+
+    public record BidCreatedPayload(
+            long auctionId,
+            String entryId,
+            String bidder,
+            long amount,
+            long biddedAt
+    ) {
     }
 }

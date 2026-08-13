@@ -13,9 +13,13 @@ export interface AuctionLiveState {
 
 interface AuctionEventHandlers {
   onState?: (state: AuctionLiveState) => void
-  onBidCreated?: (bid: BidHistoryItem) => void
+  onBidCreated?: (bid: BidCreatedEvent) => void
   onBidHistorySnapshot?: (history: BidHistoryResponse) => void
   onHeartbeat?: (serverTime: number) => void
+}
+
+interface BidCreatedEvent extends BidHistoryItem {
+  auctionId: number
 }
 
 type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'disconnected'
@@ -78,7 +82,9 @@ export function useAuctionEvents(
     const handleBid = (event: Event) => {
       markActivity()
       const bid = parseEvent<BidHistoryItem>(event)
-      if (bid?.entryId) handlersRef.current.onBidCreated?.(bid)
+      if (bid?.entryId && ids.includes(bid.auctionId)) {
+        handlersRef.current.onBidCreated?.(bid)
+      }
     }
     const handleHistory = (event: Event) => {
       markActivity()
