@@ -47,6 +47,7 @@ spring:
     # 유휴 만료. 활동이 없으면 이 시간 뒤 자동 로그아웃(Redis TTL로 처리).
     # 절대 만료(로그인 후 경과 시간)는 SessionAuthenticationFilter가 별도로 검사한다.
     timeout: ${SESSION_IDLE_TIMEOUT:3h}
+    # flush mode(즉시 반영 여부)는 이 프로퍼티로는 안 먹혀서 SessionConfig의 커스터마이저로 설정한다.
 
 server:
   tomcat:
