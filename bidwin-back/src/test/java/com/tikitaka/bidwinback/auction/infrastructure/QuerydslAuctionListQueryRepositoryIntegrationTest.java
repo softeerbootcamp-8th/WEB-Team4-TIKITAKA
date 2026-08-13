@@ -326,6 +326,78 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void 높은가격_스냅샷_분기는_완료시점_기준으로_합쳐_정렬한다() {
+        Member seller = persistMember("start-price-snapshot-seller");
+        DownAuction completedBeforeAsOf = persistDown(
+                seller,
+                "스냅샷 이전 완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction notCompleted = persistDown(
+                seller,
+                "미완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction completedAfterAsOf = persistDown(
+                seller,
+                "스냅샷 이후 완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction lowerNotCompleted = persistDown(
+                seller,
+                "낮은 미완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+
+        for (DownAuction auction : List.of(
+                completedBeforeAsOf,
+                notCompleted,
+                completedAfterAsOf,
+                lowerNotCompleted
+        )) {
+            setAuctionTimeline(auction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        }
+        setStartPrice(completedBeforeAsOf, 500_000L);
+        setStartPrice(notCompleted, 400_000L);
+        setStartPrice(completedAfterAsOf, 400_000L);
+        setStartPrice(lowerNotCompleted, 300_000L);
+        setCompletedAt(completedBeforeAsOf, AS_OF.minusMinutes(1));
+        setCompletedAt(completedAfterAsOf, AS_OF.plusMinutes(1));
+        entityManager.clear();
+
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_HIGH,
+                null,
+                AS_OF
+        );
+
+        List<DownAuctionPriceCandidate> candidates = auctionListQueryRepository
+                .findDownPriceCandidates(condition, null, 3);
+
+        assertThat(candidates)
+                .extracting(DownAuctionPriceCandidate::auctionId)
+                .containsExactly(
+                        completedAfterAsOf.getId(),
+                        notCompleted.getId(),
+                        lowerNotCompleted.getId()
+                )
+                .doesNotContain(completedBeforeAsOf.getId());
+    }
+
+    @Test
     void UP_경매는_asOf_이전_입찰만으로_최고가와_입찰수를_계산한다() {
         Member seller = persistMember("up-seller");
         Member bidder = persistMember("up-bidder");

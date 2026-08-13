@@ -35,11 +35,16 @@ import static lombok.AccessLevel.PROTECTED;
                 @Index(
                         name = "idx_auction_current_price_desc_id_desc",
                         columnList = "auction_type, current_price DESC, id DESC"
+                ),
+                @Index(
+                        name = "idx_auction_snapshot_price",
+                        columnList = "auction_type, completed_at, start_price DESC, "
+                                + "id DESC, started_at, ended_at"
                 )
         }
 )
 @Inheritance(strategy = InheritanceType.JOINED)
-@DiscriminatorColumn(name = "auction_type")
+@DiscriminatorColumn(name = "auction_type", length = 4)
 @NoArgsConstructor(access = PROTECTED)
 public abstract class Auction extends BaseTimeEntity {
 

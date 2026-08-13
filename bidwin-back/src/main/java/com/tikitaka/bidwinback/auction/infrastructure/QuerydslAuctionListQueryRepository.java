@@ -31,10 +31,12 @@ import org.hibernate.jpa.HibernateHints;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.tikitaka.bidwinback.auction.domain.entity.QAuction.auction;
 import static com.tikitaka.bidwinback.auction.domain.entity.QBid.bid;
@@ -58,6 +60,14 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ) * {5}
             )
             """;
+    private static final Comparator<DownAuctionPriceCandidateDetails> DOWN_START_PRICE_ORDER =
+            Comparator.comparingLong(DownAuctionPriceCandidateDetails::startPrice)
+                    .reversed()
+                    .thenComparing(
+                            Comparator.comparingLong(
+                                    DownAuctionPriceCandidateDetails::auctionId
+                            ).reversed()
+                    );
 
     private final JPAQueryFactory queryFactory;
     private final BidRepository bidRepository;
@@ -238,21 +248,37 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionPriceCursor cursor,
             int limit
     ) {
-        return queryFactory
-                .select(new QDownAuctionPriceCandidateDetails(
-                        auction.id,
-                        auction.startPrice,
-                        downAuction.minimumPrice,
-                        auction.startedAt,
-                        downAuction.dropPrice,
-                        downAuction.priceDropInterval
-                ))
-                .from(auction)
-                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+        // QueryDSL JPA는 UNION ALL을 지원하지 않으므로 각 분기의 Top-K를 전역 순서로 병합한다.
+        List<DownAuctionPriceCandidateDetails> unfinished = findDownCandidatesByStartPrice(
+                condition,
+                cursor,
+                limit,
+                auction.completedAt.isNull()
+        );
+        List<DownAuctionPriceCandidateDetails> completedAfterSnapshot =
+                findDownCandidatesByStartPrice(
+                        condition,
+                        cursor,
+                        limit,
+                        auction.completedAt.gt(condition.asOf())
+                );
+
+        return Stream.concat(unfinished.stream(), completedAfterSnapshot.stream())
+                .sorted(DOWN_START_PRICE_ORDER)
+                .limit(limit)
+                .toList();
+    }
+
+    private List<DownAuctionPriceCandidateDetails> findDownCandidatesByStartPrice(
+            AuctionListSearchCondition condition,
+            AuctionPriceCursor cursor,
+            int limit,
+            Predicate completedAtPredicate
+    ) {
+        return downStartPriceCandidateQuery(
+                searchPredicate(condition, completedAtPredicate)
+        )
                 .where(
-                        searchPredicate(condition),
-                        auction.instanceOf(DownAuction.class),
-                        downAuction.id.isNotNull(),
                         startPriceCursorAfter(cursor)
                 )
                 .orderBy(
@@ -267,6 +293,18 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor
     ) {
+        return downStartPriceCandidateQuery(searchPredicate(condition))
+                .where(
+                        auction.startPrice.eq(cursor.priceBound()),
+                        auction.id.lt(cursor.auctionId())
+                )
+                .orderBy(auction.id.desc())
+                .fetch();
+    }
+
+    private JPAQuery<DownAuctionPriceCandidateDetails> downStartPriceCandidateQuery(
+            Predicate searchPredicate
+    ) {
         return queryFactory
                 .select(new QDownAuctionPriceCandidateDetails(
                         auction.id,
@@ -277,16 +315,11 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.priceDropInterval
                 ))
                 .from(auction)
-                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+                .innerJoin(downAuction).on(downAuction.id.eq(auction.id))
                 .where(
-                        searchPredicate(condition),
-                        auction.instanceOf(DownAuction.class),
-                        downAuction.id.isNotNull(),
-                        auction.startPrice.eq(cursor.priceBound()),
-                        auction.id.lt(cursor.auctionId())
-                )
-                .orderBy(auction.id.desc())
-                .fetch();
+                        searchPredicate,
+                        auction.instanceOf(DownAuction.class)
+                );
     }
 
     private List<DownAuctionPriceCandidate> toDownPriceCandidates(
@@ -480,10 +513,20 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     }
 
     private Predicate searchPredicate(AuctionListSearchCondition condition) {
+        return searchPredicate(
+                condition,
+                auction.completedAt.isNull()
+                        .or(auction.completedAt.gt(condition.asOf()))
+        );
+    }
+
+    private Predicate searchPredicate(
+            AuctionListSearchCondition condition,
+            Predicate completedAtPredicate
+    ) {
         return new BooleanBuilder()
                 .and(auction.startedAt.loe(condition.asOf()))
-                .and(auction.completedAt.isNull()
-                        .or(auction.completedAt.gt(condition.asOf())))
+                .and(completedAtPredicate)
                 .and(auction.endedAt.gt(condition.asOf()))
                 .and(auctionTypeEq(condition.auctionType()))
                 .and(titleContains(auction.title, condition.keyword()));
