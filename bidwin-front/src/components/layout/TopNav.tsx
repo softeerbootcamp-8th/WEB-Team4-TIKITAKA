@@ -1,7 +1,8 @@
-import { Gavel, Search } from 'lucide-react'
+import { LogOut, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, createSearchParams, useLocation, useNavigate } from 'react-router-dom'
+import bidwinLogo from '../../assets/bidwin-logo.png'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { requestLogout } from '../../lib/api/auth'
@@ -75,10 +76,9 @@ function TopNav() {
 
   return (
     <header className="sticky top-0 z-40 h-16 border-b border-hairline bg-canvas">
-      <div className="mx-auto flex h-full max-w-[1200px] items-center gap-xl px-lg">
-        <Link to="/" className="flex items-center gap-xs font-bold text-ink">
-          <Gavel size={20} className="text-primary" />
-          급처마켓
+      <div className="mx-auto flex h-full max-w-[1200px] items-center gap-sm px-base sm:gap-xl sm:px-lg">
+        <Link to="/" aria-label="비드윈 홈" className="shrink-0">
+          <img src={bidwinLogo} alt="" className="block h-8 w-auto sm:h-10" />
         </Link>
         <nav className="hidden flex-1 gap-lg lg:flex">
           {NAV_LINKS.map((link) => (
@@ -107,7 +107,7 @@ function TopNav() {
             <>
               <Link
                 to="/mypage"
-                className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
+                className="flex h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline sm:px-base"
               >
                 마이페이지
               </Link>
@@ -115,9 +115,13 @@ function TopNav() {
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex h-9 items-center rounded-pill px-sm text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
+                className="flex h-9 w-9 items-center justify-center rounded-pill text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-sm"
               >
-                {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
+                <LogOut size={18} aria-hidden className="sm:hidden" />
+                <span className="hidden sm:inline">
+                  {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
+                </span>
               </button>
             </>
           ) : (
