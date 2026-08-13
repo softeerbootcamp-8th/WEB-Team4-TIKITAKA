@@ -51,7 +51,7 @@ export const FILTER_MODAL_TEXT = {
   title: '필터 선택',
   close: '닫기',
   reset: '초기화',
-  submit: (count: number) => `${count.toLocaleString('ko-KR')}개 경매보기`,
+  submit: '필터 적용',
   removeAriaLabel: (label: string) => `${label} 선택 해제`,
 } as const
 

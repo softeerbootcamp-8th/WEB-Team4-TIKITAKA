@@ -3,24 +3,46 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Button from '../../components/ui/Button'
 import { useAuctionEvents } from '../../hooks/useAuctionEvents'
-import { requestAuctionList } from '../../lib/api/auctions'
-import type { AuctionListResponse } from '../../lib/api/auctions'
+import { useToast } from '../../hooks/useToast'
+import { requestAuctionCategories, requestAuctionList } from '../../lib/api/auctions'
+import type { AuctionCategoryOption, AuctionListResponse } from '../../lib/api/auctions'
 import AuctionCard from './components/AuctionCard'
 import AuctionToolbar from './components/AuctionToolbar'
+import FilterModal from './components/FilterModal'
+import FilterPanel from './components/FilterPanel'
+import FilterSheet from './components/FilterSheet'
 import Pagination from './components/Pagination'
 import { FIRST_PAGE, LIST_TEXT, PAGE_SIZE, SEARCH_QUERY_PARAM } from './constants'
+import {
+  DEFAULT_FILTER_SELECTION,
+  countSelectedOptions,
+  createFilterGroups,
+  toAuctionListFilters,
+} from './filters'
+import type { FilterSelection } from './filters'
 import { DEFAULT_SORT } from './query'
 import type { SortKey } from './query'
 import type { AuctionTypeFilter } from './types'
 
 const CONTENT_HEIGHT_CLASS = 'h-[calc(100dvh-4rem)]'
+const FILTER_PANEL_WIDTH_CLASS = 'w-[190px]'
 
 function AuctionListPage() {
+  const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const keyword = searchParams.get(SEARCH_QUERY_PARAM) ?? ''
+  const [isPanelOpen, setIsPanelOpen] = useState(true)
+  const [isFilterEnabled, setIsFilterEnabled] = useState(true)
+  const [selection, setSelection] = useState<FilterSelection>(DEFAULT_FILTER_SELECTION)
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
+  const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)
   const [auctionType, setAuctionType] = useState<AuctionTypeFilter>('ALL')
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT)
-  const queryKey = `${keyword}\u0000${auctionType}\u0000${sort}`
+  const filterGroups = createFilterGroups(categories)
+  const appliedFilters = toAuctionListFilters(selection, isFilterEnabled)
+  const categoryKey = appliedFilters.categories.join(',')
+  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${categoryKey}\u0000${sort}`
   const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
   const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
@@ -30,6 +52,26 @@ function AuctionListPage() {
   const [bookmarks, setBookmarks] = useState<ReadonlySet<number>>(() => new Set())
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let active = true
+
+    requestAuctionCategories(controller.signal).then((result) => {
+      if (!active) return
+      if (!result.ok) {
+        setCategories([])
+        showToast('카테고리를 불러오지 못했어요.', 'info')
+        return
+      }
+      setCategories(result.data)
+    })
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [showToast])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -44,6 +86,8 @@ function AuctionListPage() {
     requestAuctionList({
       keyword,
       auctionType,
+      status: appliedFilters.status,
+      categories: appliedFilters.categories,
       sort,
       page,
       size: PAGE_SIZE,
@@ -63,7 +107,7 @@ function AuctionListPage() {
       active = false
       controller.abort()
     }
-  }, [auctionType, keyword, page, queryKey, retryToken, sort])
+  }, [appliedFilters.categories, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {
@@ -102,7 +146,25 @@ function AuctionListPage() {
     })
   }
 
+  function toggleFilters(next: boolean) {
+    setIsFilterEnabled(next)
+    listRef.current?.scrollTo({ top: 0 })
+  }
+
+  function applyFilters(next: FilterSelection) {
+    setSelection(next)
+    setOpenGroupId(null)
+    listRef.current?.scrollTo({ top: 0 })
+  }
+
+  function resetFilters() {
+    setSelection(DEFAULT_FILTER_SELECTION)
+    setIsFilterEnabled(true)
+    listRef.current?.scrollTo({ top: 0 })
+  }
+
   function resetSearch() {
+    resetFilters()
     setAuctionType('ALL')
     setSort(DEFAULT_SORT)
     setSearchParams({})
@@ -110,73 +172,109 @@ function AuctionListPage() {
 
   const totalCount = response?.totalCount ?? 0
   const items = response?.items ?? []
+  const filterPanel = (
+    <FilterPanel
+      groups={filterGroups}
+      selection={selection}
+      isEnabled={isFilterEnabled}
+      onToggleEnabled={toggleFilters}
+      onOpenGroup={setOpenGroupId}
+      onReset={resetFilters}
+    />
+  )
 
   return (
     <main className={`mx-auto flex ${CONTENT_HEIGHT_CLASS} max-w-[1200px] flex-col px-lg py-base`}>
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="shrink-0">
-          <AuctionToolbar
-            auctionType={auctionType}
-            onChangeAuctionType={setAuctionType}
-            sort={sort}
-            onChangeSort={setSort}
-          />
-          <h1 className="py-sm text-lg font-bold text-ink">
-            {keyword ? LIST_TEXT.searchResultPrefix(keyword) : LIST_TEXT.resultCountPrefix}{' '}
-            <span className="text-primary">{totalCount.toLocaleString('ko-KR')}</span>
-            {LIST_TEXT.resultCountSuffix}
-          </h1>
-        </div>
+      <div className="flex min-h-0 flex-1 gap-lg">
+        {isPanelOpen && (
+          <aside className={`hidden ${FILTER_PANEL_WIDTH_CLASS} shrink-0 lg:block`}>
+            {filterPanel}
+          </aside>
+        )}
 
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto pb-base">
-          {isLoading ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted">
-              경매를 불러오는 중…
-            </div>
-          ) : error ? (
-            <div className="flex h-full flex-col items-center justify-center gap-sm text-center">
-              <p className="text-base font-semibold text-ink">경매를 불러오지 못했어요.</p>
-              <p className="text-sm text-muted">{error}</p>
-              <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
-                다시 시도
-              </Button>
-            </div>
-          ) : items.length > 0 && response ? (
-            <div className="grid grid-cols-1 gap-sm md:grid-cols-4">
-              {items.map((auction) => (
-                <AuctionCard
-                  key={auction.auctionId}
-                  auction={auction}
-                  serverTime={response.serverTime}
-                  isBookmarked={bookmarks.has(auction.auctionId)}
-                  onToggleBookmark={toggleBookmark}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-sm">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-soft text-muted">
-                <SearchX size={24} />
-              </span>
-              <p className="text-base font-semibold text-ink">{LIST_TEXT.emptyTitle}</p>
-              <p className="text-sm text-muted">{LIST_TEXT.emptyDescription}</p>
-              <Button variant="secondary" onClick={resetSearch} className="mt-xs">
-                검색 초기화
-              </Button>
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="shrink-0">
+            <AuctionToolbar
+              isPanelOpen={isPanelOpen}
+              onTogglePanel={() => setIsPanelOpen((open) => !open)}
+              onOpenFilterSheet={() => setIsFilterSheetOpen(true)}
+              selectedFilterCount={isFilterEnabled ? countSelectedOptions(selection) : 0}
+              auctionType={auctionType}
+              onChangeAuctionType={setAuctionType}
+              sort={sort}
+              onChangeSort={setSort}
+            />
+            <h1 className="py-sm text-lg font-bold text-ink">
+              {keyword ? LIST_TEXT.searchResultPrefix(keyword) : LIST_TEXT.resultCountPrefix}{' '}
+              <span className="text-primary">{totalCount.toLocaleString('ko-KR')}</span>
+              {LIST_TEXT.resultCountSuffix}
+            </h1>
+          </div>
+
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto pb-base">
+            {isLoading ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted">
+                경매를 불러오는 중…
+              </div>
+            ) : error ? (
+              <div className="flex h-full flex-col items-center justify-center gap-sm text-center">
+                <p className="text-base font-semibold text-ink">경매를 불러오지 못했어요.</p>
+                <p className="text-sm text-muted">{error}</p>
+                <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
+                  다시 시도
+                </Button>
+              </div>
+            ) : items.length > 0 && response ? (
+              <div className="grid grid-cols-1 gap-sm md:grid-cols-4">
+                {items.map((auction) => (
+                  <AuctionCard
+                    key={auction.auctionId}
+                    auction={auction}
+                    serverTime={response.serverTime}
+                    isBookmarked={bookmarks.has(auction.auctionId)}
+                    onToggleBookmark={toggleBookmark}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-sm">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-soft text-muted">
+                  <SearchX size={24} />
+                </span>
+                <p className="text-base font-semibold text-ink">{LIST_TEXT.emptyTitle}</p>
+                <p className="text-sm text-muted">{LIST_TEXT.emptyDescription}</p>
+                <Button variant="secondary" onClick={resetSearch} className="mt-xs">
+                  검색 초기화
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {response && items.length > 0 && (
+            <div className="shrink-0 border-t border-hairline-soft pt-base">
+              <Pagination
+                currentPage={response.page}
+                totalPages={response.totalPages}
+                onChange={changePage}
+              />
             </div>
           )}
-        </div>
+        </section>
+      </div>
 
-        {response && items.length > 0 && (
-          <div className="shrink-0 border-t border-hairline-soft pt-base">
-            <Pagination
-              currentPage={response.page}
-              totalPages={response.totalPages}
-              onChange={changePage}
-            />
-          </div>
-        )}
-      </section>
+      {isFilterSheetOpen && (
+        <FilterSheet onClose={() => setIsFilterSheetOpen(false)}>{filterPanel}</FilterSheet>
+      )}
+
+      {openGroupId && (
+        <FilterModal
+          groups={filterGroups}
+          initialGroupId={openGroupId}
+          selection={selection}
+          onApply={applyFilters}
+          onClose={() => setOpenGroupId(null)}
+        />
+      )}
     </main>
   )
 }
