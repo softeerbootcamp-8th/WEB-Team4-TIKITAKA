@@ -13,6 +13,9 @@ export const ALLOWED_IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/we
 /* 시작가·최저가·즉시 구매가에 공통으로 적용하는 최소 금액. */
 export const MIN_PRICE = 1000
 
+/* 시작가·즉시 구매가의 상한(1000억원). 백엔드 AuctionCreateRequest와 같은 기준. */
+export const MAX_PRICE = 100_000_000_000
+
 /* 백엔드 AuctionCategory enum과 1:1 대응(HOUSEHOLD/FOOD/FURNITURE 세 가지뿐이라 고정값으로 둔다). */
 export const CATEGORY_OPTIONS = [
   { value: 'HOUSEHOLD', label: '생활용품' },
@@ -89,7 +92,9 @@ export const ERROR_MESSAGE = {
   invalidContact: '연락처는 하이픈 없이 올바른 휴대폰 번호 형식으로 입력해주세요. (예: 01012345678)',
   invalidStartPrice: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
   invalidStartPriceUnit: `시작가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 단위로 입력해주세요.`,
+  startPriceTooHigh: `시작가는 ${MAX_PRICE.toLocaleString('ko-KR')}원 이하로 입력해주세요.`,
   invalidBuyNowPrice: `즉시 구매가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
+  buyNowPriceTooHigh: `즉시 구매가는 ${MAX_PRICE.toLocaleString('ko-KR')}원 이하로 입력해주세요.`,
   buyNowPriceMustExceedStartPrice: '즉시 구매가는 시작가보다 높아야 해요.',
   invalidMinimumPrice: `최저가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
   minimumPriceMustBeLowerThanStartPrice: '최저가는 시작가보다 낮아야 해요.',

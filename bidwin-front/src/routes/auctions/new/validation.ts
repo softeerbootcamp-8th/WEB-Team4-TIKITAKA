@@ -1,6 +1,7 @@
 import {
   CONTACT_MAX_LENGTH,
   ERROR_MESSAGE,
+  MAX_PRICE,
   MIN_PRICE,
   PRICE_DROP_INTERVAL_OPTIONS,
   TITLE_MAX_LENGTH,
@@ -41,12 +42,14 @@ function validateAuctionFields(fields: AuctionFormFields) {
 
   const startPrice = toPositiveNumber(fields.startPrice)
   if (startPrice === null || startPrice < MIN_PRICE) return ERROR_MESSAGE.invalidStartPrice
+  if (startPrice > MAX_PRICE) return ERROR_MESSAGE.startPriceTooHigh
   if (startPrice % MIN_PRICE !== 0) return ERROR_MESSAGE.invalidStartPriceUnit
 
   if (auctionType === 'UP') {
     const buyNowPrice = toPositiveNumber(fields.buyNowPrice)
     if (fields.buyNowPrice.trim() !== '') {
       if (buyNowPrice === null || buyNowPrice < MIN_PRICE) return ERROR_MESSAGE.invalidBuyNowPrice
+      if (buyNowPrice > MAX_PRICE) return ERROR_MESSAGE.buyNowPriceTooHigh
       if (buyNowPrice <= startPrice) return ERROR_MESSAGE.buyNowPriceMustExceedStartPrice
     }
     return null
