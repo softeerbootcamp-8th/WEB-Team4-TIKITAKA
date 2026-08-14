@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.application.live.BidPriceCachePreempted;
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -39,6 +40,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
 
@@ -66,7 +68,7 @@ public class BidService {
             long price,
             BidType bidType
     ) {
-        validateBidUnit(price);
+        validateBidPrice(price);
 
         // Redis에서 즉시 원자적으로 승패를 가른다(비교+갱신을 한 번에). SEALED는 이 캐시 대상이 아니다.
         Long previousPrice = bidType == BidType.OPEN
@@ -165,7 +167,10 @@ public class BidService {
         return BidResult.from(sealedBid);
     }
 
-    private void validateBidUnit(long price) {
+    private void validateBidPrice(long price) {
+        if (!AuctionPricePolicy.isAllowed(price)) {
+            throw new BidException(PRICE_LIMIT_EXCEEDED);
+        }
         if (price <= 0 || price % BID_UNIT != 0) {
             throw new BidException(INVALID_BID_UNIT);
         }

@@ -19,6 +19,8 @@ export const BID_SCORE_WEIGHT = 3
 
 /** 검색어를 담는 쿼리 스트링 키. TopNav 검색과 이 페이지가 공유한다. */
 export const SEARCH_QUERY_PARAM = 'q'
+/** 홈 카테고리 버튼이 목록 화면에 전달하는 카테고리 코드. */
+export const CATEGORY_QUERY_PARAM = 'category'
 
 export const LIST_TEXT = {
   /* 검색어가 있을 때만 건수 앞에 붙는다. 별도 페이지 제목은 두지 않는다. */

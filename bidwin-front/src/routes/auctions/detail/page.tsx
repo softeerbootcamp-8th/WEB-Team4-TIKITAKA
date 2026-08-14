@@ -49,6 +49,7 @@ import type {
 import type { ApiFailure } from '../../../lib/api/client'
 import { computeCurrentDownPrice, computeDropHistory } from '../../../lib/auctionPricing'
 import { notifyDepositChanged } from '../../../lib/depositEvents'
+import { MAX_BID_PRICE, MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
 
 const CATEGORY_LABEL = {
@@ -814,7 +815,7 @@ function UpBidPanel({
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const sealedStart = useCountdown(auction.sealedBidStartsAt - serverOffsetMs)
   const nextMinBid = auction.currentPrice + BID_UNIT
-  const [amount, setAmount] = useState(nextMinBid)
+  const [amount, setAmount] = useState(Math.min(nextMinBid, MAX_BID_PRICE))
   const [inputError, setInputError] = useState<string | null>(null)
   const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const ended = deadline.isEnded || !isOngoing(auction.status)
@@ -826,21 +827,35 @@ function UpBidPanel({
     && auction.buyNowPrice !== null
   )
   const busy = pendingAction !== null
+  const bidLimitReached = nextMinBid > MAX_BID_PRICE
 
   function handleChip(increment: number) {
-    setAmount((current) => Math.max(current, auction.currentPrice) + increment)
+    setAmount((current) => Math.min(
+      Math.max(current, auction.currentPrice) + increment,
+      MAX_BID_PRICE,
+    ))
     setInputError(null)
     onClearError()
   }
 
   function handleAmountChange(event: ChangeEvent<HTMLInputElement>) {
     const raw = event.target.value.replace(/[^0-9]/g, '').slice(0, 15)
-    setAmount(raw === '' ? 0 : Number(raw))
+    const nextAmount = raw === '' ? 0 : Number(raw)
+    if (nextAmount >= MAX_PRICE_EXCLUSIVE) {
+      setInputError('입찰 금액은 1,000억 원 미만으로 입력해주세요.')
+      onClearError()
+      return
+    }
+    setAmount(nextAmount)
     setInputError(null)
     onClearError()
   }
 
   async function handleSubmit() {
+    if (amount >= MAX_PRICE_EXCLUSIVE) {
+      setInputError('입찰 금액은 1,000억 원 미만으로 입력해주세요.')
+      return
+    }
     if (!Number.isSafeInteger(amount) || amount < nextMinBid) {
       setInputError(`최소 ${formatWon(nextMinBid)} 이상 입찰해주세요.`)
       return
@@ -909,7 +924,7 @@ function UpBidPanel({
                 key={increment}
                 type="button"
                 onClick={() => handleChip(increment)}
-                disabled={busy || hasSubmittedSealedBid && sealedBidActive}
+                disabled={busy || bidLimitReached || amount >= MAX_BID_PRICE || hasSubmittedSealedBid && sealedBidActive}
                 className="flex-1 rounded-pill border border-hairline py-sm text-sm font-semibold text-body hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
               >
                 +{increment.toLocaleString('ko-KR')}
@@ -923,15 +938,17 @@ function UpBidPanel({
             value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
             onChange={handleAmountChange}
             error={inputError ?? actionError ?? undefined}
-            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
+            disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
           />
 
           <Button
             size="lg"
             onClick={handleSubmit}
-            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
+            disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
           >
-            {pendingAction === 'bid'
+            {bidLimitReached
+              ? '입찰 가능 금액 상한 도달'
+              : pendingAction === 'bid'
               ? '입찰 처리 중…'
               : hasSubmittedSealedBid && sealedBidActive
                 ? '밀봉 입찰 제출 완료'

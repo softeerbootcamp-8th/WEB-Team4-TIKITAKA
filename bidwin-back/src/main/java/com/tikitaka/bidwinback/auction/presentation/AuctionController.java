@@ -5,7 +5,6 @@ import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery.StatusFilter;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -20,7 +19,6 @@ import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,14 +46,6 @@ public class AuctionController {
     private final AuctionDetailService auctionDetailService;
     private final AuctionCreateService auctionCreateService;
     private final AuctionListService auctionListService;
-    private final AuctionLiveStateService auctionLiveStateService;
-
-    @GetMapping("/clock")
-    public ResponseEntity<ApiResponse<Long>> getClock() {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(ApiResponse.success(auctionLiveStateService.getDatabaseTimeMillis()));
-    }
 
     @GetMapping("/{auctionId}")
     public ResponseEntity<ApiResponse<AuctionDetailResponse>> getDetail(
