@@ -22,6 +22,8 @@ const SPLIT_LIST_LIMIT = 4
 const HOME_LIST_SIZE = 20
 const UP_AUCTION_LABEL = '상향 경매'
 const DOWN_AUCTION_LABEL = '하락 중'
+const HOME_SKELETON_KEYS = Array.from({ length: POPULAR_AUCTION_LIMIT }, (_, index) => index)
+const HOME_PANEL_SKELETON_KEYS = Array.from({ length: SPLIT_LIST_LIMIT }, (_, index) => index)
 
 type DownAuctionSummary = AuctionSummary & {
   auctionType: 'DOWN'
@@ -94,7 +96,7 @@ function HomePage() {
   })
 
   if (isLoading) {
-    return <HomeMessage message="경매를 불러오는 중…" />
+    return <HomeSkeleton />
   }
 
   if (error) {
@@ -449,6 +451,52 @@ function ListRowView({
         </span>
       </Link>
     </li>
+  )
+}
+
+function HomeSkeleton() {
+  return (
+    <main
+      role="status"
+      aria-label="홈 경매를 불러오는 중"
+      className="mx-auto max-w-[1200px] px-lg py-xl"
+    >
+      <span className="sr-only">홈 경매를 불러오는 중…</span>
+      <section className="mt-xl motion-safe:animate-pulse">
+        <div className="h-8 w-64 rounded-pill bg-surface-strong" />
+        <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
+        <div className="mt-lg grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {HOME_SKELETON_KEYS.map((key) => (
+            <Card key={key} className="flex h-full flex-col gap-sm">
+              <div className="aspect-square w-full rounded-md bg-surface-strong" />
+              <div className="h-6 w-2/3 rounded-pill bg-surface-strong" />
+              <div className="h-4 w-4/5 rounded-pill bg-surface-strong" />
+              <div className="h-4 w-full rounded-pill bg-surface-strong" />
+              <div className="h-3 w-16 rounded-pill bg-surface-strong" />
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-section grid grid-cols-1 gap-lg lg:grid-cols-2">
+        {[0, 1].map((panelKey) => (
+          <div key={panelKey} className="motion-safe:animate-pulse rounded-xl border border-hairline-soft bg-canvas p-lg">
+            <div className="h-6 w-40 rounded-pill bg-surface-strong" />
+            <div className="mt-sm h-4 w-3/4 rounded-pill bg-surface-strong" />
+            <div className="mt-base flex flex-col gap-sm">
+              {HOME_PANEL_SKELETON_KEYS.map((key) => (
+                <div key={key} className="flex items-center gap-sm py-xs">
+                  <div className="h-11 w-11 shrink-0 rounded-md bg-surface-strong" />
+                  <div className="h-4 flex-1 rounded-pill bg-surface-strong" />
+                  <div className="h-4 w-20 rounded-pill bg-surface-strong" />
+                  <div className="h-3 w-14 rounded-pill bg-surface-strong" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+    </main>
   )
 }
 

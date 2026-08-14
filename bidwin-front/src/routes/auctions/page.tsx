@@ -7,7 +7,7 @@ import { useServerClock } from '../../hooks/useServerClock'
 import { useToast } from '../../hooks/useToast'
 import { requestAuctionCategories, requestAuctionList } from '../../lib/api/auctions'
 import type { AuctionCategoryOption, AuctionListResponse } from '../../lib/api/auctions'
-import AuctionCard from './components/AuctionCard'
+import AuctionCard, { AuctionCardSkeleton } from './components/AuctionCard'
 import AuctionToolbar from './components/AuctionToolbar'
 import FilterModal from './components/FilterModal'
 import FilterPanel from './components/FilterPanel'
@@ -27,6 +27,7 @@ import type { AuctionTypeFilter } from './types'
 
 const CONTENT_HEIGHT_CLASS = 'h-[calc(100dvh-4rem)]'
 const FILTER_PANEL_WIDTH_CLASS = 'w-[190px]'
+const SKELETON_KEYS = Array.from({ length: PAGE_SIZE }, (_, index) => index)
 
 function AuctionListPage() {
   const { showToast } = useToast()
@@ -210,8 +211,11 @@ function AuctionListPage() {
 
           <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto pb-base">
             {isLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted">
-                경매를 불러오는 중…
+              <div role="status" aria-label="경매를 불러오는 중">
+                <span className="sr-only">경매를 불러오는 중…</span>
+                <div className="grid grid-cols-1 gap-sm md:grid-cols-4">
+                  {SKELETON_KEYS.map((key) => <AuctionCardSkeleton key={key} />)}
+                </div>
               </div>
             ) : error ? (
               <div className="flex h-full flex-col items-center justify-center gap-sm text-center">

@@ -156,4 +156,29 @@ function AuctionCardView({
   )
 }
 
+function AuctionCardSkeleton() {
+  return (
+    <article
+      aria-hidden
+      className={`flex h-full animate-pulse gap-sm p-sm md:flex-col ${CARD_SURFACE_CLASS}`}
+    >
+      <div className={`relative ${THUMBNAIL_CLASS} bg-surface-strong`}>
+        <div className="absolute left-2 top-2 hidden h-6 w-20 rounded-pill bg-canvas/80 md:block" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1 md:mt-1 md:flex-none">
+        <div className="h-3 w-2/5 rounded-pill bg-surface-strong" />
+        <div className="h-3 w-1/4 rounded-pill bg-surface-strong" />
+        <div className="mt-1 h-4 w-4/5 rounded-pill bg-surface-strong" />
+        <div className="h-5 w-full rounded-pill bg-surface-strong" />
+        <div className="h-3 w-2/5 rounded-pill bg-surface-strong" />
+        <div className="mt-auto flex items-center gap-1.5 pt-1">
+          <div className="h-6 w-20 rounded-pill bg-surface-strong md:hidden" />
+          <div className="h-6 w-24 rounded-pill bg-surface-strong" />
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export default AuctionCard
+export { AuctionCardSkeleton }
