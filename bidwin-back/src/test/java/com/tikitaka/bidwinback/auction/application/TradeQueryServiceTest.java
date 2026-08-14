@@ -105,7 +105,7 @@ class TradeQueryServiceTest {
     }
 
     @Test
-    void 구매확정_후에는_구매자에게_판매자_연락처를_공개한다() {
+    void 판매자_동의_단계에는_구매자에게_판매자_연락처를_공개한다() {
         // given
         AuctionTrade trade = trade(TradeStatus.CONFIRMED);
         stubTrade(trade);

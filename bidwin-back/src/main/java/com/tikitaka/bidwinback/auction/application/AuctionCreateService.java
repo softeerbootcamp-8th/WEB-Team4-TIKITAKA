@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionCreated;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
@@ -24,6 +25,7 @@ import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
 import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.domain.entity.PendingAuctionImage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +61,7 @@ public class AuctionCreateService {
     private final AuctionImageObjectKeyGenerator imageObjectKeyGenerator;
     private final ObjectStorage objectStorage;
     private final AuctionImageStorageCleanup imageStorageCleanup;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AuctionCreateResponse create(Long memberId, AuctionCreateRequest request) {
@@ -85,6 +88,11 @@ public class AuctionCreateService {
 
         Auction auction = buildAuction(seller, category, endedAt, request);
         auctionRepository.save(auction);
+
+        // 하향 경매는 BidPriceCache를 쓰지 않으므로(즉시구매만 존재) 상향 경매만 캐시를 초기화한다.
+        if (auction instanceof UpAuction) {
+            eventPublisher.publishEvent(new AuctionCreated(auction.getId(), auction.getStartPrice(), endedAt));
+        }
 
         attachImages(auction, pendingImages);
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import Button from '../../components/ui/Button'
 import { useAuctionEvents } from '../../hooks/useAuctionEvents'
+import { useServerClock } from '../../hooks/useServerClock'
 import { requestMyPage } from '../../lib/api/mypage'
 import type { MyPageResponse } from '../../lib/api/mypage'
 import ActiveTradeBanner from './components/ActiveTradeBanner'
@@ -32,6 +33,9 @@ function MyPage() {
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
   const [isMyInfoOpen, setIsMyInfoOpen] = useState(false)
+  const initialServerTime = data?.sellingItems.find((item) => item.downPricing)
+    ?.downPricing?.serverTime
+  const serverOffsetMs = useServerClock(initialServerTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -114,6 +118,7 @@ function MyPage() {
         emptyMessage={SELLING_SECTION_TEXT.empty}
         emptyActionLabel={SELLING_SECTION_TEXT.emptyAction}
         emptyActionPath={AUCTION_NEW_PATH}
+        serverOffsetMs={serverOffsetMs}
       />
 
       <MyItemSection
@@ -124,6 +129,7 @@ function MyPage() {
         emptyMessage={BUYING_SECTION_TEXT.empty}
         emptyActionLabel={BUYING_SECTION_TEXT.emptyAction}
         emptyActionPath={AUCTION_LIST_PATH}
+        serverOffsetMs={serverOffsetMs}
       />
 
       <SettingsSection onOpenMyInfo={() => setIsMyInfoOpen(true)} />

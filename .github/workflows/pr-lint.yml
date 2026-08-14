@@ -13,7 +13,7 @@ jobs:
         with:
           script: |
             const title = context.payload.pull_request.title;
-            const pattern = /^\[(Feat|Bug|Fix|Refactor|Chore|Docs)\] .+/;
+            const pattern = /^\[(Feat|Bug|Fix|Refactor|Chore|Docs|Release)\] .+/;
             if (!pattern.test(title)) {
               core.setFailed(
                 `PR 제목이 컨벤션에 맞지 않습니다: "${title}"\n형식: [타입] 작업 요약 (예: [Feat] 실시간 입찰 갱신 API 구현)`

@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
@@ -29,14 +30,18 @@ public class AuctionListService {
 
     private final AuctionRepository auctionRepository;
     private final AuctionListQueryRepository auctionListQueryRepository;
+    private final AuctionPricePageQuery auctionPricePageQuery;
     private final ImageUrlResolver imageUrlResolver;
 
     @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
         LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        LocalDateTime asOf = query.asOf() != null ? query.asOf() : serverTime;
+        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
+                ? serverTime
+                : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
 
+        // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
                 query.auctionType(),
                 query.sort(),
@@ -50,7 +55,7 @@ public class AuctionListService {
 
         List<AuctionSummaryResponse> pageItems = totalCount == 0
                 ? List.of()
-                : auctionListQueryRepository.findPage(condition, offset, size)
+                : findPage(condition, currentPage, size, totalCount, offset)
                         .stream()
                         .map(this::toSummary)
                         .toList();
@@ -63,6 +68,25 @@ public class AuctionListService {
                 totalPages,
                 totalCount
         );
+    }
+
+    private List<AuctionListRow> findPage(
+            AuctionListSearchCondition condition,
+            int currentPage,
+            int size,
+            long totalCount,
+            long offset
+    ) {
+        return switch (condition.sort()) {
+            case PRICE_LOW, PRICE_HIGH -> auctionPricePageQuery.findPage(
+                    condition,
+                    currentPage,
+                    size,
+                    totalCount
+            );
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    auctionListQueryRepository.findPage(condition, offset, size);
+        };
     }
 
     private AuctionSummaryResponse toSummary(AuctionListRow row) {

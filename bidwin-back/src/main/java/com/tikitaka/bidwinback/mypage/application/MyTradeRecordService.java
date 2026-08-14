@@ -2,7 +2,7 @@ package com.tikitaka.bidwinback.mypage.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
-import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
@@ -85,7 +85,7 @@ public class MyTradeRecordService {
                 trade.getFinalPrice(),
                 trade.getPurchasedAt().atZone(SERVICE_ZONE).toInstant().toEpochMilli(),
                 trade.getStatus(),
-                auction instanceof UpAuction ? TradeRoute.WON : TradeRoute.BUY_NOW
+                TradeRoute.from(AuctionType.from(auction))
         );
     }
 }

@@ -40,7 +40,7 @@ function AuctionTypeBadge({ auctionType, overlay }: {
 
 interface AuctionCardProps {
   auction: AuctionSummary
-  serverTime: number
+  serverOffsetMs: number
   isBookmarked: boolean
   onToggleBookmark: (auctionId: number) => void
 }
@@ -54,7 +54,7 @@ function AuctionCard(props: AuctionCardProps) {
 }
 
 function TimedDownAuctionCard(props: AuctionCardProps) {
-  const { auction, serverTime } = props
+  const { auction, serverOffsetMs } = props
   // 부모가 하향 진행 경매이면서 pricing이 있을 때만 이 컴포넌트를 렌더링한다.
   const pricing = auction.downPricing!
   const clockPricing = useMemo(() => ({
@@ -63,29 +63,27 @@ function TimedDownAuctionCard(props: AuctionCardProps) {
     dropPrice: pricing.dropPrice,
     priceDropIntervalMs: pricing.priceDropIntervalMs,
     startedAt: pricing.startedAt,
-    serverTime,
   }), [
     auction.startPrice,
     pricing.dropPrice,
     pricing.minimumPrice,
     pricing.priceDropIntervalMs,
     pricing.startedAt,
-    serverTime,
   ])
-  const { currentPrice } = useDownAuctionClock(clockPricing)
+  const { currentPrice } = useDownAuctionClock(clockPricing, serverOffsetMs)
   return <AuctionCardView {...props} currentPrice={currentPrice} />
 }
 
 function AuctionCardView({
   auction,
-  serverTime,
+  serverOffsetMs,
   currentPrice,
   isBookmarked,
   onToggleBookmark,
 }: AuctionCardProps & { currentPrice: number }) {
   const localDeadline = useMemo(
-    () => auction.deadline - (serverTime - Date.now()),
-    [auction.deadline, serverTime],
+    () => auction.deadline - serverOffsetMs,
+    [auction.deadline, serverOffsetMs],
   )
   const countdown = useCountdown(localDeadline)
   const ended = !isOngoing(auction) || countdown.isEnded

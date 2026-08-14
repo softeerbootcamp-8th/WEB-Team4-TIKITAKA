@@ -24,8 +24,10 @@ dependencies {
     implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.5'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.mysql:mysql-connector-j'
@@ -42,6 +44,12 @@ dependencies {
     // AWS S3
     implementation platform('software.amazon.awssdk:bom:2.47.6')
     implementation 'software.amazon.awssdk:s3'
+
+    // Redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // 순수 spring-session-data-redis만으로는 Boot의 자동설정(글루 코드)이 빠져서
+    // SessionRepository 빈이 전혀 안 만들어진다. Boot 스타터를 써야 실제로 활성화된다.
+    implementation 'org.springframework.boot:spring-boot-starter-session-data-redis'
 }
 
 tasks.named('test') {
@@ -50,6 +58,10 @@ tasks.named('test') {
     // 기본 시간대와 무관하게 시각 관련 검증이 흔들리지 않도록 여기서 서울로 고정한다.
     systemProperty 'user.timezone', 'Asia/Seoul'
     finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'app.jar'
 }
 
 tasks.named('jacocoTestReport') {

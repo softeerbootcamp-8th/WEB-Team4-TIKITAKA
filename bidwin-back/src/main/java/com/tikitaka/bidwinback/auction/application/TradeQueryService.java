@@ -2,7 +2,6 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
-import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.TradeException;
@@ -48,7 +47,7 @@ public class TradeQueryService {
                 auction.getId(),
                 auction.getTitle(),
                 resolveThumbnailUrl(auction.getId()),
-                auctionType(auction),
+                AuctionType.from(auction),
                 trade.getStatus(),
                 isBuyer ? ROLE_BUYER : ROLE_SELLER,
                 trade.getFinalPrice(),
@@ -97,10 +96,6 @@ public class TradeQueryService {
                 .findFirst()
                 .map(row -> imageUrlResolver.resolve(row.objectKey()))
                 .orElse(null);
-    }
-
-    private AuctionType auctionType(Auction auction) {
-        return auction instanceof UpAuction ? AuctionType.UP : AuctionType.DOWN;
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {

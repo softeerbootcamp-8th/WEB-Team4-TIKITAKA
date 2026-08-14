@@ -550,6 +550,25 @@ class SessionAuthenticationFilterTest {
     }
 
     @Test
+    void 카테고리_목록은_세션_없이_조회할_수_있다() throws ServletException, IOException {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                HttpMethod.GET.name(),
+                "/api/v1/categories"
+        );
+        AtomicBoolean filterChainInvoked = new AtomicBoolean();
+
+        // when
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) ->
+                filterChainInvoked.set(true)
+        );
+
+        // then
+        assertThat(filterChainInvoked).isTrue();
+        verifyNoInteractions(sessionAuthService);
+    }
+
+    @Test
     void 공개_경매_경로라도_POST는_인증이_필요하다() {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 HttpMethod.POST.name(),

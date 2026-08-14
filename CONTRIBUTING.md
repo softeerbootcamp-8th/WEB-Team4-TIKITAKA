@@ -37,7 +37,7 @@ commit-msg 훅(commitlint)이 이 형식을 강제합니다. 최초 1회 `npm in
 
 ## PR 컨벤션
 
-**제목:** `[타입] 작업 요약` (예: `[Feat] 실시간 입찰 갱신 API 구현`, `[Bug] 동시성 테스트 중 데드락 해결`)
+**제목:** `[타입] 작업 요약` (예: `[Feat] 실시간 입찰 갱신 API 구현`, `[Bug] 동시성 테스트 중 데드락 해결`, `[Release] v1.2.0`)
 
 템플릿은 `.github/PULL_REQUEST_TEMPLATE.md`에 정의되어 있으며 PR 생성 시 자동으로 채워집니다.
 

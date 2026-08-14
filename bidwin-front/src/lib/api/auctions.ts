@@ -4,6 +4,7 @@ import type { ApiResult } from './client'
 export type AuctionType = 'UP' | 'DOWN'
 export type AuctionStatus = 'OPEN' | 'BID_ONGOING' | 'WINNER_DETERMINING' | 'COMPLETED' | 'UNSOLD'
 export type AuctionCategory = 'HOUSEHOLD' | 'FOOD' | 'FURNITURE'
+export type AuctionListStatusFilter = 'ACTIVE' | 'ENDED'
 export type TradeType = 'DELIVERY' | 'DIRECT'
 export type BidType = 'OPEN' | 'SEALED'
 export type AuctionSort = 'recommended' | 'deadline' | 'latest' | 'priceLow' | 'priceHigh'
@@ -131,10 +132,17 @@ export interface BuyNowResponse {
 export interface AuctionListQuery {
   keyword: string
   auctionType: AuctionType | 'ALL'
+  status?: AuctionListStatusFilter
+  categories?: AuctionCategory[]
   sort: AuctionSort
   page: number
   size: number
   asOf?: number
+}
+
+export interface AuctionCategoryOption {
+  code: AuctionCategory
+  label: string
 }
 
 export interface AuctionCreateRequest {
@@ -159,6 +167,7 @@ export interface AuctionCreateResponse {
 }
 
 const API_PATH = '/api/v1/auctions'
+const CATEGORY_API_PATH = '/api/v1/categories'
 
 export function requestAuctionCreate(
   request: AuctionCreateRequest,
@@ -178,8 +187,20 @@ export function requestAuctionList(
   const keyword = query.keyword.trim()
   if (keyword) params.set('keyword', keyword)
   if (query.auctionType !== 'ALL') params.set('auctionType', query.auctionType)
+  if (query.status) params.set('status', query.status)
+  query.categories?.forEach((category) => params.append('category', category))
   if (query.asOf !== undefined) params.set('asOf', String(query.asOf))
   return getJson<AuctionListResponse>(`${API_PATH}?${params.toString()}`, signal)
+}
+
+export function requestAuctionCategories(
+  signal?: AbortSignal,
+): Promise<ApiResult<AuctionCategoryOption[]>> {
+  return getJson<AuctionCategoryOption[]>(CATEGORY_API_PATH, signal)
+}
+
+export function requestAuctionClock(signal?: AbortSignal): Promise<ApiResult<number>> {
+  return getJson<number>(`${API_PATH}/clock`, signal)
 }
 
 export function requestAuctionDetail(

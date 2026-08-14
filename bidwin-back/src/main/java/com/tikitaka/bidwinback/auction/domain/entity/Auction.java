@@ -19,13 +19,32 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(
         name = "Auction",
-        indexes = @Index(
-                name = "idx_auction_status_ended_at",
-                columnList = "status, ended_at"
-        )
+        indexes = {
+                @Index(
+                        name = "idx_auction_status_ended_at",
+                        columnList = "status, ended_at"
+                ),
+                @Index(
+                        name = "idx_auction_start_price_id",
+                        columnList = "auction_type, start_price DESC, id DESC"
+                ),
+                @Index(
+                        name = "idx_auction_current_price_asc_id_desc",
+                        columnList = "auction_type, current_price ASC, id DESC"
+                ),
+                @Index(
+                        name = "idx_auction_current_price_desc_id_desc",
+                        columnList = "auction_type, current_price DESC, id DESC"
+                ),
+                @Index(
+                        name = "idx_auction_snapshot_price",
+                        columnList = "auction_type, completed_at, start_price DESC, "
+                                + "id DESC, started_at, ended_at"
+                )
+        }
 )
 @Inheritance(strategy = InheritanceType.JOINED)
-@DiscriminatorColumn(name = "auction_type")
+@DiscriminatorColumn(name = "auction_type", length = 4)
 @NoArgsConstructor(access = PROTECTED)
 public abstract class Auction extends BaseTimeEntity {
 
@@ -54,9 +73,13 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "start_price", nullable = false)
     private long startPrice;
 
-    // 스키마 변경 전에 생성된 경매는 null일 수 있어 조회 시 Bid 최고가로 보정한다.
+    // 스키마 변경 전 데이터는 null일 수 있어 도메인 조회에서는 시작가로 방어한다.
     @Column(name = "current_price")
     private Long currentPrice;
+
+    // 추천순 조회가 전체 입찰을 매번 집계하지 않도록 Bid 행 수를 누적한다.
+    @Column(name = "bid_count", nullable = false)
+    private long bidCount;
 
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;

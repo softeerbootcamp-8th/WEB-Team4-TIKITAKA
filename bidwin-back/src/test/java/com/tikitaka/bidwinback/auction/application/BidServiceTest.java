@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.application.live.BidPriceCachePreempted;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -21,6 +22,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,9 +55,11 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -92,6 +96,9 @@ class BidServiceTest {
     private SealedBidRepository sealedBidRepository;
 
     @Mock
+    private BidPriceCache bidPriceCache;
+
+    @Mock
     private Member bidder;
 
     @Mock
@@ -111,6 +118,13 @@ class BidServiceTest {
 
     @InjectMocks
     private BidService bidService;
+
+    @BeforeEach
+    void setUpBidPriceCache() {
+        // Mockito는 Long처럼 박싱된 숫자 타입의 기본 반환값을 null이 아닌 0으로 준다.
+        // 스텁 안 해두면 previousPrice가 0으로 잡혀 "Redis에서 선점 성공"으로 오인된다.
+        lenient().when(bidPriceCache.tryWinRace(any(), anyLong())).thenReturn(null);
+    }
 
     @Test
     void 조건부_현재가_갱신에_성공하면_UP_입찰을_저장한다() {
@@ -361,7 +375,10 @@ class BidServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
         verifyNoInteractions(memberRepository, bidRepository);
-        verifyNoInteractions(eventPublisher);
+        // Redis 응답이 없어(previousPrice=null) 실제로 선점했는지 모르므로, 안전망 이벤트는
+        // 그래도 등록해둔다 - 트랜잭션이 실패로 끝나므로 리스너가 재동기화를 시도하게 된다.
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test
@@ -383,7 +400,8 @@ class BidServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(AUCTION_NOT_FOUND);
         verifyNoInteractions(memberRepository, bidRepository);
         verify(bidRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test
@@ -398,7 +416,8 @@ class BidServiceTest {
         assertThat(exception.getErrorCode()).isEqualTo(NOT_UP_AUCTION);
         verifyNoInteractions(memberRepository, bidRepository);
         verify(bidRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new BidPriceCachePreempted(AUCTION_ID, PRICE));
+        verifyNoMoreInteractions(eventPublisher);
     }
 
     @Test

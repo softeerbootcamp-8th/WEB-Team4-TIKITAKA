@@ -44,6 +44,9 @@ class AuctionListServiceTest {
     private AuctionListQueryRepository auctionListQueryRepository;
 
     @Mock
+    private AuctionPricePageQuery auctionPricePageQuery;
+
+    @Mock
     private ImageUrlResolver imageUrlResolver;
 
     private AuctionListService auctionListService;
@@ -53,6 +56,7 @@ class AuctionListServiceTest {
         auctionListService = new AuctionListService(
                 auctionRepository,
                 auctionListQueryRepository,
+                auctionPricePageQuery,
                 imageUrlResolver
         );
         when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
@@ -124,6 +128,26 @@ class AuctionListServiceTest {
     }
 
     @Test
+    void 추천순은_요청_asOf를_무시하고_DB_현재시각을_사용한다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.RECOMMENDED, null, 1, 16, AS_OF)
+        );
+
+        assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(SERVER_TIME));
+        verify(auctionListQueryRepository).count(
+                eq(new AuctionListSearchCondition(
+                        null,
+                        AuctionSort.RECOMMENDED,
+                        null,
+                        SERVER_TIME
+                ))
+        );
+    }
+
+    @Test
     void 전체_개수로_totalPages를_계산하고_페이지_크기만큼_조회한다() {
         when(auctionListQueryRepository.count(any())).thenReturn(3L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(2)))
@@ -137,6 +161,27 @@ class AuctionListServiceTest {
         assertThat(response.totalCount()).isEqualTo(3L);
         assertThat(response.totalPages()).isEqualTo(2);
         assertThat(response.page()).isEqualTo(1);
+    }
+
+    @Test
+    void 가격순은_전체_집계_페이지_쿼리_대신_top_k_조회를_사용한다() {
+        // given
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                null,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        when(auctionListQueryRepository.count(condition)).thenReturn(2L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 2L))
+                .thenReturn(List.of(upRow(1L, null, 100_000L, 0L)));
+
+        // when
+        auctionListService.getList(query(null, AuctionSort.PRICE_LOW, null, 1, 16));
+
+        // then
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 2L);
+        verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
     }
 
     @Test
@@ -223,7 +268,7 @@ class AuctionListServiceTest {
             int size,
             LocalDateTime asOf
     ) {
-        return new AuctionListQuery(type, sort, keyword, page, size, asOf);
+        return new AuctionListQuery(type, sort, keyword, null, List.of(), page, size, asOf);
     }
 
     private AuctionListRow upRow(long id, String thumbnailObjectKey, long currentPrice, long bidCount) {

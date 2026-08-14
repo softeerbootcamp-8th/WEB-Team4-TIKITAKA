@@ -31,16 +31,16 @@ class AuctionTradeRepositoryIntegrationTest {
     private EntityManager entityManager;
 
     @Test
-    void 판매자는_CONFIRMED이고_구매자는_WAITING_CONFIRM인_거래만_조회한다() {
+    void 구매자와_판매자는_거래_완료_전_모든_단계에서_진행_중_거래를_조회한다() {
         // given
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         Member member = persistMember("m" + suffix);
         Member counterparty = persistMember("c" + suffix);
 
+        AuctionTrade sellerWaiting = persistTrade(member, counterparty, TradeStatus.WAITING_CONFIRM, "판매 확인 대기");
         AuctionTrade sellerConfirmed = persistTrade(member, counterparty, TradeStatus.CONFIRMED, "판매 확인 완료");
-        persistTrade(member, counterparty, TradeStatus.WAITING_CONFIRM, "판매 확인 대기");
         AuctionTrade buyerWaiting = persistTrade(counterparty, member, TradeStatus.WAITING_CONFIRM, "구매 확인 대기");
-        persistTrade(counterparty, member, TradeStatus.CONFIRMED, "구매 확인 완료");
+        AuctionTrade buyerConfirmed = persistTrade(counterparty, member, TradeStatus.CONFIRMED, "구매 확인 완료");
         entityManager.flush();
         entityManager.clear();
 
@@ -54,7 +54,42 @@ class AuctionTradeRepositoryIntegrationTest {
         // then
         assertThat(activeTrades)
                 .extracting(AuctionTrade::getId)
-                .containsExactlyInAnyOrder(sellerConfirmed.getId(), buyerWaiting.getId());
+                .containsExactlyInAnyOrder(
+                        sellerWaiting.getId(),
+                        sellerConfirmed.getId(),
+                        buyerWaiting.getId(),
+                        buyerConfirmed.getId()
+                );
+    }
+
+    @Test
+    void 완료된_거래는_구매자와_판매자의_진행_중_거래에서_제외한다() {
+        // given
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        Member member = persistMember("tm" + suffix);
+        Member counterparty = persistMember("tc" + suffix);
+        AuctionTrade active = persistTrade(
+                member,
+                counterparty,
+                TradeStatus.CONFIRMED,
+                "진행 중 거래"
+        );
+        persistTrade(member, counterparty, TradeStatus.COMPLETED, "판매 완료 거래");
+        persistTrade(counterparty, member, TradeStatus.COMPLETED, "구매 완료 거래");
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        List<AuctionTrade> activeTrades = auctionTradeRepository.findActiveTrades(
+                member.getId(),
+                TradeStatus.WAITING_CONFIRM,
+                TradeStatus.CONFIRMED
+        );
+
+        // then
+        assertThat(activeTrades)
+                .extracting(AuctionTrade::getId)
+                .containsExactly(active.getId());
     }
 
     @Test

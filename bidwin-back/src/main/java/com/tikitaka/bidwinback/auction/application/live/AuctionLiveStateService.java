@@ -2,8 +2,6 @@ package com.tikitaka.bidwinback.auction.application.live;
 
 import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
-import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
-import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -123,7 +121,7 @@ public class AuctionLiveStateService {
             Map<Long, Long> sealedBidCounts,
             Map<Long, Long> finalPrices
     ) {
-        AuctionType auctionType = auctionTypeOf(auction);
+        AuctionType auctionType = AuctionType.from(auction);
         AuctionBidSummary bidSummary = bidSummaries.get(auction.getId());
 
         return new AuctionLiveState(
@@ -134,16 +132,6 @@ public class AuctionLiveStateService {
                 currentPrice(auction, auctionType, databaseTime, bidSummary, finalPrices),
                 bidCount(auction, auctionType, bidSummary, sealedBidCounts)
         );
-    }
-
-    private AuctionType auctionTypeOf(Auction auction) {
-        if (auction instanceof UpAuction) {
-            return AuctionType.UP;
-        }
-        if (auction instanceof DownAuction) {
-            return AuctionType.DOWN;
-        }
-        throw new IllegalStateException("지원하지 않는 경매 유형입니다.");
     }
 
     private long bidCount(

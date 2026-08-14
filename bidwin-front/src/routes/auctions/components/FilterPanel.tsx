@@ -1,27 +1,28 @@
 import { Plus, RotateCcw } from 'lucide-react'
 import { FILTER_TEXT } from '../constants'
-import { FILTER_GROUPS, countSelectedOptions, summarizeGroup } from '../filters'
-import type { FilterSelection } from '../filters'
+import { hasNonDefaultSelection, summarizeGroup } from '../filters'
+import type { FilterGroup, FilterSelection } from '../filters'
 
 /*
  * 좌측 필터 패널. 그리는 내용은 전부 filters.ts의 FILTER_GROUPS에서 온다.
  * 그룹이 하나도 없으면 안내 문구만 두고, 항목이 추가되는 순간 행과 + 버튼이 생긴다.
  */
 function FilterPanel({
+  groups,
   selection,
   isEnabled,
   onToggleEnabled,
   onOpenGroup,
   onReset,
 }: {
+  groups: readonly FilterGroup[]
   selection: FilterSelection
   isEnabled: boolean
   onToggleEnabled: (next: boolean) => void
   onOpenGroup: (groupId: string) => void
   onReset: () => void
 }) {
-  const hasGroups = FILTER_GROUPS.length > 0
-  const selectedCount = countSelectedOptions(selection)
+  const hasGroups = groups.length > 0
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -53,7 +54,7 @@ function FilterPanel({
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-hairline">
         {hasGroups ? (
           <ul className={isEnabled ? '' : 'pointer-events-none opacity-50'}>
-            {FILTER_GROUPS.map((group) => {
+            {groups.map((group) => {
               const summary = summarizeGroup(group, selection)
               return (
                 <li key={group.id} className="border-b border-hairline">
@@ -92,7 +93,7 @@ function FilterPanel({
         <button
           type="button"
           onClick={onReset}
-          disabled={selectedCount === 0}
+          disabled={!hasNonDefaultSelection(selection)}
           className="flex items-center gap-xs text-sm font-semibold text-body transition-colors hover:text-ink disabled:cursor-not-allowed disabled:text-muted-soft disabled:hover:text-muted-soft"
         >
           <RotateCcw size={14} />

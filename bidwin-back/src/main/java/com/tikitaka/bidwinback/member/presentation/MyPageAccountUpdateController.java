@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -54,6 +55,7 @@ public class MyPageAccountUpdateController {
             throw new AuthException(ErrorCode.UNAUTHENTICATED);
         }
 
+        // 이 호출이 반환된 시점엔 비밀번호 변경이 이미 DB에 커밋되어 있다.
         AuthMember refreshedAuth = passwordChangeService.change(
                 authMember,
                 request.currentPassword(),
@@ -61,8 +63,22 @@ public class MyPageAccountUpdateController {
                 request.newPasswordConfirm()
         );
 
-        servletRequest.changeSessionId();
-        session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+        try {
+            servletRequest.changeSessionId();
+            session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+        } catch (DataAccessException exception) {
+            // 비밀번호 변경 자체는 이미 성공(커밋)했다. changeSessionId()는 세션ID를 이미
+            // 바꿔놨고 IMMEDIATE flush라 다음 세션 쓰기에서 그 rename이 Redis에 반영될 수
+            // 있는데, 그 직후 이 catch로 빠졌다는 건 뒤이은 setAttribute()가 실패했다는
+            // 뜻이다. SessionRepositoryFilter의 최종 커밋이 이 반쯤 바뀐 세션을 다시 저장
+            // 시도하지 않도록 지금 명시적으로 폐기하고, 예전 버전을 그대로 들고 있던
+            // 세션이 아니라 재로그인이 필요한 상태임을 바로 알린다.
+            try {
+                session.invalidate();
+            } catch (IllegalStateException | DataAccessException ignored) {
+            }
+            throw new AuthException(ErrorCode.UNAUTHENTICATED);
+        }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }

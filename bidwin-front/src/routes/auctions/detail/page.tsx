@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   TrendingDown,
   Truck,
+  WifiOff,
 } from 'lucide-react'
 import type { ChangeEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -22,9 +23,11 @@ import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import TextInput from '../../../components/ui/TextInput'
 import { useAuctionEvents } from '../../../hooks/useAuctionEvents'
+import type { ConnectionStatus } from '../../../hooks/useAuctionEvents'
 import { useAuth } from '../../../hooks/useAuth'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
+import { useServerClock } from '../../../hooks/useServerClock'
 import { useToast } from '../../../hooks/useToast'
 import {
   requestAuctionDetail,
@@ -113,7 +116,6 @@ function AuctionDetailPage() {
   const [auction, setAuction] = useState<AuctionDetail | null>(null)
   const [bidHistory, setBidHistory] = useState<BidHistoryItem[]>([])
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [serverOffsetMs, setServerOffsetMs] = useState(0)
   const [isLoading, setIsLoading] = useState(validAuctionId)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(!validAuctionId)
@@ -129,6 +131,7 @@ function AuctionDetailPage() {
   const { showToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
+  const serverOffsetMs = useServerClock(auction?.serverTime)
 
   useEffect(() => {
     if (!validAuctionId) {
@@ -139,7 +142,6 @@ function AuctionDetailPage() {
 
     const controller = new AbortController()
     let active = true
-    const requestedAt = Date.now()
 
     setIsLoading(true)
     setLoadError(null)
@@ -163,11 +165,7 @@ function AuctionDetailPage() {
         return
       }
 
-      const receivedAt = Date.now()
       setAuction(detailResult.data)
-      setServerOffsetMs(
-        detailResult.data.serverTime - Math.round((requestedAt + receivedAt) / 2),
-      )
 
       if (historyResult.ok) {
         setBidHistory((current) => mergeBidHistory(current, historyResult.data.bidLog))
@@ -191,7 +189,7 @@ function AuctionDetailPage() {
     buyNowKeyRef.current = null
   }, [auctionId])
 
-  const connectionStatus = useAuctionEvents(
+  const { status: connectionStatus, reconnect } = useAuctionEvents(
     'detail',
     auction ? [auction.auctionId] : [],
     {
@@ -227,9 +225,11 @@ function AuctionDetailPage() {
         })
       },
       onBidCreated: (bid) => {
+        setHistoryError(null)
         setBidHistory((current) => mergeBidHistory(current, [bid]))
       },
       onBidHistorySnapshot: (history) => {
+        setHistoryError(null)
         setBidHistory((current) => mergeBidHistory(current, history.bidLog))
         setAuction((current) => (
           current?.auctionType === 'UP' && history.bidCount > current.bidCount
@@ -262,6 +262,20 @@ function AuctionDetailPage() {
     }
   }
 
+  function refreshBidHistory() {
+    void requestBidHistory(auctionId).then((result) => {
+      if (!result.ok) {
+        setHistoryError(result.message)
+        return
+      }
+      setHistoryError(null)
+      setBidHistory((current) => mergeBidHistory(current, result.data.bidLog))
+      setAuction((current) => current?.auctionType === 'UP'
+        ? { ...current, bidCount: Math.max(current.bidCount, result.data.bidCount) }
+        : current)
+    })
+  }
+
   async function handleBid(price: number, bidType: BidType) {
     if (!ensureAuthenticated() || pendingAction !== null) return false
 
@@ -284,7 +298,12 @@ function AuctionDetailPage() {
       setHasSubmittedSealedBid(true)
       showToast('밀봉 입찰을 제출했어요. 마감 후 결과가 공개됩니다.', 'success')
     } else {
-      showToast(`${formatWon(result.data.price)}으로 입찰했어요.`, 'success')
+      const acceptedPrice = result.data.price
+      setAuction((current) => current?.auctionType === 'UP'
+        ? { ...current, currentPrice: Math.max(current.currentPrice, acceptedPrice) }
+        : current)
+      refreshBidHistory()
+      showToast(`${formatWon(acceptedPrice)}으로 입찰했어요.`, 'success')
     }
     return true
   }
@@ -351,61 +370,92 @@ function AuctionDetailPage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1200px] px-lg py-xl">
-      <AuctionHeader
-        auction={auction}
-        connectionStatus={connectionStatus}
-      />
+    <>
+      <main className="mx-auto max-w-[1200px] px-lg py-xl">
+        <AuctionHeader
+          auction={auction}
+          connectionStatus={connectionStatus}
+        />
 
-      <div className="mt-lg grid grid-cols-1 gap-xl lg:grid-cols-[1fr_380px]">
-        <div className="order-2 flex flex-col gap-xl lg:order-1">
-          <AuctionGallery images={auction.images} title={auction.title} />
-          <ProductTabs auction={auction} />
-          {auction.auctionType === 'UP' ? (
-            <BidHistoryPanel
-              bidCount={auction.bidCount}
-              bidLog={bidHistory}
-              ownBidEntryIds={ownBidEntryIds}
-              sealedBidActive={
-                isOngoing(auction.status)
-                && Date.now() + serverOffsetMs >= auction.sealedBidStartsAt
-                && Date.now() + serverOffsetMs < auction.deadline
-              }
-              error={historyError}
-              onRetry={() => setRetryToken((value) => value + 1)}
-            />
-          ) : (
-            <PriceDropTimeline auction={auction} serverOffsetMs={serverOffsetMs} />
-          )}
-        </div>
+        <div className="mt-lg grid grid-cols-1 gap-xl lg:grid-cols-[1fr_380px]">
+          <div className="order-2 flex flex-col gap-xl lg:order-1">
+            <AuctionGallery images={auction.images} title={auction.title} />
+            <ProductTabs auction={auction} />
+            {auction.auctionType === 'UP' ? (
+              <BidHistoryPanel
+                bidCount={auction.bidCount}
+                bidLog={bidHistory}
+                ownBidEntryIds={ownBidEntryIds}
+                sealedBidActive={
+                  isOngoing(auction.status)
+                  && Date.now() + serverOffsetMs >= auction.sealedBidStartsAt
+                  && Date.now() + serverOffsetMs < auction.deadline
+                }
+                error={historyError}
+                onRetry={() => setRetryToken((value) => value + 1)}
+              />
+            ) : (
+              <PriceDropTimeline auction={auction} serverOffsetMs={serverOffsetMs} />
+            )}
+          </div>
 
-        <div className="order-1 lg:sticky lg:top-[88px] lg:order-2 lg:max-h-[calc(100dvh-104px)] lg:self-start lg:overflow-y-auto">
-          {auction.auctionType === 'UP' ? (
-            <UpBidPanel
-              auction={auction}
-              serverOffsetMs={serverOffsetMs}
-              pendingAction={pendingAction}
-              actionError={actionError}
-              hasSubmittedSealedBid={hasSubmittedSealedBid}
-              authPending={isAuthenticated === null}
-              onClearError={() => setActionError(null)}
-              onBid={handleBid}
-              onBuyNow={handleBuyNow}
-            />
-          ) : (
-            <DownBuyPanel
-              auction={auction}
-              serverOffsetMs={serverOffsetMs}
-              pendingAction={pendingAction}
-              actionError={actionError}
-              authPending={isAuthenticated === null}
-              onClearError={() => setActionError(null)}
-              onBuyNow={handleBuyNow}
-            />
-          )}
+          <div className="order-1 lg:sticky lg:top-[88px] lg:order-2 lg:max-h-[calc(100dvh-104px)] lg:self-start lg:overflow-y-auto">
+            {auction.auctionType === 'UP' ? (
+              <UpBidPanel
+                auction={auction}
+                serverOffsetMs={serverOffsetMs}
+                pendingAction={pendingAction}
+                actionError={actionError}
+                hasSubmittedSealedBid={hasSubmittedSealedBid}
+                authPending={isAuthenticated === null}
+                onClearError={() => setActionError(null)}
+                onBid={handleBid}
+                onBuyNow={handleBuyNow}
+              />
+            ) : (
+              <DownBuyPanel
+                auction={auction}
+                serverOffsetMs={serverOffsetMs}
+                pendingAction={pendingAction}
+                actionError={actionError}
+                authPending={isAuthenticated === null}
+                onClearError={() => setActionError(null)}
+                onBuyNow={handleBuyNow}
+              />
+            )}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+      {connectionStatus === 'disconnected' && <ReconnectDialog onReconnect={reconnect} />}
+    </>
+  )
+}
+
+function ReconnectDialog({ onReconnect }: { onReconnect: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 px-lg">
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reconnect-title"
+        className="flex w-full max-w-[420px] flex-col items-center gap-lg text-center shadow-soft"
+      >
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-down-tint text-down">
+          <WifiOff size={24} />
+        </span>
+        <div>
+          <h2 id="reconnect-title" className="text-xl font-bold text-ink">
+            실시간 연결이 끊겼어요
+          </h2>
+          <p className="mt-xs text-sm leading-relaxed text-body">
+            최신 경매 시간과 가격을 확인하려면 다시 연결해주세요.
+          </p>
+        </div>
+        <Button size="lg" className="w-full" onClick={onReconnect} autoFocus>
+          다시 연결하기
+        </Button>
+      </Card>
+    </div>
   )
 }
 
@@ -448,14 +498,16 @@ function AuctionHeader({
   connectionStatus,
 }: {
   auction: AuctionDetail
-  connectionStatus: ReturnType<typeof useAuctionEvents>
+  connectionStatus: ConnectionStatus
 }) {
   const [interested, setInterested] = useState(false)
   const liveLabel = connectionStatus === 'open'
     ? '실시간 연결됨'
     : connectionStatus === 'reconnecting'
       ? '실시간 재연결 중'
-      : '실시간 연결 중'
+      : connectionStatus === 'disconnected'
+        ? '실시간 연결 끊김'
+        : '실시간 연결 중'
 
   return (
     <div className="flex flex-col gap-sm">
@@ -657,6 +709,7 @@ function UpBidPanel({
   const nextMinBid = auction.currentPrice + BID_UNIT
   const [amount, setAmount] = useState(nextMinBid)
   const [inputError, setInputError] = useState<string | null>(null)
+  const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const ended = deadline.isEnded || !isOngoing(auction.status)
   const sealedBidActive = !ended && sealedStart.isEnded
   const canBuyNow = (
@@ -668,7 +721,7 @@ function UpBidPanel({
   const busy = pendingAction !== null
 
   function handleChip(increment: number) {
-    setAmount(auction.currentPrice + increment)
+    setAmount((current) => Math.max(current, auction.currentPrice) + increment)
     setInputError(null)
     onClearError()
   }
@@ -732,8 +785,12 @@ function UpBidPanel({
       {!ended && (
         <>
           {sealedBidActive && (
-            <p className="rounded-md bg-primary-tint p-sm text-xs leading-relaxed text-primary">
-              입찰 금액은 마감 전까지 공개되지 않으며 한 번만 제출할 수 있어요.
+            <p
+              role="status"
+              className="rounded-md bg-primary-tint p-sm text-xs leading-relaxed text-primary"
+            >
+              현재 밀봉입찰 상태입니다. 입찰 금액은 마감 전까지 공개되지 않으며,
+              단 1회만 입찰할 수 있고 즉시구매는 이용할 수 없어요.
             </p>
           )}
 
@@ -773,15 +830,30 @@ function UpBidPanel({
           </Button>
 
           {canBuyNow && (
-            <Button
-              variant="secondary"
-              onClick={onBuyNow}
-              disabled={busy || authPending}
-            >
-              {pendingAction === 'buy'
-                ? '구매 처리 중…'
-                : `즉시구매 ${formatWon(auction.buyNowPrice!)}`}
-            </Button>
+            <div className="flex flex-col gap-sm">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  onClearError()
+                  void onBuyNow()
+                }}
+                disabled={busy || authPending || !buyNowConfirmed}
+              >
+                {pendingAction === 'buy'
+                  ? '구매 처리 중…'
+                  : `즉시구매 ${formatWon(auction.buyNowPrice!)}`}
+              </Button>
+              <label className="flex cursor-pointer items-start gap-xs text-xs leading-relaxed text-body">
+                <input
+                  type="checkbox"
+                  checked={buyNowConfirmed}
+                  onChange={(event) => setBuyNowConfirmed(event.target.checked)}
+                  disabled={busy || authPending}
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                상품과 즉시구매 가격을 확인했으며 구매에 동의합니다.
+              </label>
+            </div>
           )}
         </>
       )}
@@ -808,7 +880,8 @@ function DownBuyPanel({
   onClearError,
   onBuyNow,
 }: DownBuyPanelProps) {
-  const clock = useDownAuctionClock(auction)
+  const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
+  const clock = useDownAuctionClock(auction, serverOffsetMs)
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const ended = deadline.isEnded || auction.status !== 'OPEN'
   const currentPrice = ended && auction.finalPrice !== null
@@ -871,12 +944,22 @@ function DownBuyPanel({
               onClearError()
               void onBuyNow()
             }}
-            disabled={pendingAction !== null || authPending}
+            disabled={pendingAction !== null || authPending || !buyNowConfirmed}
           >
             {pendingAction === 'buy'
               ? '구매 처리 중…'
               : `${formatWon(currentPrice)}에 구매하기`}
           </Button>
+          <label className="flex cursor-pointer items-start gap-xs text-xs leading-relaxed text-body">
+            <input
+              type="checkbox"
+              checked={buyNowConfirmed}
+              onChange={(event) => setBuyNowConfirmed(event.target.checked)}
+              disabled={pendingAction !== null || authPending}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            상품과 현재 가격을 확인했으며 구매에 동의합니다.
+          </label>
           {actionError && <p className="text-sm text-down">{actionError}</p>}
           <p className="text-center text-xs text-muted">
             서버의 구매 확정 시각에 계산된 가격으로 선착순 거래가 확정됩니다.
@@ -995,7 +1078,7 @@ function PriceDropTimeline({
   serverOffsetMs: number
 }) {
   // 진행 중에는 매 tick마다 새 하락 내역이 즉시 추가되도록 재렌더링한다.
-  useDownAuctionClock(auction)
+  useDownAuctionClock(auction, serverOffsetMs)
   const completedAt = auction.finalPrice === null
     ? null
     : auction.startedAt
