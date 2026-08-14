@@ -8,6 +8,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionDuration;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
+import com.tikitaka.bidwinback.auction.domain.enums.PriceDropInterval;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
@@ -128,6 +129,7 @@ public class AuctionCreateService {
         if (request.minimumPrice() >= request.startPrice()) {
             throw new AuctionException(INVALID_MINIMUM_PRICE);
         }
+        PriceDropInterval.from(request.priceDropInterval());
     }
 
     private void validatePriceUnit(long price, String fieldName) {

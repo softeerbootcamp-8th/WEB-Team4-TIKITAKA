@@ -38,6 +38,14 @@ export const AUCTION_DURATION_OPTIONS = [
   { value: '360', label: '6시간' },
 ] as const
 
+/* 백엔드 PriceDropInterval enum(1/3/5/10분)과 1:1 대응. */
+export const PRICE_DROP_INTERVAL_OPTIONS = [
+  { value: '1', label: '1분' },
+  { value: '3', label: '3분' },
+  { value: '5', label: '5분' },
+  { value: '10', label: '10분' },
+] as const
+
 export const TEXT = {
   pageTitle: '경매 등록',
   pageSubtitle: '급처 물품 정보를 입력하고 사진을 올려 경매를 시작해보세요.',
@@ -62,7 +70,6 @@ export const TEXT = {
   minimumPriceLabel: '최저가',
   dropPriceLabel: '인하 금액',
   priceDropIntervalLabel: '인하 주기',
-  priceDropIntervalPlaceholder: '몇 분마다 내릴지 입력하세요',
 
   submit: '경매 등록하기',
   submitting: '등록 처리 중…',
@@ -87,7 +94,7 @@ export const ERROR_MESSAGE = {
   invalidMinimumPrice: `최저가는 ${MIN_PRICE.toLocaleString('ko-KR')}원 이상으로 입력해주세요.`,
   minimumPriceMustBeLowerThanStartPrice: '최저가는 시작가보다 낮아야 해요.',
   invalidDropPrice: '인하 금액은 0보다 큰 숫자로 입력해주세요.',
-  invalidPriceDropInterval: '인하 주기는 0보다 큰 숫자(분)로 입력해주세요.',
+  invalidPriceDropInterval: '인하 주기는 1분/3분/5분/10분 중에서 선택해주세요.',
   noImages: '상품 이미지를 1장 이상 올려주세요.',
   imagesUploading: '이미지 업로드가 끝날 때까지 기다려주세요.',
   imageUploadFailed: '이미지 업로드에 실패했어요. 다시 시도해주세요.',

@@ -27,6 +27,7 @@ import {
   ERROR_MESSAGE,
   MAX_IMAGE_COUNT,
   MAX_IMAGE_SIZE_BYTES,
+  PRICE_DROP_INTERVAL_OPTIONS,
   TEXT,
   TRADE_TYPE_OPTIONS,
 } from './constants'
@@ -41,6 +42,7 @@ const ROUTE = {
 type AuctionType = (typeof AUCTION_TYPE_OPTIONS)[number]['value']
 type AuctionDurationMinutes = (typeof AUCTION_DURATION_OPTIONS)[number]['value']
 type TradeType = (typeof TRADE_TYPE_OPTIONS)[number]['value']
+type PriceDropIntervalMinutes = (typeof PRICE_DROP_INTERVAL_OPTIONS)[number]['value']
 
 let nextImageItemId = 0
 function createImageItemId() {
@@ -75,7 +77,9 @@ function AuctionRegisterPage() {
   const [buyNowPrice, setBuyNowPrice] = useState('')
   const [minimumPrice, setMinimumPrice] = useState('')
   const [dropPrice, setDropPrice] = useState('')
-  const [priceDropInterval, setPriceDropInterval] = useState('')
+  const [priceDropInterval, setPriceDropInterval] = useState<PriceDropIntervalMinutes>(
+    PRICE_DROP_INTERVAL_OPTIONS[0].value,
+  )
 
   const [images, setImages] = useState<AuctionImageItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -405,15 +409,11 @@ function AuctionRegisterPage() {
                 value={formatPriceDigits(dropPrice)}
                 onChange={handlePriceChange(setDropPrice)}
               />
-              <TextInput
+              <SegmentedControl
                 label={TEXT.priceDropIntervalLabel}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                suffix="분"
+                options={PRICE_DROP_INTERVAL_OPTIONS}
                 value={priceDropInterval}
-                onChange={handleFieldChange(setPriceDropInterval)}
-                placeholder={TEXT.priceDropIntervalPlaceholder}
+                onChange={setPriceDropInterval}
               />
             </>
           )}

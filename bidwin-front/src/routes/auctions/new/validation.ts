@@ -1,4 +1,10 @@
-import { CONTACT_MAX_LENGTH, ERROR_MESSAGE, MIN_PRICE, TITLE_MAX_LENGTH } from './constants'
+import {
+  CONTACT_MAX_LENGTH,
+  ERROR_MESSAGE,
+  MIN_PRICE,
+  PRICE_DROP_INTERVAL_OPTIONS,
+  TITLE_MAX_LENGTH,
+} from './constants'
 
 /* 백엔드 AuctionCreateRequest.contact와 같은 기준(하이픈 없는 휴대폰 번호). */
 const CONTACT_PATTERN = /^01[016789]\d{7,8}$/
@@ -53,8 +59,10 @@ function validateAuctionFields(fields: AuctionFormFields) {
   const dropPrice = toPositiveNumber(fields.dropPrice)
   if (dropPrice === null || dropPrice <= 0) return ERROR_MESSAGE.invalidDropPrice
 
-  const priceDropInterval = toPositiveNumber(fields.priceDropInterval)
-  if (priceDropInterval === null || priceDropInterval <= 0) {
+  const isAllowedPriceDropInterval = PRICE_DROP_INTERVAL_OPTIONS.some(
+    (option) => option.value === fields.priceDropInterval,
+  )
+  if (!isAllowedPriceDropInterval) {
     return ERROR_MESSAGE.invalidPriceDropInterval
   }
 

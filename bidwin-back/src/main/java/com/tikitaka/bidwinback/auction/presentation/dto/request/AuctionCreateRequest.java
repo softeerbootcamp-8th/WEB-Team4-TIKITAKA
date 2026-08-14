@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -60,7 +59,7 @@ public record AuctionCreateRequest(
         @Min(value = 1_000, message = "인하 금액은 1,000원 이상이어야 합니다.")
         Long dropPrice,
 
-        @Positive(message = "인하 주기는 0보다 커야 합니다.")
+        // 1/3/5/10(분)만 허용되며, 실제 검증은 서비스에서 수행한다.
         Long priceDropInterval,
 
         // presign 응답의 uploadId 목록. 순서가 곧 노출 순서(첫 장이 대표 이미지)다.

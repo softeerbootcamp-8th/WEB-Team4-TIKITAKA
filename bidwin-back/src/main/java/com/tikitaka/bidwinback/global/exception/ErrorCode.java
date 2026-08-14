@@ -209,6 +209,11 @@ public enum ErrorCode {
             "AUCTION_400_9",
             "지원하지 않는 정렬 기준입니다."
     ),
+    INVALID_PRICE_DROP_INTERVAL(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_10",
+            "인하 주기는 1분/3분/5분/10분 중에서 선택해야 합니다."
+    ),
 
     // Upload
     UNSUPPORTED_IMAGE_TYPE(
