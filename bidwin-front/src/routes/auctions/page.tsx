@@ -56,7 +56,7 @@ function AuctionListPage() {
   const [bookmarks, setBookmarks] = useState<ReadonlySet<number>>(() => new Set())
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const serverOffsetMs = useServerClock(response?.serverTime)
+  const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -116,6 +116,7 @@ function AuctionListPage() {
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {
+    onHeartbeat: synchronize,
     onState: (state) => {
       setResponse((current) => {
         if (!current) return current

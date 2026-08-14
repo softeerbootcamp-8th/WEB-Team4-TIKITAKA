@@ -131,7 +131,7 @@ function AuctionDetailPage() {
   const { showToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
-  const serverOffsetMs = useServerClock(auction?.serverTime)
+  const { serverOffsetMs, synchronize } = useServerClock(auction?.serverTime)
 
   useEffect(() => {
     if (!validAuctionId) {
@@ -193,6 +193,7 @@ function AuctionDetailPage() {
     'detail',
     auction ? [auction.auctionId] : [],
     {
+      onHeartbeat: synchronize,
       onState: (state) => {
         setAuction((current) => {
           if (

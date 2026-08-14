@@ -47,7 +47,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const serverOffsetMs = useServerClock(response?.serverTime)
+  const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -72,6 +72,7 @@ function HomePage() {
 
   const auctions = response?.items ?? []
   useAuctionEvents('list', auctions.map((auction) => auction.auctionId), {
+    onHeartbeat: synchronize,
     onState: (state) => {
       setResponse((current) => {
         if (!current) return current
