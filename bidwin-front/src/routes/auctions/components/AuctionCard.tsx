@@ -1,4 +1,4 @@
-import { Bookmark, Clock, Gavel, ImageIcon, TrendingDown, TrendingUp } from 'lucide-react'
+import { Clock, Gavel, ImageIcon, TrendingDown, TrendingUp } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useCountdown } from '../../../hooks/useCountdown'
@@ -41,8 +41,6 @@ function AuctionTypeBadge({ auctionType, overlay }: {
 interface AuctionCardProps {
   auction: AuctionSummary
   serverOffsetMs: number
-  isBookmarked: boolean
-  onToggleBookmark: (auctionId: number) => void
 }
 
 function AuctionCard(props: AuctionCardProps) {
@@ -78,8 +76,6 @@ function AuctionCardView({
   auction,
   serverOffsetMs,
   currentPrice,
-  isBookmarked,
-  onToggleBookmark,
 }: AuctionCardProps & { currentPrice: number }) {
   const localDeadline = useMemo(
     () => auction.deadline - serverOffsetMs,
@@ -99,16 +95,6 @@ function AuctionCardView({
         aria-label={auction.title}
         className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       />
-
-      <button
-        type="button"
-        onClick={() => onToggleBookmark(auction.auctionId)}
-        aria-label={isBookmarked ? CARD_TEXT.bookmarkOn : CARD_TEXT.bookmarkOff}
-        aria-pressed={isBookmarked}
-        className={`absolute right-4 top-4 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-canvas/80 backdrop-blur-sm transition-colors hover:bg-canvas ${isBookmarked ? 'text-ink' : 'text-muted'}`}
-      >
-        <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
-      </button>
 
       <div className={`relative ${THUMBNAIL_CLASS}`}>
         {auction.thumbnailUrl ? (

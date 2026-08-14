@@ -1,8 +1,6 @@
 import {
   BadgeCheck,
   Clock,
-  Flag,
-  Heart,
   ImageOff,
   ShieldCheck,
   TrendingDown,
@@ -501,7 +499,6 @@ function AuctionHeader({
   auction: AuctionDetail
   connectionStatus: ConnectionStatus
 }) {
-  const [interested, setInterested] = useState(false)
   const liveLabel = connectionStatus === 'open'
     ? '실시간 연결됨'
     : connectionStatus === 'reconnecting'
@@ -514,39 +511,14 @@ function AuctionHeader({
     <div className="flex flex-col gap-sm">
       <span className="text-xs text-muted">{CATEGORY_LABEL[auction.category]}</span>
 
-      <div className="flex flex-wrap items-start justify-between gap-sm">
-        <div>
-          <div className="flex flex-wrap items-center gap-xs">
-            <Badge tone={STATUS_BADGE_TONE[auction.status]}>
-              {STATUS_LABEL[auction.status]}
-            </Badge>
-            <span className="text-xs text-muted" aria-live="polite">{liveLabel}</span>
-          </div>
-          <h1 className="mt-xs text-2xl font-bold text-ink">{auction.title}</h1>
+      <div>
+        <div className="flex flex-wrap items-center gap-xs">
+          <Badge tone={STATUS_BADGE_TONE[auction.status]}>
+            {STATUS_LABEL[auction.status]}
+          </Badge>
+          <span className="text-xs text-muted" aria-live="polite">{liveLabel}</span>
         </div>
-
-        <div className="flex shrink-0 gap-xs">
-          <button
-            type="button"
-            onClick={() => setInterested((current) => !current)}
-            aria-pressed={interested}
-            className={`flex h-9 items-center gap-1 rounded-pill border px-base text-xs font-semibold transition-colors ${
-              interested
-                ? 'border-down-tint bg-down-tint text-down'
-                : 'border-hairline bg-canvas text-body hover:bg-surface-strong'
-            }`}
-          >
-            <Heart size={14} fill={interested ? 'currentColor' : 'none'} />
-            관심
-          </button>
-          <button
-            type="button"
-            className="flex h-9 items-center gap-1 rounded-pill border border-hairline bg-canvas px-base text-xs font-semibold text-body hover:bg-surface-strong"
-          >
-            <Flag size={14} />
-            신고
-          </button>
-        </div>
+        <h1 className="mt-xs text-2xl font-bold text-ink">{auction.title}</h1>
       </div>
     </div>
   )

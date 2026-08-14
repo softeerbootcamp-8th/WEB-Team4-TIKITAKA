@@ -53,7 +53,6 @@ function AuctionListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const [bookmarks, setBookmarks] = useState<ReadonlySet<number>>(() => new Set())
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
@@ -144,14 +143,6 @@ function AuctionListPage() {
     listRef.current?.scrollTo({ top: 0 })
   }
 
-  function toggleBookmark(auctionId: number) {
-    setBookmarks((current) => {
-      const next = new Set(current)
-      if (!next.delete(auctionId)) next.add(auctionId)
-      return next
-    })
-  }
-
   function toggleFilters(next: boolean) {
     setIsFilterEnabled(next)
     listRef.current?.scrollTo({ top: 0 })
@@ -237,8 +228,6 @@ function AuctionListPage() {
                     key={auction.auctionId}
                     auction={auction}
                     serverOffsetMs={serverOffsetMs}
-                    isBookmarked={bookmarks.has(auction.auctionId)}
-                    onToggleBookmark={toggleBookmark}
                   />
                 ))}
               </div>
