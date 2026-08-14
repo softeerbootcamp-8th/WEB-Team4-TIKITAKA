@@ -1,4 +1,4 @@
-import { LogOut, Search } from 'lucide-react'
+import { LogOut, Menu, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, createSearchParams, useLocation, useNavigate } from 'react-router-dom'
@@ -24,6 +24,7 @@ function TopNav() {
     : ''
   const [keyword, setKeyword] = useState(currentKeyword)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
@@ -75,12 +76,12 @@ function TopNav() {
   )
 
   return (
-    <header className="sticky top-0 z-40 h-16 border-b border-hairline bg-canvas">
+    <header className="relative h-16 sticky top-0 z-40 border-b border-hairline bg-canvas">
       <div className="mx-auto flex h-full max-w-[1200px] items-center gap-sm px-base sm:gap-xl sm:px-lg">
         <Link to="/" aria-label="비드윈 홈" className="shrink-0">
           <img src={bidwinLogo} alt="" className="block h-8 w-auto sm:h-10" />
         </Link>
-        <nav className="hidden flex-1 items-center gap-lg lg:flex">
+        <nav className="hidden flex-1 items-center gap-md md:flex">
           {NAV_LINKS.filter((link) => !link.authenticatedOnly || isAuthenticated === true).map((link) => {
             const isActive = location.pathname === link.pathname
             return (
@@ -88,7 +89,7 @@ function TopNav() {
                 key={link.to}
                 to={link.to}
                 aria-current={isActive ? 'page' : undefined}
-                className={`relative flex items-center text-sm font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:bg-primary after:transition-transform after:duration-200 ${
+                className={`relative flex items-center whitespace-nowrap text-sm font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:bg-primary after:transition-transform after:duration-200 ${
                   isActive
                     ? 'text-primary after:scale-x-100'
                     : 'text-body after:scale-x-0 hover:text-primary hover:after:scale-x-100'
@@ -116,7 +117,7 @@ function TopNav() {
               <>
                 <Link
                   to="/mypage"
-                  className="flex h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline sm:px-base"
+                  className="hidden h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline md:flex md:px-base"
                 >
                   마이페이지
                 </Link>
@@ -125,7 +126,7 @@ function TopNav() {
                   onClick={handleLogout}
                   disabled={isLoggingOut}
                   aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
-                  className="flex h-9 w-9 items-center justify-center rounded-pill text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-sm"
+                  className="hidden h-9 w-9 items-center justify-center rounded-pill text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 md:flex md:w-auto md:px-sm"
                 >
                   <LogOut size={18} aria-hidden className="sm:hidden" />
                   <span className="hidden sm:inline">
@@ -141,7 +142,68 @@ function TopNav() {
                 로그인
               </Link>
             )}
+            <button
+              type="button"
+              aria-label="메뉴 열기"
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="rounded-full p-2 text-body hover:bg-surface-strong hover:text-ink md:hidden"
+            >
+              <Menu size={22} />
+            </button>
           </div>
+        </div>
+      </div>
+
+      <div
+        className={`absolute left-0 right-0 top-full z-30 overflow-hidden border-b border-hairline bg-canvas transition-all duration-250 ease-out ${
+          isMenuOpen
+            ? 'pointer-events-auto max-h-96 opacity-100 translate-y-0'
+            : 'pointer-events-none max-h-0 opacity-0 -translate-y-1'
+        }`}
+      >
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-sm px-base pb-base pt-sm sm:px-lg">
+          <p className="px-sm text-xs font-semibold uppercase tracking-[0.08em] text-body">메뉴</p>
+          {NAV_LINKS.filter((link) => !link.authenticatedOnly || isAuthenticated === true).map((link) => {
+            const isActive = location.pathname === link.pathname
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                onClick={() => setIsMenuOpen(false)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`rounded-lg px-sm py-3 text-base font-medium transition-colors ${
+                  isActive ? 'bg-surface-soft text-primary' : 'text-ink hover:bg-surface-soft'
+                }`}
+              >
+                {link.label}
+              </Link>
+            )
+          })}
+          {isAuthenticated === true && (
+            <>
+              <Link
+                to="/mypage"
+                onClick={() => setIsMenuOpen(false)}
+                className="rounded-lg px-sm py-3 text-base font-medium text-ink hover:bg-surface-soft"
+              >
+                마이페이지
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  handleLogout()
+                }}
+                disabled={isLoggingOut}
+                aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
+                className="flex items-center gap-sm rounded-lg px-sm py-3 text-base font-medium text-ink hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LogOut size={18} aria-hidden />
+                <span>{isLoggingOut ? '로그아웃 중…' : '로그아웃'}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
