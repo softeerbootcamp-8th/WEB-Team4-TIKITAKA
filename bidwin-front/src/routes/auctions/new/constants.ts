@@ -3,6 +3,8 @@
  * 길이·용량 제한은 백엔드 Auction 엔티티, AuctionImagePresignRequest 검증값과 같게 맞춘다.
  */
 
+import { MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
+
 export const TITLE_MAX_LENGTH = 30
 export const CONTACT_MAX_LENGTH = 100
 
@@ -13,8 +15,9 @@ export const ALLOWED_IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/we
 /* 시작가·최저가·즉시 구매가에 공통으로 적용하는 최소 금액. */
 export const MIN_PRICE = 1000
 
-/* 시작가·즉시 구매가의 상한(1000억원). 백엔드 AuctionCreateRequest와 같은 기준. */
-export const MAX_PRICE = 100_000_000_000
+/* 시작가·즉시 구매가의 상한. 입찰가·즉시구매가에 적용되는 배타적 상한(1000억원 미만)과 맞춰,
+ * 등록만 되고 아무도 살 수 없는 가격(정확히 1000억원)을 막는다. */
+export const MAX_PRICE = MAX_PRICE_EXCLUSIVE - 1_000
 
 /* 백엔드 AuctionCategory enum과 1:1 대응(HOUSEHOLD/FOOD/FURNITURE 세 가지뿐이라 고정값으로 둔다). */
 export const CATEGORY_OPTIONS = [

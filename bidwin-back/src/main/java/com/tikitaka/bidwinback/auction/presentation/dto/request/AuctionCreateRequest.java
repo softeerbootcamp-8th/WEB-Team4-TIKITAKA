@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.request;
 
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import jakarta.validation.constraints.Max;
@@ -48,14 +49,15 @@ public record AuctionCreateRequest(
         @NotNull(message = "경매 진행 시간은 필수입니다.")
         Integer durationMinutes,
 
-        // 1,000원 단위 여부는 서비스에서 검증하고, 여기서는 금액 범위(1,000원~1000억원)만 확인한다.
+        // 1,000원 단위 여부는 서비스에서 검증한다. 상한은 AuctionPricePolicy가 입찰가·즉시구매가에
+        // 적용하는 배타적 상한(1000억원 미만)과 맞춰, 등록만 되고 아무도 살 수 없는 가격을 막는다.
         @Min(value = 1_000, message = "시작가는 1,000원 이상이어야 합니다.")
-        @Max(value = 100_000_000_000L, message = "시작가는 1000억원 이하로 입력해주세요.")
+        @Max(value = AuctionPricePolicy.MAX_PRICE_EXCLUSIVE - 1_000L, message = "시작가는 1,000억 원 미만으로 입력해주세요.")
         long startPrice,
 
         // 상향 경매에서만 사용하는 선택 필드.
         @Min(value = 1_000, message = "즉시구매가는 1,000원 이상이어야 합니다.")
-        @Max(value = 100_000_000_000L, message = "즉시구매가는 1000억원 이하로 입력해주세요.")
+        @Max(value = AuctionPricePolicy.MAX_PRICE_EXCLUSIVE - 1_000L, message = "즉시구매가는 1,000억 원 미만으로 입력해주세요.")
         Long buyNowPrice,
 
         // 아래 세 필드는 하향 경매 전용이며, 서비스에서 필수 여부를 검증한다.
