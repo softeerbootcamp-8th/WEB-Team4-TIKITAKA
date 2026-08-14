@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, UserRound } from 'lucide-react'
+import { Check, ShieldCheck } from 'lucide-react'
 import AuthFormError from '../../components/auth/AuthFormError'
 import AuthSplitLayout from '../../components/auth/AuthSplitLayout'
 import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
@@ -26,8 +26,8 @@ import {
   validateNickname,
 } from '../../lib/auth/validation'
 import { formatPhoneNumber } from '../../lib/format'
-import MemberInfoModal from './MemberInfoModal'
-import type { SignupIdentity } from './MemberInfoModal'
+import PassVerificationModal from './PassVerificationModal'
+import type { VerifiedIdentity } from './PassVerificationModal'
 
 const TEXT = {
   title: '회원가입',
@@ -47,16 +47,16 @@ const TEXT = {
   nicknamePlaceholder: `${NICKNAME_MIN_LENGTH}~${NICKNAME_MAX_LENGTH}자로 입력하세요`,
   nicknameAvailable: '사용 가능한 닉네임입니다.',
   nicknameUnavailable: '이미 사용 중인 닉네임입니다.',
-  identityLabel: '본인 정보',
-  memberInfoInput: '이름·전화번호 입력',
-  memberInfoComplete: '본인 정보 입력 완료',
+  identityLabel: '본인인증',
+  passVerify: 'PASS로 본인인증',
+  passVerified: '본인인증 완료',
   submit: '회원가입',
   submitting: '가입 처리 중…',
   loginPrompt: '이미 계정이 있으신가요?',
   login: '로그인',
   imagePlaceholder: '이미지 영역 2',
   signUpSuccess: '회원가입이 완료됐어요. 이메일 인증을 진행해주세요.',
-  memberInfoCompleteToast: '본인 정보를 입력했어요.',
+  passVerifiedToast: '본인인증이 완료됐어요.',
 }
 
 const ROUTE = {
@@ -68,13 +68,13 @@ const ERROR_MESSAGE = {
   emptyField: '이메일, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.',
   emailAvailabilityRequired: '이메일 중복 확인을 완료해주세요.',
   nicknameAvailabilityRequired: '닉네임 중복 확인을 완료해주세요.',
-  identityRequired: '본인 정보를 입력해주세요.',
+  identityRequired: 'PASS 본인인증을 완료해주세요.',
 }
 
 const FORM_ERROR_ID = 'signup-form-error'
 const EMAIL_AVAILABILITY_ID = 'signup-email-availability'
 const NICKNAME_AVAILABILITY_ID = 'signup-nickname-availability'
-const MEMBER_INFO_ICON_SIZE = 18
+const PASS_BUTTON_ICON_SIZE = 18
 
 type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'error'
 
@@ -127,15 +127,15 @@ function SignupPage() {
   const [nicknameAvailability, setNicknameAvailability] = useState(INITIAL_AVAILABILITY_CHECK)
   const emailAvailabilityRequestId = useRef(0)
   const nicknameAvailabilityRequestId = useRef(0)
-  /* 회원가입 API에 전달할 이름·전화번호. 입력 이후에는 다시 열지 않는다. */
-  const [identity, setIdentity] = useState<SignupIdentity | null>(null)
-  const [isMemberInfoModalOpen, setIsMemberInfoModalOpen] = useState(false)
+  /* PASS 인증으로 받은 이름·전화번호. 성공 이후에는 다시 인증할 수 없다. */
+  const [identity, setIdentity] = useState<VerifiedIdentity | null>(null)
+  const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { showToast } = useToast()
   const navigate = useNavigate()
 
-  const isMemberInfoComplete = identity !== null
+  const isIdentityVerified = identity !== null
   const trimmedEmail = email.trim()
   const trimmedNickname = nickname.trim()
   const isEmailAvailable = emailAvailability.status === 'available'
@@ -233,17 +233,17 @@ function SignupPage() {
     })
   }
 
-  const handleOpenMemberInfoModal = () => {
-    /* 한 번 입력을 마치면 버튼을 막는다. */
-    if (isMemberInfoComplete) return
-    setIsMemberInfoModalOpen(true)
+  const handleOpenPassModal = () => {
+    /* 한 번 인증에 성공하면 버튼을 막는다. */
+    if (isIdentityVerified) return
+    setIsPassModalOpen(true)
   }
 
-  const handleMemberInfoComplete = (memberInfo: SignupIdentity) => {
-    setIdentity(memberInfo)
-    setIsMemberInfoModalOpen(false)
+  const handlePassVerified = (verified: VerifiedIdentity) => {
+    setIdentity(verified)
+    setIsPassModalOpen(false)
     setError(null)
-    showToast(TEXT.memberInfoCompleteToast)
+    showToast(TEXT.passVerifiedToast)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -436,26 +436,26 @@ function SignupPage() {
             )}
           </div>
 
-          {/* 회원가입 API가 요구하는 이름과 전화번호를 별도 모달에서 입력한다. */}
+          {/* 본인인증: 인증 전에는 PASS 모달을 열고, 성공하면 버튼이 막힌다. */}
           <div className="flex flex-col gap-xs">
             <span className="text-sm font-semibold text-body">
               {TEXT.identityLabel}
             </span>
             <Button
               variant="secondary"
-              onClick={handleOpenMemberInfoModal}
-              disabled={isMemberInfoComplete}
+              onClick={handleOpenPassModal}
+              disabled={isIdentityVerified}
               className="w-full"
             >
-              {isMemberInfoComplete ? (
+              {isIdentityVerified ? (
                 <>
-                  <Check size={MEMBER_INFO_ICON_SIZE} className="text-up" />
-                  {TEXT.memberInfoComplete}
+                  <Check size={PASS_BUTTON_ICON_SIZE} className="text-up" />
+                  {TEXT.passVerified}
                 </>
               ) : (
                 <>
-                  <UserRound size={MEMBER_INFO_ICON_SIZE} />
-                  {TEXT.memberInfoInput}
+                  <ShieldCheck size={PASS_BUTTON_ICON_SIZE} />
+                  {TEXT.passVerify}
                 </>
               )}
             </Button>
@@ -486,10 +486,10 @@ function SignupPage() {
         </div>
       </form>
 
-      <MemberInfoModal
-        isOpen={isMemberInfoModalOpen}
-        onClose={() => setIsMemberInfoModalOpen(false)}
-        onComplete={handleMemberInfoComplete}
+      <PassVerificationModal
+        isOpen={isPassModalOpen}
+        onClose={() => setIsPassModalOpen(false)}
+        onVerified={handlePassVerified}
       />
     </AuthSplitLayout>
   )
