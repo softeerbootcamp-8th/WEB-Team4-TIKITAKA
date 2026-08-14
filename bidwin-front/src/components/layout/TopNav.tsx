@@ -212,7 +212,9 @@ function TopNav() {
       </div>
 
       <div
-        className={`absolute left-0 right-0 top-full z-30 overflow-hidden border-b border-hairline bg-canvas transition-all duration-250 ease-out ${
+        aria-hidden={!isMenuOpen}
+        inert={!isMenuOpen}
+        className={`absolute left-0 right-0 top-full z-30 overflow-hidden border-b border-hairline bg-canvas transition-all duration-250 ease-out md:hidden ${
           isMenuOpen
             ? 'pointer-events-auto max-h-96 opacity-100 translate-y-0'
             : 'pointer-events-none max-h-0 opacity-0 -translate-y-1'
