@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -28,7 +29,10 @@ public record AuctionCreateRequest(
         String category,
 
         @NotBlank(message = "연락처는 필수입니다.")
-        @Size(max = 100, message = "연락처는 100자 이하로 입력해주세요.")
+        @Pattern(
+                regexp = "^01[016789]\\d{7,8}$",
+                message = "연락처는 하이픈 없이 올바른 휴대폰 번호 형식으로 입력해야 합니다."
+        )
         String contact,
 
         @NotNull(message = "경매 방식은 필수입니다.")

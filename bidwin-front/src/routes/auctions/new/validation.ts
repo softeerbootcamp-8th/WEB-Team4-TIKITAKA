@@ -1,5 +1,8 @@
 import { CONTACT_MAX_LENGTH, ERROR_MESSAGE, MIN_PRICE, TITLE_MAX_LENGTH } from './constants'
 
+/* 백엔드 AuctionCreateRequest.contact와 같은 기준(하이픈 없는 휴대폰 번호). */
+const CONTACT_PATTERN = /^01[016789]\d{7,8}$/
+
 interface AuctionFormFields {
   title: string
   description: string
@@ -28,6 +31,7 @@ function validateAuctionFields(fields: AuctionFormFields) {
   }
   if (title.length > TITLE_MAX_LENGTH) return ERROR_MESSAGE.titleTooLong
   if (contact.length > CONTACT_MAX_LENGTH) return ERROR_MESSAGE.contactTooLong
+  if (!CONTACT_PATTERN.test(contact)) return ERROR_MESSAGE.invalidContact
 
   const startPrice = toPositiveNumber(fields.startPrice)
   if (startPrice === null || startPrice < MIN_PRICE) return ERROR_MESSAGE.invalidStartPrice
