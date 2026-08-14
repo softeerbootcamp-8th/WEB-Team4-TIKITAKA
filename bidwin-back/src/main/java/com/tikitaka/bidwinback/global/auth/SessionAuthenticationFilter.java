@@ -29,7 +29,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
     // 유휴 만료(spring.session.timeout)만으로는 계속 사용되는 탈취 세션을 종료할 수 없어
     // 로그인 시각부터 수명을 별도로 제한한다. 경매 입찰처럼 장시간 붙어있는 사용 패턴을
     // 고려해 은행권 수준보다는 여유를 둔다.
-    private static final Duration ABSOLUTE_SESSION_LIFETIME = Duration.ofHours(48);
+    private static final Duration ABSOLUTE_SESSION_LIFETIME = Duration.ofHours(24);
     private static final List<PathPattern> PUBLIC_POST_PATHS = List.of(
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups"),
             PathPatternParser.defaultInstance.parse("/api/v1/auth/signups/*/verify"),
