@@ -170,8 +170,9 @@ class BidServiceIntegrationTest {
     }
 
     @Test
-    void 기존_밀봉_최고가보다_낮은_밀봉입찰은_거절한다() {
-        Fixture fixture = createFixture(3);
+    void 기존_밀봉_최고가보다_낮아도_일반_최고가를_넘으면_밀봉입찰을_수락한다() {
+        // given
+        Fixture fixture = createFixture(2);
         moveAuctionIntoSealedWindow(fixture.auctionId());
         bidService.place(
                 fixture.bidderIds().get(0),
@@ -180,31 +181,24 @@ class BidServiceIntegrationTest {
                 BidType.SEALED
         );
 
-        Throwable rejected = catchThrowable(() -> bidService.place(
+        // when
+        BidResult result = bidService.place(
                 fixture.bidderIds().get(1),
                 fixture.auctionId(),
                 FIRST_BID_PRICE,
                 BidType.SEALED
-        ));
-        bidService.place(
-                fixture.bidderIds().get(2),
-                fixture.auctionId(),
-                SECOND_BID_PRICE + 1_000L,
-                BidType.SEALED
         );
 
-        assertThat(rejected).isInstanceOfSatisfying(
-                BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.BID_PRICE_TOO_LOW)
-        );
+        // then
+        assertThat(result.status()).isEqualTo(BidStatus.SEALED);
         assertThat(findSealedBidPrices(fixture.auctionId()))
-                .containsExactly(SECOND_BID_PRICE, SECOND_BID_PRICE + 1_000L);
+                .containsExactly(FIRST_BID_PRICE, SECOND_BID_PRICE);
         assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(2);
     }
 
     @Test
-    void 동일한_가격의_동시_밀봉입찰은_한_건만_성공한다() throws Exception {
+    void 동일한_가격의_동시_밀봉입찰은_모두_성공한다() throws Exception {
+        // given
         Fixture fixture = createFixture(2);
         moveAuctionIntoSealedWindow(fixture.auctionId());
         CyclicBarrier barrier = new CyclicBarrier(2);
@@ -226,19 +220,17 @@ class BidServiceIntegrationTest {
                     BidType.SEALED
             ));
 
+            // when
             List<Attempt> attempts = List.of(
                     first.get(10, TimeUnit.SECONDS),
                     second.get(10, TimeUnit.SECONDS)
             );
 
-            assertThat(attempts).filteredOn(Attempt::succeeded).hasSize(1);
-            assertThat(attempts)
-                    .filteredOn(attempt -> !attempt.succeeded())
-                    .extracting(Attempt::errorCode)
-                    .containsExactly(ErrorCode.BID_PRICE_TOO_LOW);
+            // then
+            assertThat(attempts).allMatch(Attempt::succeeded);
             assertThat(findSealedBidPrices(fixture.auctionId()))
-                    .containsExactly(FIRST_BID_PRICE);
-            assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(1);
+                    .containsExactly(FIRST_BID_PRICE, FIRST_BID_PRICE);
+            assertThat(findDepositSnapshots(fixture.auctionId())).hasSize(2);
         } finally {
             executor.shutdownNow();
         }
