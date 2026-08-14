@@ -457,7 +457,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
-    void UP_경매는_asOf_이전_입찰만으로_최고가와_입찰수를_계산한다() {
+    void 추천순_UP_경매는_asOf와_무관하게_현재가와_전체_입찰수를_사용한다() {
         Member seller = persistMember("up-seller");
         Member bidder = persistMember("up-bidder");
         UpAuction auction = persistUp(seller, "입찰 집계 경매", AuctionCategory.HOUSEHOLD);
@@ -465,10 +465,12 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
 
         Bid first = persistBid(auction, bidder, 120_000L);
         Bid second = persistBid(auction, bidder, 180_000L);
+        Bid atAsOf = persistBid(auction, bidder, 200_000L);
         Bid afterAsOf = persistBid(auction, bidder, 999_000L);
         setBidCreatedAt(first, AS_OF.minusMinutes(2));
         setBidCreatedAt(second, AS_OF.minusMinutes(1));
-        setBidCreatedAt(afterAsOf, AS_OF.plusMinutes(1));
+        setBidCreatedAt(atAsOf, AS_OF);
+        setBidCreatedAt(afterAsOf, AS_OF.plusSeconds(1));
         entityManager.clear();
 
         List<AuctionListRow> rows = findPage(
@@ -479,9 +481,32 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
 
         assertThat(rows).singleElement().satisfies(row -> {
             assertThat(row.auctionId()).isEqualTo(auction.getId());
-            assertThat(row.currentPrice()).isEqualTo(180_000L);
-            assertThat(row.bidCount()).isEqualTo(2L);
+            assertThat(row.currentPrice()).isEqualTo(999_000L);
+            assertThat(row.bidCount()).isEqualTo(4L);
         });
+    }
+
+    @Test
+    void 추천순은_asOf_이후에_완료됐어도_현재_완료된_경매를_제외한다() {
+        Member seller = persistMember("recommended-current-seller");
+        UpAuction ongoing = persistUp(seller, "진행 중 경매", AuctionCategory.HOUSEHOLD);
+        UpAuction completed = persistUp(seller, "완료된 경매", AuctionCategory.HOUSEHOLD);
+        setAuctionTimeline(ongoing, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setAuctionTimeline(completed, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setCompletedAt(completed, AS_OF.plusMinutes(1));
+        entityManager.clear();
+
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.UP,
+                AuctionSort.RECOMMENDED,
+                null,
+                AS_OF
+        );
+
+        assertThat(auctionListQueryRepository.count(condition)).isEqualTo(1L);
+        assertThat(findPage(condition, 0, 10))
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(ongoing.getId());
     }
 
     @Test
@@ -785,6 +810,13 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                 .build();
         entityManager.persist(bid);
         entityManager.flush();
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET bid_count = bid_count + 1
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
         if (auction instanceof UpAuction) {
             // 운영 입찰 경로와 동일하게 상향 경매 행의 current_price도 함께 전진시킨다.
             entityManager.createNativeQuery("""

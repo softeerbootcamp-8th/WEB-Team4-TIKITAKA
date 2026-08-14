@@ -95,7 +95,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         Long count = queryFactory
                 .select(auction.count())
                 .from(auction)
-                .where(searchPredicate(condition))
+                .where(searchPredicateForSort(condition))
                 .setHint(
                         HibernateHints.HINT_QUERY_DATABASE,
                         "idx_auction_count"
@@ -112,7 +112,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     ) {
         List<AuctionListMetrics> metrics = switch (condition.sort()) {
             case DEADLINE, LATEST -> findPageByColumnSort(condition, offset, limit);
-            case RECOMMENDED -> findPageByAggregateSort(
+            case RECOMMENDED -> findPageByRecommendedSort(
                     condition,
                     offset,
                     limit
@@ -534,7 +534,15 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 auctionIds,
                 asOf
         );
-        // IN 조회 결과는 순서를 보장하지 않으므로 후보 쿼리가 정한 페이지 순서로 복원한다.
+
+        return metricsInOrder(auctionIds, metricsByAuctionId);
+    }
+
+    private List<AuctionListMetrics> metricsInOrder(
+            List<Long> auctionIds,
+            Map<Long, AuctionListMetrics> metricsByAuctionId
+    ) {
+
         return auctionIds.stream()
                 .map(auctionId -> {
                     AuctionListMetrics metrics = metricsByAuctionId.get(auctionId);
@@ -565,19 +573,63 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ));
     }
 
-    private List<AuctionListMetrics> findPageByAggregateSort(
+    private List<AuctionListMetrics> findPageByRecommendedSort(
             AuctionListSearchCondition condition,
             long offset,
             int limit
     ) {
-        AuctionListMetricExpressions expressions = metricExpressions();
-        return baseMetricQuery(expressions, condition.asOf())
-                .where(searchPredicate(condition))
-                .groupBy(expressions.groupByKeys())
-                .orderBy(aggregateOrderBy(condition.sort(), expressions))
+        List<Long> auctionIds = queryFactory
+                .select(auction.id)
+                .from(auction)
+                .where(currentSearchPredicate(condition))
+                .orderBy(auction.bidCount.desc(), auction.id.desc())
                 .offset(offset)
                 .limit(limit)
                 .fetch();
+        if (auctionIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, AuctionListMetrics> metricsByAuctionId =
+                findRecommendedMetricsByAuctionId(auctionIds, condition.asOf());
+        return metricsInOrder(auctionIds, metricsByAuctionId);
+    }
+
+    private Map<Long, AuctionListMetrics> findRecommendedMetricsByAuctionId(
+            List<Long> auctionIds,
+            LocalDateTime asOf
+    ) {
+        NumberExpression<Long> downCurrentPrice = Expressions.numberTemplate(
+                Long.class,
+                DOWN_CURRENT_PRICE_TEMPLATE,
+                downAuction.minimumPrice,
+                auction.startPrice,
+                auction.startedAt,
+                PRICE_AS_OF,
+                downAuction.priceDropInterval,
+                downAuction.dropPrice
+        );
+        NumberExpression<Long> currentPrice = Expressions.cases()
+                .when(auction.instanceOf(UpAuction.class))
+                .then(auction.currentPrice.coalesce(auction.startPrice))
+                .otherwise(downCurrentPrice);
+
+        return queryFactory
+                .select(new QAuctionListMetrics(
+                        auction.id,
+                        currentPrice,
+                        auction.bidCount
+                ))
+                .from(auction)
+                .leftJoin(downAuction).on(downAuction.id.eq(auction.id))
+                .where(auction.id.in(auctionIds))
+                .set(PRICE_AS_OF, asOf)
+                .fetch()
+                .stream()
+                .collect(Collectors.toMap(
+                        AuctionListMetrics::auctionId,
+                        Function.identity()
+                ));
     }
 
     private JPAQuery<AuctionListMetrics> baseMetricQuery(
@@ -606,6 +658,16 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 auction.completedAt.isNull()
                         .or(auction.completedAt.gt(condition.asOf()))
         );
+    }
+
+    private Predicate searchPredicateForSort(AuctionListSearchCondition condition) {
+        return condition.sort() == AuctionSort.RECOMMENDED
+                ? currentSearchPredicate(condition)
+                : searchPredicate(condition);
+    }
+
+    private Predicate currentSearchPredicate(AuctionListSearchCondition condition) {
+        return searchPredicate(condition, auction.completedAt.isNull());
     }
 
     private Predicate searchPredicate(
@@ -669,20 +731,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             );
             case RECOMMENDED, PRICE_LOW, PRICE_HIGH ->
                     throw new IllegalArgumentException("컬럼 정렬이 아닙니다: " + sort);
-        };
-    }
-
-    private OrderSpecifier<?>[] aggregateOrderBy(
-            AuctionSort sort,
-            AuctionListMetricExpressions expressions
-    ) {
-        return switch (sort) {
-            case RECOMMENDED -> new OrderSpecifier<?>[]{
-                    expressions.bidCount().desc(),
-                    auction.id.desc()
-            };
-            case PRICE_LOW, PRICE_HIGH, DEADLINE, LATEST ->
-                    throw new IllegalArgumentException("집계 정렬이 아닙니다: " + sort);
         };
     }
 

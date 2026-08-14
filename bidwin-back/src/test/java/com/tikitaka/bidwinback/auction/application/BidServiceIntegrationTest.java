@@ -114,6 +114,7 @@ class BidServiceIntegrationTest {
         assertThat(result.status()).isEqualTo(BidStatus.SEALED);
         assertThat(result.price()).isNull();
         assertThat(findBidPrices(fixture.auctionId())).isEmpty();
+        assertThat(findAuctionBidCount(fixture.auctionId())).isZero();
         assertThat(findSealedBidPrices(fixture.auctionId()))
                 .containsExactly(FIRST_BID_PRICE);
         assertThat(findAuctionSnapshot(fixture.auctionId()))
@@ -163,6 +164,7 @@ class BidServiceIntegrationTest {
         );
         assertThat(findBidPrices(fixture.auctionId()))
                 .containsExactly(FIRST_BID_PRICE);
+        assertThat(findAuctionBidCount(fixture.auctionId())).isEqualTo(1L);
         assertThat(findSealedBidPrices(fixture.auctionId()))
                 .containsExactly(SECOND_BID_PRICE);
         assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
@@ -389,6 +391,7 @@ class BidServiceIntegrationTest {
                     .containsExactly(ErrorCode.BID_PRICE_TOO_LOW);
             assertThat(findBidPrices(fixture.auctionId()))
                     .containsExactly(FIRST_BID_PRICE);
+            assertThat(findAuctionBidCount(fixture.auctionId())).isEqualTo(1L);
             assertThat(findAuctionSnapshot(fixture.auctionId()))
                     .isEqualTo(new AuctionSnapshot(
                             FIRST_BID_PRICE,
@@ -428,6 +431,8 @@ class BidServiceIntegrationTest {
                 assertThat(lowerAttempt.errorCode()).isEqualTo(ErrorCode.BID_PRICE_TOO_LOW);
             }
             assertThat(storedPrices).hasSizeBetween(1, 2);
+            assertThat(findAuctionBidCount(fixture.auctionId()))
+                    .isEqualTo(storedPrices.size());
             assertThat(storedPrices.getLast()).isEqualTo(SECOND_BID_PRICE);
             assertThat(storedPrices).allMatch(price -> price % 1_000L == 0);
             assertThat(findAuctionSnapshot(fixture.auctionId()).currentPrice())
@@ -818,6 +823,16 @@ class BidServiceIntegrationTest {
                         """, Long.class)
                 .setParameter("auctionId", auctionId)
                 .getResultList());
+    }
+
+    private long findAuctionBidCount(Long auctionId) {
+        return executeInTransaction(entityManager -> entityManager.createQuery("""
+                        select auction.bidCount
+                        from Auction auction
+                        where auction.id = :auctionId
+                        """, Long.class)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult());
     }
 
     private List<Long> findSealedBidPrices(Long auctionId) {
