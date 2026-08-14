@@ -16,6 +16,13 @@ import type {
 } from '../lib/api/auctions'
 import type { DownPricing } from '../lib/auctionPricing'
 import { formatClock, formatWon } from '../lib/format'
+import {
+  HOME_BANNER_ITEMS,
+  HOME_BANNER_ROTATION_MS,
+  HOME_BANNER_TRANSITION_MS,
+  homeBannerTransitionDuration,
+  nextHomeBannerIndex,
+} from '../lib/homeBanner'
 
 const POPULAR_AUCTION_LIMIT = 5
 const SPLIT_LIST_LIMIT = 4
@@ -24,7 +31,6 @@ const UP_AUCTION_LABEL = '상향 경매'
 const DOWN_AUCTION_LABEL = '하락 중'
 const HOME_SKELETON_KEYS = Array.from({ length: POPULAR_AUCTION_LIMIT }, (_, index) => index)
 const HOME_PANEL_SKELETON_KEYS = Array.from({ length: SPLIT_LIST_LIMIT }, (_, index) => index)
-
 type DownAuctionSummary = AuctionSummary & {
   auctionType: 'DOWN'
   downPricing: AuctionDownPricing
@@ -130,7 +136,13 @@ function HomePage() {
 
   return (
     <main className="mx-auto max-w-[1200px] px-lg py-xl">
-      {spotlight && <SpotlightBanner auction={spotlight} serverOffsetMs={serverOffsetMs} />}
+      <HomeHeroBanner />
+
+      {spotlight && (
+        <div className="mt-xl">
+          <SpotlightBanner auction={spotlight} serverOffsetMs={serverOffsetMs} />
+        </div>
+      )}
 
       <section className="mt-xl">
         <h1 className="text-2xl font-bold text-ink">지금 인기 있는 경매 TOP 5</h1>
@@ -165,6 +177,73 @@ function HomePage() {
         />
       </section>
     </main>
+  )
+}
+
+function HomeHeroBanner() {
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [isRolling, setIsRolling] = useState(false)
+
+  useEffect(() => {
+    let transitionTimer: number | undefined
+    const rotationTimer = window.setInterval(() => {
+      setIsRolling(true)
+      transitionTimer = window.setTimeout(() => {
+        setActiveIndex(nextHomeBannerIndex)
+        setIsRolling(false)
+      }, HOME_BANNER_TRANSITION_MS)
+    }, HOME_BANNER_ROTATION_MS)
+
+    return () => {
+      window.clearInterval(rotationTimer)
+      window.clearTimeout(transitionTimer)
+    }
+  }, [])
+
+  const nextIndex = nextHomeBannerIndex(activeIndex)
+
+  return (
+    <section
+      aria-label="판매 추천 배너"
+      className="relative flex min-h-[260px] items-center overflow-hidden rounded-xl bg-surface-soft px-xl py-xxl sm:min-h-[320px] sm:justify-between sm:px-[clamp(3rem,8vw,6rem)]"
+    >
+      <h1 className="text-[clamp(2rem,5vw,3.75rem)] font-semibold leading-[1.08] tracking-[-0.025em] text-ink">
+        <span className="block">지금 판매해야 할</span>
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          className="block h-[1.04em] overflow-hidden font-bold text-primary"
+        >
+          <span
+            className={`flex flex-col transition-transform ease-in-out motion-reduce:transition-none ${isRolling ? '-translate-y-1/2' : 'translate-y-0'}`}
+            style={{ transitionDuration: homeBannerTransitionDuration(isRolling) }}
+          >
+            <span className="h-[1.04em] shrink-0">“{HOME_BANNER_ITEMS[activeIndex].label}”</span>
+            <span aria-hidden="true" className="h-[1.04em] shrink-0">
+              “{HOME_BANNER_ITEMS[nextIndex].label}”
+            </span>
+          </span>
+        </span>
+        <span className="block">비드윈에서</span>
+      </h1>
+
+      <span
+        aria-hidden="true"
+        className="absolute bottom-lg right-lg block h-[1.15em] overflow-hidden text-5xl leading-none sm:static sm:shrink-0 sm:text-[clamp(5rem,10vw,7rem)]"
+      >
+        <span
+          className={`flex flex-col transition-transform ease-in-out motion-reduce:transition-none ${isRolling ? '-translate-y-1/2' : 'translate-y-0'}`}
+          style={{ transitionDuration: homeBannerTransitionDuration(isRolling) }}
+        >
+          <span className="flex h-[1.15em] shrink-0 items-center justify-center">
+            {HOME_BANNER_ITEMS[activeIndex].emoji}
+          </span>
+          <span className="flex h-[1.15em] shrink-0 items-center justify-center">
+            {HOME_BANNER_ITEMS[nextIndex].emoji}
+          </span>
+        </span>
+      </span>
+    </section>
   )
 }
 
@@ -462,6 +541,7 @@ function HomeSkeleton() {
       className="mx-auto max-w-[1200px] px-lg py-xl"
     >
       <span className="sr-only">홈 경매를 불러오는 중…</span>
+      <HomeHeroBanner />
       <section className="mt-xl motion-safe:animate-pulse">
         <div className="h-8 w-64 rounded-pill bg-surface-strong" />
         <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
