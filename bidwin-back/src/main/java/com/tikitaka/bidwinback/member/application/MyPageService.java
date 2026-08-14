@@ -3,8 +3,8 @@ package com.tikitaka.bidwinback.member.application;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
-import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
@@ -129,7 +129,7 @@ public class MyPageService {
                 auction.getId(),
                 auction.getTitle(),
                 thumbnailUrls.get(auction.getId()),
-                auctionType(auction),
+                AuctionType.from(auction).name(),
                 auction.getStartPrice(),
                 sellingPrice(auction),
                 sellingStatus(auction.getStatus()),
@@ -174,7 +174,7 @@ public class MyPageService {
                 auction.getId(),
                 auction.getTitle(),
                 thumbnailUrls.get(auction.getId()),
-                auctionType(auction),
+                AuctionType.from(auction).name(),
                 auction.getStartPrice(),
                 trade.getFinalPrice(),
                 buyingStatus(trade.getStatus())
@@ -201,10 +201,6 @@ public class MyPageService {
                         AuctionThumbnailRow::auctionId,
                         row -> imageUrlResolver.resolve(row.objectKey())
                 ));
-    }
-
-    private String auctionType(Auction auction) {
-        return auction instanceof UpAuction ? "UP" : "DOWN";
     }
 
     private String sellingStatus(AuctionStatus status) {

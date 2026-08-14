@@ -7,6 +7,7 @@ import Card from '../components/ui/Card'
 import { useAuctionEvents } from '../hooks/useAuctionEvents'
 import { useCountdown } from '../hooks/useCountdown'
 import { useDownAuctionClock } from '../hooks/useDownAuctionClock'
+import { useServerClock } from '../hooks/useServerClock'
 import { requestAuctionList } from '../lib/api/auctions'
 import type {
   AuctionDownPricing,
@@ -31,14 +32,13 @@ function hasDownPricing(auction: AuctionSummary): auction is DownAuctionSummary 
   return auction.auctionType === 'DOWN' && auction.downPricing !== null
 }
 
-function toDownPricing(auction: DownAuctionSummary, serverTime: number): DownPricing {
+function toDownPricing(auction: DownAuctionSummary): DownPricing {
   return {
     startPrice: auction.startPrice,
     minimumPrice: auction.downPricing.minimumPrice,
     dropPrice: auction.downPricing.dropPrice,
     priceDropIntervalMs: auction.downPricing.priceDropIntervalMs,
     startedAt: auction.downPricing.startedAt,
-    serverTime,
   }
 }
 
@@ -47,6 +47,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
+  const serverOffsetMs = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -126,7 +127,7 @@ function HomePage() {
 
   return (
     <main className="mx-auto max-w-[1200px] px-lg py-xl">
-      {spotlight && <SpotlightBanner auction={spotlight} serverTime={response.serverTime} />}
+      {spotlight && <SpotlightBanner auction={spotlight} serverOffsetMs={serverOffsetMs} />}
 
       <section className="mt-xl">
         <h1 className="text-2xl font-bold text-ink">지금 인기 있는 경매 TOP 5</h1>
@@ -139,7 +140,7 @@ function HomePage() {
             <AuctionSummaryCard
               key={auction.auctionId}
               auction={auction}
-              serverTime={response.serverTime}
+              serverOffsetMs={serverOffsetMs}
             />
           ))}
         </div>
@@ -150,13 +151,13 @@ function HomePage() {
           title="상승 중인 경매"
           description="입찰이 들어올수록 가격이 오르는 일반 경매예요."
           auctions={upAuctions}
-          serverTime={response.serverTime}
+          serverOffsetMs={serverOffsetMs}
         />
         <AuctionListPanel
           title="가격이 빠르게 떨어지는 중"
           description="시간이 지날수록 가격이 내려가요. 원하는 가격일 때 바로 잡으세요."
           auctions={downAuctions}
-          serverTime={response.serverTime}
+          serverOffsetMs={serverOffsetMs}
           accent
         />
       </section>
@@ -175,16 +176,13 @@ function HomeMessage({ message, children }: { message: string; children?: React.
 
 function SpotlightBanner({
   auction,
-  serverTime,
+  serverOffsetMs,
 }: {
   auction: DownAuctionSummary
-  serverTime: number
+  serverOffsetMs: number
 }) {
-  const pricing = useMemo(
-    () => toDownPricing(auction, serverTime),
-    [auction, serverTime],
-  )
-  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing)
+  const pricing = useMemo(() => toDownPricing(auction), [auction])
+  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing, serverOffsetMs)
 
   return (
     <Link to={`/auctions/${auction.auctionId}`} className="block">
@@ -223,28 +221,28 @@ function SpotlightBanner({
 
 function AuctionSummaryCard({
   auction,
-  serverTime,
+  serverOffsetMs,
 }: {
   auction: AuctionSummary
-  serverTime: number
+  serverOffsetMs: number
 }) {
   return hasDownPricing(auction) ? (
-    <DownSummaryCard auction={auction} serverTime={serverTime} />
+    <DownSummaryCard auction={auction} serverOffsetMs={serverOffsetMs} />
   ) : (
-    <StaticSummaryCard auction={auction} serverTime={serverTime} />
+    <StaticSummaryCard auction={auction} serverOffsetMs={serverOffsetMs} />
   )
 }
 
 function StaticSummaryCard({
   auction,
-  serverTime,
+  serverOffsetMs,
 }: {
   auction: AuctionSummary
-  serverTime: number
+  serverOffsetMs: number
 }) {
   const deadline = useMemo(
-    () => auction.deadline - (serverTime - Date.now()),
-    [auction.deadline, serverTime],
+    () => auction.deadline - serverOffsetMs,
+    [auction.deadline, serverOffsetMs],
   )
   const { remaining, isUrgent } = useCountdown(deadline)
   return (
@@ -259,16 +257,13 @@ function StaticSummaryCard({
 
 function DownSummaryCard({
   auction,
-  serverTime,
+  serverOffsetMs,
 }: {
   auction: DownAuctionSummary
-  serverTime: number
+  serverOffsetMs: number
 }) {
-  const pricing = useMemo(
-    () => toDownPricing(auction, serverTime),
-    [auction, serverTime],
-  )
-  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing)
+  const pricing = useMemo(() => toDownPricing(auction), [auction])
+  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing, serverOffsetMs)
   return (
     <SummaryCardView
       auction={auction}
@@ -331,13 +326,13 @@ function AuctionListPanel({
   title,
   description,
   auctions,
-  serverTime,
+  serverOffsetMs,
   accent,
 }: {
   title: string
   description: string
   auctions: AuctionSummary[]
-  serverTime: number
+  serverOffsetMs: number
   accent?: boolean
 }) {
   return (
@@ -352,7 +347,7 @@ function AuctionListPanel({
             <AuctionListRow
               key={auction.auctionId}
               auction={auction}
-              serverTime={serverTime}
+              serverOffsetMs={serverOffsetMs}
               accent={accent}
             />
           ))}
@@ -364,32 +359,32 @@ function AuctionListPanel({
 
 function AuctionListRow({
   auction,
-  serverTime,
+  serverOffsetMs,
   accent,
 }: {
   auction: AuctionSummary
-  serverTime: number
+  serverOffsetMs: number
   accent?: boolean
 }) {
   return hasDownPricing(auction) ? (
-    <DownListRow auction={auction} serverTime={serverTime} accent={accent} />
+    <DownListRow auction={auction} serverOffsetMs={serverOffsetMs} accent={accent} />
   ) : (
-    <StaticListRow auction={auction} serverTime={serverTime} accent={accent} />
+    <StaticListRow auction={auction} serverOffsetMs={serverOffsetMs} accent={accent} />
   )
 }
 
 function StaticListRow({
   auction,
-  serverTime,
+  serverOffsetMs,
   accent,
 }: {
   auction: AuctionSummary
-  serverTime: number
+  serverOffsetMs: number
   accent?: boolean
 }) {
   const deadline = useMemo(
-    () => auction.deadline - (serverTime - Date.now()),
-    [auction.deadline, serverTime],
+    () => auction.deadline - serverOffsetMs,
+    [auction.deadline, serverOffsetMs],
   )
   const { remaining, isUrgent } = useCountdown(deadline)
   return (
@@ -405,18 +400,15 @@ function StaticListRow({
 
 function DownListRow({
   auction,
-  serverTime,
+  serverOffsetMs,
   accent,
 }: {
   auction: DownAuctionSummary
-  serverTime: number
+  serverOffsetMs: number
   accent?: boolean
 }) {
-  const pricing = useMemo(
-    () => toDownPricing(auction, serverTime),
-    [auction, serverTime],
-  )
-  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing)
+  const pricing = useMemo(() => toDownPricing(auction), [auction])
+  const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing, serverOffsetMs)
   return (
     <ListRowView
       auction={auction}

@@ -81,7 +81,7 @@ public class MySaleRecordService {
                 auction.getId(),
                 auction.getTitle(),
                 thumbnails.get(auction.getId()),
-                auction instanceof UpAuction ? AuctionType.UP : AuctionType.DOWN,
+                AuctionType.from(auction),
                 auction.getStartPrice(),
                 resolvePrice(auction, asOf),
                 auction.getStatus(),

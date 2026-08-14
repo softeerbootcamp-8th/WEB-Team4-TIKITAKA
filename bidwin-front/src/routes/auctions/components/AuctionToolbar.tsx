@@ -1,9 +1,13 @@
 import {
   ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  SlidersHorizontal,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { FILTER_TEXT } from '../constants'
 import { SORT_OPTIONS } from '../query'
 import type { SortKey } from '../query'
 import type { AuctionTypeFilter } from '../types'
@@ -22,20 +26,54 @@ const AUCTION_TYPE_OPTIONS: { key: AuctionTypeFilter; label: string; icon?: Luci
 ]
 
 function AuctionToolbar({
+  isPanelOpen,
+  onTogglePanel,
+  onOpenFilterSheet,
+  selectedFilterCount,
   auctionType,
   onChangeAuctionType,
   sort,
   onChangeSort,
 }: {
+  isPanelOpen: boolean
+  onTogglePanel: () => void
+  onOpenFilterSheet: () => void
+  selectedFilterCount: number
   auctionType: AuctionTypeFilter
   onChangeAuctionType: (next: AuctionTypeFilter) => void
   sort: SortKey
   onChangeSort: (next: SortKey) => void
 }) {
+  const PanelIcon = isPanelOpen ? PanelLeftClose : PanelLeftOpen
+
   return (
     <div className="flex flex-wrap items-center gap-xs">
+      <button
+        type="button"
+        onClick={onOpenFilterSheet}
+        className="flex h-11 shrink-0 items-center gap-xs rounded-md border border-hairline px-base text-sm font-semibold text-body transition-colors hover:bg-surface-soft hover:text-ink lg:hidden"
+      >
+        <SlidersHorizontal size={16} />
+        {FILTER_TEXT.openSheet}
+        {selectedFilterCount > 0 && (
+          <span className="rounded-xs bg-primary-tint px-1.5 py-0.5 text-xs text-primary">
+            {selectedFilterCount}
+          </span>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={onTogglePanel}
+        aria-expanded={isPanelOpen}
+        className="hidden h-11 shrink-0 items-center gap-xs rounded-md border border-hairline px-base text-sm font-semibold text-body transition-colors hover:bg-surface-soft hover:text-ink lg:flex"
+      >
+        <PanelIcon size={16} />
+        {isPanelOpen ? FILTER_TEXT.collapse : FILTER_TEXT.expand}
+      </button>
+
       <div
-        className="flex min-w-0 flex-1 flex-wrap items-center gap-xs"
+        className="order-last flex w-full flex-wrap items-center gap-xs md:order-none md:w-auto"
         role="group"
       >
         {AUCTION_TYPE_OPTIONS.map((option) => {

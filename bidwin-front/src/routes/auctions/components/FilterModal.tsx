@@ -3,8 +3,7 @@ import { useEffect, useState } from 'react'
 import Button from '../../../components/ui/Button'
 import { FILTER_MODAL_TEXT } from '../constants'
 import {
-  EMPTY_SELECTION,
-  FILTER_GROUPS,
+  DEFAULT_FILTER_SELECTION,
   clearGroup,
   getSelectedIds,
   summarizeGroup,
@@ -22,16 +21,15 @@ import type { FilterGroup, FilterSelection } from '../filters'
 const ESCAPE_KEY = 'Escape'
 
 function FilterModal({
+  groups,
   initialGroupId,
   selection,
-  countFor,
   onApply,
   onClose,
 }: {
+  groups: readonly FilterGroup[]
   initialGroupId: string
   selection: FilterSelection
-  /** 아직 적용하지 않은 선택으로 몇 건이 남는지 (확인 버튼 문구에 쓴다) */
-  countFor: (selection: FilterSelection) => number
   onApply: (selection: FilterSelection) => void
   onClose: () => void
 }) {
@@ -47,7 +45,7 @@ function FilterModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const activeGroup = FILTER_GROUPS.find((group) => group.id === activeGroupId) ?? FILTER_GROUPS[0]
+  const activeGroup = groups.find((group) => group.id === activeGroupId) ?? groups[0]
   if (!activeGroup || activeGroup.sections.length === 0) return null
 
   const activeSection =
@@ -55,7 +53,7 @@ function FilterModal({
     activeGroup.sections[0]
   const SectionIcon = activeSection.icon
 
-  const selectedGroups = FILTER_GROUPS.filter(
+  const selectedGroups = groups.filter(
     (group) => getSelectedIds(draft, group.id).length > 0,
   )
 
@@ -75,7 +73,7 @@ function FilterModal({
           <nav className="shrink-0 overflow-y-auto border-b border-hairline-soft p-lg md:w-[200px] md:border-b-0 md:border-r">
             <h2 className="mb-base text-lg font-bold text-ink">{FILTER_MODAL_TEXT.title}</h2>
             <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-              {FILTER_GROUPS.map((group) => (
+              {groups.map((group) => (
                 <li key={group.id} className="shrink-0 md:shrink">
                   <GroupTab
                     group={group}
@@ -144,7 +142,9 @@ function FilterModal({
                 </div>
 
                 <div className="flex flex-wrap gap-xs">
-                  {activeSection.options.map((option) => {
+                  {activeSection.options.length === 0 ? (
+                    <p className="text-sm text-muted">{activeSection.emptyText}</p>
+                  ) : activeSection.options.map((option) => {
                     const isSelected = getSelectedIds(draft, activeGroup.id).includes(option.id)
                     return (
                       <button
@@ -190,13 +190,13 @@ function FilterModal({
 
           <button
             type="button"
-            onClick={() => setDraft(EMPTY_SELECTION)}
+            onClick={() => setDraft(DEFAULT_FILTER_SELECTION)}
             className="flex items-center gap-xs px-sm text-sm font-semibold text-body transition-colors hover:text-ink"
           >
             <RotateCcw size={14} />
             {FILTER_MODAL_TEXT.reset}
           </button>
-          <Button onClick={() => onApply(draft)}>{FILTER_MODAL_TEXT.submit(countFor(draft))}</Button>
+          <Button onClick={() => onApply(draft)}>{FILTER_MODAL_TEXT.submit}</Button>
         </div>
       </div>
     </div>

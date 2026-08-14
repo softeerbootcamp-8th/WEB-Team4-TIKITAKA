@@ -90,7 +90,7 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
             @Param("statuses") Collection<TradeStatus> statuses
     );
 
-    // 마이페이지 진행 중 거래 배너: 구매자는 확인 대기, 판매자는 확인 완료인 거래를 조회한다.
+    // 마이페이지 진행 중 거래 배너: 구매자·판매자 모두 거래 완료 전 두 단계를 조회한다.
     // 역할 판별을 위해 경매·판매자·구매자를 함께 가져온다.
     @Query("""
             select trade
@@ -98,8 +98,8 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
             join fetch trade.auction auction
             join fetch auction.seller
             join fetch trade.buyer
-            where (trade.buyer.id = :memberId and trade.status = :buyerStatus)
-               or (auction.seller.id = :memberId and trade.status = :sellerStatus)
+            where (trade.buyer.id = :memberId or auction.seller.id = :memberId)
+              and trade.status in (:buyerStatus, :sellerStatus)
             order by trade.purchasedAt asc, trade.id asc
             """)
     List<AuctionTrade> findActiveTrades(

@@ -27,6 +27,7 @@ function MyItemSection({
   emptyMessage,
   emptyActionLabel,
   emptyActionPath,
+  serverOffsetMs,
 }: {
   title: string
   items: ItemCardModel[]
@@ -35,6 +36,7 @@ function MyItemSection({
   emptyMessage: string
   emptyActionLabel: string
   emptyActionPath: string
+  serverOffsetMs: number
 }) {
   /* 미리보기 자리는 몇 개뿐이라, 아직 진행 중인 물품이 먼저 보이게 한다. */
   const visibleItems = ongoingFirst(items).slice(0, ITEM_PREVIEW_LIMIT)
@@ -59,7 +61,7 @@ function MyItemSection({
         <ul className="mt-sm grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-3">
           {visibleItems.map((item) => (
             <li key={item.auctionId}>
-              <MyItemCard item={item} />
+              <MyItemCard item={item} serverOffsetMs={serverOffsetMs} />
             </li>
           ))}
         </ul>
@@ -80,7 +82,10 @@ function MyItemSection({
   )
 }
 
-function MyItemCard({ item }: { item: ItemCardModel }) {
+function MyItemCard({ item, serverOffsetMs }: {
+  item: ItemCardModel
+  serverOffsetMs: number
+}) {
   const isDown = item.auctionType === 'DOWN'
 
   return (
@@ -107,7 +112,7 @@ function MyItemCard({ item }: { item: ItemCardModel }) {
             </dt>
             <dd className={`truncate text-base font-bold ${isDown ? 'text-down' : 'text-ink'}`}>
               {item.downPricing ? (
-                <DownCurrentPrice pricing={item.downPricing} />
+                <DownCurrentPrice pricing={item.downPricing} serverOffsetMs={serverOffsetMs} />
               ) : (
                 formatWon(item.price)
               )}
@@ -119,8 +124,11 @@ function MyItemCard({ item }: { item: ItemCardModel }) {
   )
 }
 
-function DownCurrentPrice({ pricing }: { pricing: DownPricing }) {
-  const { currentPrice } = useDownAuctionClock(pricing)
+function DownCurrentPrice({ pricing, serverOffsetMs }: {
+  pricing: DownPricing
+  serverOffsetMs: number
+}) {
+  const { currentPrice } = useDownAuctionClock(pricing, serverOffsetMs)
   return formatWon(currentPrice)
 }
 

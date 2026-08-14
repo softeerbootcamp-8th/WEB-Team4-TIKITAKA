@@ -3,13 +3,17 @@ package com.tikitaka.bidwinback.auction.presentation;
 import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
+import com.tikitaka.bidwinback.auction.application.AuctionListQuery.StatusFilter;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSellerResponse;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.DownAuctionDetailResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.UpAuctionDetailResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
@@ -36,6 +40,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,15 +55,40 @@ class AuctionControllerTest {
     @Mock
     private AuctionListService auctionListService;
 
+    @Mock
+    private AuctionLiveStateService auctionLiveStateService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuctionController(auctionDetailService, auctionCreateService, auctionListService))
+                .standaloneSetup(new AuctionController(
+                        auctionDetailService,
+                        auctionCreateService,
+                        auctionListService,
+                        auctionLiveStateService
+                ))
                 .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void 서버_시각을_조회하면_캐시하지_않고_DB_기준_시각을_응답한다() throws Exception {
+        // given
+        long databaseTime = 1_754_020_500_000L;
+        when(auctionLiveStateService.getDatabaseTimeMillis()).thenReturn(databaseTime);
+
+        // when
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions/clock"));
+
+        // then
+        result
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data").value(databaseTime));
+        verify(auctionLiveStateService).getDatabaseTimeMillis();
     }
 
     @Test
@@ -131,6 +161,63 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.error.code").value("COMMON_500_1"))
                 .andExpect(jsonPath("$.error.message")
                         .value("서버 내부 오류가 발생했습니다."));
+    }
+
+    @Test
+    void 목록_필터를_요청하면_상태와_카테고리를_조회_조건으로_전달한다() throws Exception {
+        // given
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenReturn(new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L));
+
+        // when
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
+                .param("status", "ACTIVE")
+                .param("category", "HOUSEHOLD", "FOOD"));
+
+        // then
+        result.andExpect(status().isOk());
+        verify(auctionListService).getList(new AuctionListQuery(
+                null,
+                AuctionSort.RECOMMENDED,
+                null,
+                StatusFilter.ACTIVE,
+                List.of(AuctionCategory.HOUSEHOLD, AuctionCategory.FOOD),
+                1,
+                16,
+                null
+        ));
+    }
+
+    @Test
+    void 지원하지_않는_경매_상태_필터면_400이고_목록을_조회하지_않는다() throws Exception {
+        // given
+        String unsupportedStatus = "PAUSED";
+
+        // when
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
+                .param("status", unsupportedStatus));
+
+        // then
+        result
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+        verifyNoInteractions(auctionListService);
+    }
+
+    @Test
+    void 지원하지_않는_카테고리_필터면_400이고_목록을_조회하지_않는다() throws Exception {
+        // given
+        String unsupportedCategory = "DIGITAL";
+
+        // when
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
+                .param("category", unsupportedCategory));
+
+        // then
+        result
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+        verifyNoInteractions(auctionListService);
     }
 
     @Test
