@@ -5,7 +5,6 @@ import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery.StatusFilter;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -40,7 +39,6 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,9 +53,6 @@ class AuctionControllerTest {
     @Mock
     private AuctionListService auctionListService;
 
-    @Mock
-    private AuctionLiveStateService auctionLiveStateService;
-
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -66,29 +61,11 @@ class AuctionControllerTest {
                 .standaloneSetup(new AuctionController(
                         auctionDetailService,
                         auctionCreateService,
-                        auctionListService,
-                        auctionLiveStateService
+                        auctionListService
                 ))
                 .setCustomArgumentResolvers(new LoginMemberArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
-    }
-
-    @Test
-    void 서버_시각을_조회하면_캐시하지_않고_DB_기준_시각을_응답한다() throws Exception {
-        // given
-        long databaseTime = 1_754_020_500_000L;
-        when(auctionLiveStateService.getDatabaseTimeMillis()).thenReturn(databaseTime);
-
-        // when
-        ResultActions result = mockMvc.perform(get("/api/v1/auctions/clock"));
-
-        // then
-        result
-                .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.data").value(databaseTime));
-        verify(auctionLiveStateService).getDatabaseTimeMillis();
     }
 
     @Test
