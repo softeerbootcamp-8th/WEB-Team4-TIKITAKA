@@ -260,4 +260,22 @@ class AuthControllerTest {
         // then
         assertEquals(HttpStatus.OK, result.getStatusCode());
     }
+
+    @Test
+    void 로그아웃_시_세션_삭제에_실패하면_인증_불가로_응답한다() {
+        // given
+        AuthService authService = mock(AuthService.class);
+        MockHttpServletRequest servletRequest = mock(MockHttpServletRequest.class);
+        var session = mock(jakarta.servlet.http.HttpSession.class);
+        when(servletRequest.getSession(false)).thenReturn(session);
+        doThrow(new DataAccessException("Redis 장애") {
+        }).when(session).invalidate();
+
+        // when & then
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> new AuthController(authService, sessionRepository).logout(servletRequest)
+        );
+        assertEquals(ErrorCode.AUTHENTICATION_UNAVAILABLE, exception.getErrorCode());
+    }
 }

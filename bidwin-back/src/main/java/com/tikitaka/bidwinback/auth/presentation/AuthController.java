@@ -152,9 +152,11 @@ public class AuthController {
                 session.invalidate();
             } catch (IllegalStateException ignored) {
                 // 이미 로그아웃된 세션!
-            } catch (DataAccessException ignored) {
-                // Redis 장애로 못 지워도 로그아웃 의도는 달성된 것으로 본다.
-                // 방치된 세션은 절대 만료(48h)나 TTL로 결국 자연 정리된다.
+            } catch (DataAccessException exception) {
+                // 서버 측 세션이 실제로 삭제됐는지 확인할 수 없다. 성공으로 응답하면
+                // 탈취됐거나 다른 곳에 저장된 같은 쿠키가 재시도 없이 TTL/절대 만료
+                // 전까지 계속 유효한 자격으로 남으므로, 성공으로 숨기지 않고 알린다.
+                throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
             }
         }
 
