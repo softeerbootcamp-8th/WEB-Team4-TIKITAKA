@@ -28,20 +28,6 @@ function TopNav() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 768px)')
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      if (event.matches) setIsMenuOpen(false)
-    }
-
-    if (mediaQuery.matches) setIsMenuOpen(false)
-    mediaQuery.addEventListener('change', handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleChange)
-    }
-  }, [])
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
