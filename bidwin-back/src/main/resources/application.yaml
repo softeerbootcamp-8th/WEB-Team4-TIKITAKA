@@ -36,11 +36,20 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # 로컬/테스트는 비밀번호 없는 Redis를 그대로 쓰도록 기본값을 빈 문자열로 둔다.
+      password: ${REDIS_PASSWORD:}
       # Redis는 보조 캐시라 응답이 없어도(먹통) 빠르게 실패해서 MySQL로 넘어가야 한다.
       # 기본값(수십 초)대로 두면 그 시간만큼 톰캣 스레드가 묶여, 보조 캐시 장애가
       # 입찰 API 전체 지연/고갈로 번질 수 있다.
+      # 세션 저장소도 같은 커넥션 설정을 공유하므로, 세션 조회도 동일하게 빠르게 실패한다.
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:300ms}
       timeout: ${REDIS_COMMAND_TIMEOUT:300ms}
+  session:
+    store-type: redis
+    # 유휴 만료. 활동이 없으면 이 시간 뒤 자동 로그아웃(Redis TTL로 처리).
+    # 절대 만료(로그인 후 경과 시간)는 SessionAuthenticationFilter가 별도로 검사한다.
+    timeout: ${SESSION_IDLE_TIMEOUT:3h}
+    # flush mode(즉시 반영 여부)는 이 프로퍼티로는 안 먹혀서 SessionConfig의 커스터마이저로 설정한다.
 
 server:
   tomcat:
@@ -53,6 +62,9 @@ server:
     session:
       tracking-modes: cookie
       cookie:
+        # Spring Session 도입 전과 쿠키 이름을 동일하게 유지한다
+        # (기본값 SESSION으로 바뀌면 기존 클라이언트/인프라 설정이 깨질 수 있음).
+        name: JSESSIONID
         secure: ${SESSION_COOKIE_SECURE:true}
         http-only: true
         same-site: lax

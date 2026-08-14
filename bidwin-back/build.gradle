@@ -47,6 +47,9 @@ dependencies {
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // 순수 spring-session-data-redis만으로는 Boot의 자동설정(글루 코드)이 빠져서
+    // SessionRepository 빈이 전혀 안 만들어진다. Boot 스타터를 써야 실제로 활성화된다.
+    implementation 'org.springframework.boot:spring-boot-starter-session-data-redis'
 }
 
 tasks.named('test') {

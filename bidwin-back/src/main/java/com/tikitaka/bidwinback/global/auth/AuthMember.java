@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.global.auth;
 
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 
+import java.io.Serializable;
 import java.time.Instant;
 
 /**
@@ -9,12 +10,13 @@ import java.time.Instant;
  * 현재 자격과 비교할 로그인 당시 authVersion만 보관한다.
  * loggedInAt은 활동할 때마다 갱신하지 않는 절대 만료의 기준 시각이다.
  * authVersion과 loggedInAt이 생략된 스냅샷은 검증을 우회하므로 편의 생성자를 두지 않는다.
+ * Redis 세션 저장소에 직렬화되어 보관되므로 Serializable을 구현해야 한다.
  */
 public record AuthMember(
         Long memberId,
         long authVersion,
         Instant loggedInAt
-) {
+) implements Serializable {
 
     public static AuthMember from(Member member, Instant loggedInAt) {
         return new AuthMember(

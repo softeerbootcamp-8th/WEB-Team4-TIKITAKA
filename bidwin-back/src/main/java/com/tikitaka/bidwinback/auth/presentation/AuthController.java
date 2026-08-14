@@ -13,13 +13,18 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.session.SessionRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final SessionRepository<?> sessionRepository;
 
     @PostMapping("/signups/email/verify")
     public ResponseEntity<ApiResponse<AvailabilityResponse>> verifyEmail(
@@ -80,11 +86,57 @@ public class AuthController {
             HttpServletRequest servletRequest
     ) {
         AuthMember authMember = authService.login(request);
+
+        try {
+            establishSession(servletRequest, authMember);
+        } catch (SerializationException exception) {
+            // 로그인은 공개 경로라 SessionAuthenticationFilter를 거치지 않는다. 클라이언트가
+            // 들고 있던 기존 쿠키가 가리키는 세션이 손상되어 있으면 getSession()이 역직렬화
+            // 단계에서 바로 이 예외를 던진다. 손상된 세션을 지우지 않으면 재로그인해도 같은
+            // 손상된 데이터를 계속 읽어 TTL이 끝날 때까지 로그인이 안 되므로, 지우고 재시도한다.
+            try {
+                discardCorruptedSession(servletRequest);
+                establishSession(servletRequest, authMember);
+            } catch (DataAccessException | SerializationException retryException) {
+                discardFailedSession(servletRequest);
+                throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+            }
+        } catch (DataAccessException exception) {
+            // 자격 검증은 끝났지만 세션을 저장할 수 없으므로 로그인 성공으로 응답하면 안 된다.
+            discardFailedSession(servletRequest);
+            throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
+        }
+
+        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    private void establishSession(HttpServletRequest servletRequest, AuthMember authMember) {
         HttpSession session = servletRequest.getSession();
         servletRequest.changeSessionId();
         session.setAttribute(AuthConstant.SESSION_KEY, authMember);
+    }
 
-        return ResponseEntity.ok(ApiResponse.successWithoutData());
+    private void discardCorruptedSession(HttpServletRequest servletRequest) {
+        String requestedSessionId = servletRequest.getRequestedSessionId();
+        if (requestedSessionId != null) {
+            sessionRepository.deleteById(requestedSessionId);
+        }
+    }
+
+    /**
+     * 이 요청을 실패로 응답한 뒤에도, SessionRepositoryFilter의 최종 커밋(finally 블록)은
+     * 이미 "현재 세션"으로 표시된 이 세션을 다시 저장하거나 쿠키를 내려보내려 시도할 수
+     * 있다. 실패 응답과 서버에 남은 유효 세션이 어긋나지 않도록 지금 명시적으로 폐기해
+     * 최종 커밋 대상에서 제거한다. 폐기 자체가 실패해도 이미 실패로 응답할 것이므로 무시한다.
+     */
+    private void discardFailedSession(HttpServletRequest servletRequest) {
+        try {
+            HttpSession session = servletRequest.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+        } catch (IllegalStateException | DataAccessException ignored) {
+        }
     }
 
     @GetMapping("/session")
@@ -118,6 +170,11 @@ public class AuthController {
                 session.invalidate();
             } catch (IllegalStateException ignored) {
                 // 이미 로그아웃된 세션!
+            } catch (DataAccessException exception) {
+                // 서버 측 세션이 실제로 삭제됐는지 확인할 수 없다. 성공으로 응답하면
+                // 탈취됐거나 다른 곳에 저장된 같은 쿠키가 재시도 없이 TTL/절대 만료
+                // 전까지 계속 유효한 자격으로 남으므로, 성공으로 숨기지 않고 알린다.
+                throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
             }
         }
 
