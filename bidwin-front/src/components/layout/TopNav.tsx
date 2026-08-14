@@ -16,6 +16,8 @@ const NAV_LINKS = [
   { label: '판매하기', to: '/auctions/new', pathname: '/auctions/new', authenticatedOnly: true },
 ]
 
+const AVAILABLE_DEPOSIT_LABEL = '사용 가능 금액'
+
 function TopNav() {
   const { isAuthenticated, setAuthenticated } = useAuth()
   const { showToast } = useToast()
@@ -28,7 +30,8 @@ function TopNav() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [availableBalance, setAvailableBalance] = useState<number | null>(null)
+  /* 지금 입찰에 쓸 수 있는 금액. inUse(입찰에 묶인 보증금)는 뺀 deposit.balance다. */
+  const [availableDeposit, setAvailableDeposit] = useState<number | null>(null)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
   useEffect(() => {
@@ -47,7 +50,7 @@ function TopNav() {
   }, [])
   useEffect(() => {
     if (isAuthenticated !== true) {
-      setAvailableBalance(null)
+      setAvailableDeposit(null)
       return
     }
 
@@ -55,7 +58,7 @@ function TopNav() {
     requestMyPage(controller.signal).then((result) => {
       if (controller.signal.aborted) return
       if (result.ok) {
-        setAvailableBalance(result.data.deposit.balance + result.data.deposit.inUse)
+        setAvailableDeposit(result.data.deposit.balance)
         return
       }
       if (result.status === 401) setAuthenticated(false)
@@ -152,6 +155,21 @@ function TopNav() {
             </button>
             {isAuthenticated === true ? (
               <>
+                {/*
+                  * 알약 버튼 사이에 또 하나의 알약을 두면 무게가 겹쳐, 라벨+금액 두 줄로 세우고
+                  * 오른쪽 hairline으로만 버튼 묶음과 나눈다. 값이 늦게 와도 헤더가 밀리지 않게
+                  * 로딩 중에는 같은 폭의 자리를 잡아 둔다.
+                  */}
+                <p className="mr-xxs hidden flex-col items-end justify-center gap-0.5 border-r border-hairline pr-sm leading-none md:flex">
+                  <span className="text-xs font-medium text-muted">{AVAILABLE_DEPOSIT_LABEL}</span>
+                  {availableDeposit === null ? (
+                    <span aria-hidden className="h-4 w-20 animate-pulse rounded-xs bg-surface-strong" />
+                  ) : (
+                    <span className="text-sm font-bold tracking-tight text-ink tabular-nums">
+                      {formatWon(availableDeposit)}
+                    </span>
+                  )}
+                </p>
                 <Link
                   to="/mypage"
                   className="hidden h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline md:flex md:px-base"
@@ -170,11 +188,6 @@ function TopNav() {
                     {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
                   </span>
                 </button>
-                {availableBalance !== null && (
-                  <span className="hidden h-9 items-center rounded-pill border border-hairline bg-surface-soft px-sm text-sm font-semibold text-ink md:inline-flex">
-                    {formatWon(availableBalance)}
-                  </span>
-                )}
               </>
             ) : (
               <Link
@@ -205,6 +218,13 @@ function TopNav() {
         }`}
       >
         <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-sm px-base pb-base pt-sm sm:px-lg">
+          {/* 링크 사이에 문장으로 끼워 두면 누를 수 있는 항목처럼 보여, 마이페이지 보증금 카드와 같은 타일로 맨 위에 올린다. */}
+          {isAuthenticated === true && availableDeposit !== null && (
+            <div className="flex items-center justify-between rounded-lg bg-surface-soft px-base py-sm">
+              <span className="text-sm text-body">{AVAILABLE_DEPOSIT_LABEL}</span>
+              <span className="text-base font-bold text-ink tabular-nums">{formatWon(availableDeposit)}</span>
+            </div>
+          )}
           <p className="px-sm text-xs font-semibold uppercase tracking-[0.08em] text-body">메뉴</p>
           {NAV_LINKS.filter((link) => !link.authenticatedOnly || isAuthenticated === true).map((link) => {
             const isActive = location.pathname === link.pathname
@@ -231,11 +251,6 @@ function TopNav() {
               >
                 마이페이지
               </Link>
-              {availableBalance !== null && (
-                <p className="rounded-lg px-sm py-2 text-sm font-semibold text-ink">
-                  현재 잔액: <span className="text-primary">{formatWon(availableBalance)}</span>
-                </p>
-              )}
               <button
                 type="button"
                 onClick={() => {
