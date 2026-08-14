@@ -42,6 +42,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_TRAD
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.IDEMPOTENCY_KEY_REUSED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -169,6 +170,34 @@ class BuyNowServiceTest {
                 () -> assertThat(bid.getBidder()).isSameAs(buyer),
                 () -> assertThat(bid.getPrice()).isEqualTo(FINAL_PRICE),
                 () -> assertThat(bid.getStatus()).isEqualTo(bidStatus)
+        );
+    }
+
+    @Test
+    void 즉시구매가는_1000억_원부터_거절한다() {
+        // given
+        BuyNowCommand command = command(
+                AUCTION_ID,
+                100_000_000_000L,
+                BidStatus.BUY_NOW
+        );
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> transactionService.buy(command)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_LIMIT_EXCEEDED);
+        verifyNoInteractions(
+                memberRepository,
+                auctionRepository,
+                auctionDepositRepository,
+                auctionTradeRepository,
+                bidRepository,
+                requestRepository,
+                eventPublisher
         );
     }
 

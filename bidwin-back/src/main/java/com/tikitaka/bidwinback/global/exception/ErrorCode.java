@@ -209,9 +209,14 @@ public enum ErrorCode {
             "AUCTION_400_9",
             "지원하지 않는 정렬 기준입니다."
     ),
-    INVALID_PRICE_DROP_INTERVAL(
+    PRICE_LIMIT_EXCEEDED(
             HttpStatus.BAD_REQUEST,
             "AUCTION_400_10",
+            "가격은 1,000억 원 미만이어야 합니다."
+    ),
+    INVALID_PRICE_DROP_INTERVAL(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_11",
             "인하 주기는 1분/3분/5분/10분 중에서 선택해야 합니다."
     ),
 

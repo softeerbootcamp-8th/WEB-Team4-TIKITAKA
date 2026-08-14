@@ -17,10 +17,10 @@ import {
 import type { AuctionImagePresignResponse } from '../../../lib/api/auctionImage'
 import { requestAuctionCreate } from '../../../lib/api/auctions'
 import type { AuctionCategory } from '../../../lib/api/auctions'
+import { isAuthenticImageFile } from '../../../lib/imageValidation'
 import ImageUploader from './ImageUploader'
 import type { AuctionImageItem } from './ImageUploader'
 import {
-  ALLOWED_IMAGE_CONTENT_TYPES,
   AUCTION_DURATION_OPTIONS,
   AUCTION_TYPE_OPTIONS,
   CATEGORY_OPTIONS,
@@ -118,7 +118,7 @@ function AuctionRegisterPage() {
         setError(ERROR_MESSAGE.imageTooLarge)
         continue
       }
-      if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type)) {
+      if (!(await isAuthenticImageFile(file))) {
         setError(ERROR_MESSAGE.unsupportedImageType)
         continue
       }
