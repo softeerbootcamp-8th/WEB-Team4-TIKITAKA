@@ -159,7 +159,7 @@ function HomePage() {
           입찰이 활발한 경매예요. 하락 중인 경매는 시간이 지날수록 가격이 떨어집니다.
         </p>
 
-        <div className="mt-lg grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-lg grid grid-cols-2 gap-sm sm:gap-lg lg:grid-cols-3 xl:grid-cols-5">
           {popularAuctions.map((auction) => (
             <AuctionSummaryCard
               key={auction.auctionId}
@@ -586,7 +586,7 @@ function HomeSkeleton({ categories }: { categories: AuctionCategoryOption[] | nu
       <section className="mt-section motion-safe:animate-pulse">
         <div className="h-8 w-64 rounded-pill bg-surface-strong" />
         <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
-        <div className="mt-lg grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-lg grid grid-cols-2 gap-sm sm:gap-lg lg:grid-cols-3 xl:grid-cols-5">
           {HOME_SKELETON_KEYS.map((key) => (
             <Card key={key} className="flex h-full flex-col gap-sm">
               <div className="aspect-square w-full rounded-md bg-surface-strong" />
