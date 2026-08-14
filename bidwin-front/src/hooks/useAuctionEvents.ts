@@ -43,11 +43,18 @@ export function useAuctionEvents(
   const idsKey = uniqueIds.join(',')
   const [status, setStatus] = useState<ConnectionStatus>('idle')
   const [reconnectToken, setReconnectToken] = useState(0)
-  const reconnect = useCallback(() => setReconnectToken((value) => value + 1), [])
+  const reconnect = useCallback(() => {
+    if (!navigator.onLine) return
+    setReconnectToken((value) => value + 1)
+  }, [])
 
   useEffect(() => {
     if (idsKey.length === 0) {
       setStatus('idle')
+      return
+    }
+    if (mode === 'detail' && !navigator.onLine) {
+      setStatus('disconnected')
       return
     }
 
@@ -101,6 +108,11 @@ export function useAuctionEvents(
     source.addEventListener('bid-created', handleBid)
     source.addEventListener('bid-history-snapshot', handleHistory)
     source.addEventListener('heartbeat', handleHeartbeat)
+    const handleOffline = () => {
+      source.close()
+      setStatus('disconnected')
+    }
+    if (mode === 'detail') window.addEventListener('offline', handleOffline)
     const staleCheckId = mode === 'detail'
       ? window.setInterval(() => {
           if (Date.now() - lastActivityAt < DETAIL_STALE_AFTER_MS) return
@@ -110,6 +122,7 @@ export function useAuctionEvents(
       : undefined
 
     return () => {
+      if (mode === 'detail') window.removeEventListener('offline', handleOffline)
       if (staleCheckId !== undefined) window.clearInterval(staleCheckId)
       source.close()
     }
