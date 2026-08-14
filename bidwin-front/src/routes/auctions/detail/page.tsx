@@ -48,6 +48,7 @@ import type {
 } from '../../../lib/api/auctions'
 import type { ApiFailure } from '../../../lib/api/client'
 import { computeCurrentDownPrice, computeDropHistory } from '../../../lib/auctionPricing'
+import { notifyDepositChanged } from '../../../lib/depositEvents'
 import { MAX_BID_PRICE, MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
 
@@ -309,6 +310,7 @@ function AuctionDetailPage() {
       refreshBidHistory()
       showToast(`${formatWon(acceptedPrice)}으로 입찰했어요.`, 'success')
     }
+    notifyDepositChanged()
     return true
   }
 
@@ -351,6 +353,7 @@ function AuctionDetailPage() {
         finalPrice: result.data.finalPrice,
       }
     })
+    notifyDepositChanged()
     showToast(`${formatWon(result.data.finalPrice)}에 구매가 확정됐어요.`, 'success')
   }
 
