@@ -7,13 +7,19 @@ import com.tikitaka.bidwinback.global.auth.AuthExceptionFilter;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.LoginMemberArgumentResolver;
 import com.tikitaka.bidwinback.global.auth.SessionAuthenticationFilter;
+import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.member.presentation.dto.request.PasswordUpdateRequest;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,11 +29,12 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -111,16 +118,11 @@ class MyPageAccountUpdateControllerTest {
         MockHttpSession session = authenticatedSession(currentAuth);
         String previousSessionId = session.getId();
         when(passwordChangeService.change(
-                eq(currentAuth),
-                eq("current-password!"),
-                eq("new-password!"),
-                eq("new-password!"),
-                any()
-        )).thenAnswer(invocation -> {
-            Consumer<AuthMember> onPasswordChanged = invocation.getArgument(4);
-            onPasswordChanged.accept(refreshedAuth);
-            return refreshedAuth;
-        });
+                currentAuth,
+                "current-password!",
+                "new-password!",
+                "new-password!"
+        )).thenReturn(refreshedAuth);
 
         mockMvc.perform(patch("/api/v1/mypage/password")
                         .session(session)
@@ -138,6 +140,36 @@ class MyPageAccountUpdateControllerTest {
         assertThat(session.getId()).isNotEqualTo(previousSessionId);
         assertThat(session.getAttribute(AuthConstant.SESSION_KEY))
                 .isSameAs(refreshedAuth);
+    }
+
+    @Test
+    void 비밀번호_변경_후_세션_갱신에_실패하면_재로그인을_안내한다() {
+        // given
+        AuthMember currentAuth = authMember();
+        AuthMember refreshedAuth = new AuthMember(1L, 3L, currentAuth.loggedInAt());
+        when(passwordChangeService.change(
+                currentAuth,
+                "current-password!",
+                "new-password!",
+                "new-password!"
+        )).thenReturn(refreshedAuth);
+
+        HttpServletRequest servletRequest = mock(HttpServletRequest.class);
+        HttpSession session = mock(HttpSession.class);
+        when(servletRequest.getSession(false)).thenReturn(session);
+        doThrow(new DataAccessResourceFailureException("Redis 장애"))
+                .when(session).setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
+        PasswordUpdateRequest request = new PasswordUpdateRequest(
+                "current-password!", "new-password!", "new-password!"
+        );
+
+        // when & then
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> new MyPageAccountUpdateController(memberService, passwordChangeService)
+                        .changePassword(currentAuth, request, servletRequest)
+        );
+        assertEquals(ErrorCode.UNAUTHENTICATED, exception.getErrorCode());
     }
 
     @Test

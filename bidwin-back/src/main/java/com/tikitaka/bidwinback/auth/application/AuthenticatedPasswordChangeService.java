@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -26,19 +25,19 @@ public class AuthenticatedPasswordChangeService {
     private final Clock clock;
 
     /**
-     * 세션 갱신(onPasswordChanged)을 같은 트랜잭션 안에서 실행한다. 세션 갱신이 실패하면
-     * 비밀번호는 이미 바뀌었는데 세션은 예전 자격을 들고 있는 부분 성공 상태가 되므로,
-     * 실패 시 이 메서드 전체(비밀번호 변경 포함)를 함께 롤백해 원자성을 지킨다.
-     * 대가로 Redis 응답을 기다리는 동안 이 회원 행의 비관적 락을 더 오래 붙잡게 되는데,
-     * 비밀번호 변경은 빈도가 낮은 작업이라 이 트레이드오프를 감수한다.
+     * 세션(Redis) 갱신은 이 메서드가 반환된(=DB 커밋이 끝난) 이후 컨트롤러가 담당한다.
+     * HttpSession은 웹 계층 개념이라 이 서비스가 알 필요가 없고, 커밋 전에 세션을 먼저
+     * 갱신하면 그 이후 커밋 자체가 실패할 때 반대 방향의 불일치(세션은 새 버전인데 DB는
+     * 롤백된 옛 버전)가 생긴다. 세션 갱신이 실패해도 비밀번호 변경 자체는 이미 유효하므로,
+     * 그 경우 이 세션만 예전 authVersion을 들고 있다가 다음 인증 요청에서 자연스럽게
+     * 재로그인이 유도되게 한다(다른 기기 세션과 동일한 방식).
      */
     @Transactional
     public AuthMember change(
             AuthMember currentAuth,
             String currentPassword,
             String newPassword,
-            String newPasswordConfirm,
-            Consumer<AuthMember> onPasswordChanged
+            String newPasswordConfirm
     ) {
         if (!newPassword.equals(newPasswordConfirm)) {
             throw new AuthException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH);
@@ -63,8 +62,6 @@ public class AuthenticatedPasswordChangeService {
         );
 
         // 현재 세션은 새 인증 버전으로 갱신하고, 로그인 절대 만료 시각은 연장하지 않는다.
-        AuthMember refreshedAuth = AuthMember.from(member, currentAuth.loggedInAt());
-        onPasswordChanged.accept(refreshedAuth);
-        return refreshedAuth;
+        return AuthMember.from(member, currentAuth.loggedInAt());
     }
 }
