@@ -183,12 +183,18 @@ function AuctionListPage() {
 
   return (
     <main className={`mx-auto flex ${CONTENT_HEIGHT_CLASS} max-w-[1200px] flex-col px-lg py-base`}>
-      <div className="flex min-h-0 flex-1 gap-lg">
-        {isPanelOpen && (
-          <aside className={`hidden ${FILTER_PANEL_WIDTH_CLASS} shrink-0 lg:block`}>
+      <div className="flex min-h-0 flex-1">
+        <aside
+          aria-hidden={!isPanelOpen}
+          inert={!isPanelOpen}
+          className={`hidden shrink-0 overflow-hidden transition-[width,margin-right,opacity] duration-300 ease-out lg:block ${
+            isPanelOpen ? 'mr-lg w-[190px] opacity-100' : 'pointer-events-none mr-0 w-0 opacity-0'
+          }`}
+        >
+          <div className={`h-full ${FILTER_PANEL_WIDTH_CLASS}`}>
             {filterPanel}
-          </aside>
-        )}
+          </div>
+        </aside>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="shrink-0">
