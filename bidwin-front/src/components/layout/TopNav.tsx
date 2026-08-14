@@ -10,8 +10,8 @@ import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 
 const NAV_LINKS = [
-  { label: '진행중 경매', to: '/auctions' },
-  { label: '판매하기', to: '/auctions/new' },
+  { label: '진행중 경매', to: '/auctions?status=ACTIVE', pathname: '/auctions', authenticatedOnly: false },
+  { label: '판매하기', to: '/auctions/new', pathname: '/auctions/new', authenticatedOnly: true },
 ]
 
 function TopNav() {
@@ -80,58 +80,68 @@ function TopNav() {
         <Link to="/" aria-label="비드윈 홈" className="shrink-0">
           <img src={bidwinLogo} alt="" className="block h-8 w-auto sm:h-10" />
         </Link>
-        <nav className="hidden flex-1 gap-lg lg:flex">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className="text-sm font-medium text-body hover:text-ink"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <form onSubmit={submitSearch} role="search" className="hidden w-[min(280px,30vw)] md:flex">
-          {searchField}
-        </form>
-        <div className="flex items-center gap-xs">
-          <button
-            type="button"
-            aria-label="검색"
-            onClick={() => setIsSearchOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-body hover:bg-surface-strong hover:text-ink md:hidden"
-          >
-            <Search size={18} />
-          </button>
-          {isAuthenticated === true ? (
-            <>
+        <nav className="hidden flex-1 items-center gap-lg lg:flex">
+          {NAV_LINKS.filter((link) => !link.authenticatedOnly || isAuthenticated === true).map((link) => {
+            const isActive = location.pathname === link.pathname
+            return (
               <Link
-                to="/mypage"
-                className="flex h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline sm:px-base"
+                key={link.to}
+                to={link.to}
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative flex items-center text-sm font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-left after:bg-primary after:transition-transform after:duration-200 ${
+                  isActive
+                    ? 'text-primary after:scale-x-100'
+                    : 'text-body after:scale-x-0 hover:text-primary hover:after:scale-x-100'
+                }`}
               >
-                마이페이지
+                {link.label}
               </Link>
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
-                className="flex h-9 w-9 items-center justify-center rounded-pill text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-sm"
-              >
-                <LogOut size={18} aria-hidden className="sm:hidden" />
-                <span className="hidden sm:inline">
-                  {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
-                </span>
-              </button>
-            </>
-          ) : (
-            <Link
-              to="/login"
-              className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
+            )
+          })}
+        </nav>
+        <div className="ml-auto flex min-w-0 items-center gap-xs sm:gap-sm">
+          <form onSubmit={submitSearch} role="search" className="hidden w-[min(280px,30vw)] md:flex">
+            {searchField}
+          </form>
+          <div className="flex shrink-0 items-center gap-xs">
+            <button
+              type="button"
+              aria-label="검색"
+              onClick={() => setIsSearchOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-body hover:bg-surface-strong hover:text-ink md:hidden"
             >
-              로그인
-            </Link>
-          )}
+              <Search size={18} />
+            </button>
+            {isAuthenticated === true ? (
+              <>
+                <Link
+                  to="/mypage"
+                  className="flex h-9 items-center rounded-pill bg-surface-strong px-sm text-sm font-semibold text-ink hover:bg-hairline sm:px-base"
+                >
+                  마이페이지
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  aria-label={isLoggingOut ? '로그아웃 중' : '로그아웃'}
+                  className="flex h-9 w-9 items-center justify-center rounded-pill text-sm font-semibold text-muted hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-sm"
+                >
+                  <LogOut size={18} aria-hidden className="sm:hidden" />
+                  <span className="hidden sm:inline">
+                    {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
+                  </span>
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="flex h-9 items-center rounded-pill bg-surface-strong px-base text-sm font-semibold text-ink hover:bg-hairline"
+              >
+                로그인
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
