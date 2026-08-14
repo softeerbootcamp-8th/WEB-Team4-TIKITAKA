@@ -7,8 +7,9 @@ import {
   TITLE_MAX_LENGTH,
 } from './constants'
 
-/* 백엔드 AuctionCreateRequest.contact와 같은 기준(하이픈 없는 휴대폰 번호). */
-const CONTACT_PATTERN = /^01[016789]\d{7,8}$/
+/* 백엔드 AuctionCreateRequest.contact와 같은 기준.
+ * 오픈채팅방 링크 등으로 연락받는 판매자도 있어 휴대폰 번호 또는 http(s) 링크를 모두 허용한다. */
+const CONTACT_PATTERN = /^(01[016789]\d{7,8}|https?:\/\/\S+)$/
 
 interface AuctionFormFields {
   title: string

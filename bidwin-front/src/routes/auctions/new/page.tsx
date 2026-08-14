@@ -199,12 +199,6 @@ function AuctionRegisterPage() {
       setError(null)
     }
 
-  /* 한글 등 숫자가 아닌 문자는 입력 시점에 걸러 연락처에 들어가지 않게 한다. */
-  const handleContactChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setContact(event.target.value.replace(NON_DIGIT_PATTERN, ''))
-    setError(null)
-  }
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isSubmitting) return
@@ -336,12 +330,10 @@ function AuctionRegisterPage() {
           />
           <TextInput
             label={TEXT.contactLabel}
-            type="text"
-            inputMode="numeric"
             value={contact}
-            onChange={handleContactChange}
+            onChange={handleFieldChange(setContact)}
             placeholder={TEXT.contactPlaceholder}
-            maxLength={11}
+            maxLength={100}
           />
         </Card>
 

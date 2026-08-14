@@ -28,10 +28,13 @@ public record AuctionCreateRequest(
         @NotBlank(message = "카테고리는 필수입니다.")
         String category,
 
+        // 오픈채팅방 링크 등으로 연락받는 판매자도 있어, 휴대폰 번호 또는 http(s) 링크
+        // 형식을 모두 허용한다(한글 등 의미 없는 문자열만 막는다).
         @NotBlank(message = "연락처는 필수입니다.")
+        @Size(max = 100, message = "연락처는 100자 이하로 입력해주세요.")
         @Pattern(
-                regexp = "^01[016789]\\d{7,8}$",
-                message = "연락처는 하이픈 없이 올바른 휴대폰 번호 형식으로 입력해야 합니다."
+                regexp = "^(01[016789]\\d{7,8}|https?://\\S+)$",
+                message = "연락처는 하이픈 없는 휴대폰 번호 또는 http(s)로 시작하는 링크로 입력해야 합니다."
         )
         String contact,
 
