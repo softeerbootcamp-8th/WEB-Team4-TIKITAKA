@@ -1,7 +1,15 @@
 package com.tikitaka.bidwinback.auction.application.live;
 
-/**
- * 트랜잭션 안에서는 식별자만 알리고, 커밋 뒤 DB에서 최신 절대 상태를 다시 읽는다.
- */
-public record TradeStatusChanged(long tradeId) {
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
+
+/** 커밋 후 전파할 거래 상태의 절대 스냅샷. */
+public record TradeStatusChanged(TradeLiveState state) {
+
+    public static TradeStatusChanged from(AuctionTrade trade) {
+        return new TradeStatusChanged(new TradeLiveState(
+                trade.getId(),
+                trade.getAuction().getId(),
+                trade.getStatus()
+        ));
+    }
 }

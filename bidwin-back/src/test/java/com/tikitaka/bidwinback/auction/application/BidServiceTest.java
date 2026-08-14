@@ -20,6 +20,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionDepositRepositor
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.SealedBidRepository;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -141,7 +142,18 @@ class BidServiceTest {
         ArgumentCaptor<Bid> bidCaptor = ArgumentCaptor.forClass(Bid.class);
         verify(bidRepository).save(bidCaptor.capture());
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
-        verify(eventPublisher).publishEvent(new AuctionBidCreated(AUCTION_ID, BID_ID));
+        verify(eventPublisher).publishEvent(new AuctionBidCreated(
+                AUCTION_ID,
+                BID_ID,
+                new BidHistoryItemResponse(
+                        "BID:" + BID_ID,
+                        "입*자",
+                        PRICE,
+                        BID_AT.atZone(java.time.ZoneId.of("Asia/Seoul"))
+                                .toInstant()
+                                .toEpochMilli()
+                )
+        ));
         Bid saved = bidCaptor.getValue();
         assertAll(
                 () -> assertThat(saved.getAuction()).isSameAs(auction),
@@ -613,6 +625,7 @@ class BidServiceTest {
         when(auction.getId()).thenReturn(AUCTION_ID);
         when(persistedBid.getBidder()).thenReturn(bidder);
         when(bidder.getId()).thenReturn(MEMBER_ID);
+        when(bidder.getNickname()).thenReturn("입찰자");
         when(persistedBid.getPrice()).thenReturn(PRICE);
         when(persistedBid.getStatus()).thenReturn(BidStatus.UP);
         when(persistedBid.getCreatedAt()).thenReturn(BID_AT);

@@ -49,10 +49,9 @@ class AuctionBidSseListenerTest {
                 1_754_122_920_000L
         );
         when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(true);
-        when(bidHistoryService.getPublishedBid(1L, 9L)).thenReturn(bid);
 
         // when
-        listener.publishBid(new AuctionBidCreated(1L, 9L));
+        listener.publishBid(new AuctionBidCreated(1L, 9L, bid));
 
         // then
         @SuppressWarnings("unchecked")
@@ -61,6 +60,7 @@ class AuctionBidSseListenerTest {
         verify(sseHub).publish(message.capture());
         assertThat(message.getValue().data().auctionId()).isEqualTo(1L);
         assertThat(message.getValue().data().entryId()).isEqualTo("BID:9");
+        verifyNoInteractions(bidHistoryService);
     }
 
     @Test
@@ -78,7 +78,11 @@ class AuctionBidSseListenerTest {
     void 구독자가_없으면_입찰내역을_조회하지_않는다() {
         when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(false);
 
-        listener.publishBid(new AuctionBidCreated(1L, 9L));
+        listener.publishBid(new AuctionBidCreated(
+                1L,
+                9L,
+                new BidHistoryItemResponse("BID:9", "입**자", 230_000L, 1L)
+        ));
 
         verifyNoInteractions(bidHistoryService);
         verify(sseHub, never()).publish(any());

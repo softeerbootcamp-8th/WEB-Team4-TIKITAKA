@@ -133,10 +133,7 @@ public class BuyNowTransactionService {
         request.complete(trade, command.finalPrice());
         eventPublisher.publishEvent(new AuctionStateChanged(command.auctionId()));
         if (auction instanceof UpAuction) {
-            eventPublisher.publishEvent(new AuctionBidCreated(
-                    command.auctionId(),
-                    purchaseBid.getId()
-            ));
+            eventPublisher.publishEvent(AuctionBidCreated.from(purchaseBid));
         }
 
         return BuyNowResult.from(trade);

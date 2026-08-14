@@ -143,7 +143,7 @@ public class BidService {
                 .build());
 
         eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
-        eventPublisher.publishEvent(new AuctionBidCreated(auction.getId(), bid.getId()));
+        eventPublisher.publishEvent(AuctionBidCreated.from(bid));
         return BidResult.from(bid);
     }
 

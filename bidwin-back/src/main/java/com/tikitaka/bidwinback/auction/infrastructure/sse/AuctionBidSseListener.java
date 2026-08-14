@@ -3,7 +3,6 @@ package com.tikitaka.bidwinback.auction.infrastructure.sse;
 import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryRevealed;
-import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.global.sse.SseHub;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,14 +26,10 @@ public class AuctionBidSseListener {
         }
 
         try {
-            BidHistoryItemResponse bid = bidHistoryService.getPublishedBid(
-                    event.auctionId(),
-                    event.bidId()
-            );
             sseHub.publish(AuctionSseMessages.bidCreated(
                     event.auctionId(),
                     event.bidId(),
-                    bid
+                    event.bid()
             ));
         } catch (RuntimeException exception) {
             log.warn(
