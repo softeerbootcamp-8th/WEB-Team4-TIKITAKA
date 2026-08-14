@@ -22,6 +22,8 @@ const SPLIT_LIST_LIMIT = 4
 const HOME_LIST_SIZE = 20
 const UP_AUCTION_LABEL = '상향 경매'
 const DOWN_AUCTION_LABEL = '하락 중'
+const HOME_SKELETON_KEYS = Array.from({ length: POPULAR_AUCTION_LIMIT }, (_, index) => index)
+const HOME_PANEL_SKELETON_KEYS = Array.from({ length: SPLIT_LIST_LIMIT }, (_, index) => index)
 
 type DownAuctionSummary = AuctionSummary & {
   auctionType: 'DOWN'
@@ -47,7 +49,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const serverOffsetMs = useServerClock(response?.serverTime)
+  const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -72,6 +74,7 @@ function HomePage() {
 
   const auctions = response?.items ?? []
   useAuctionEvents('list', auctions.map((auction) => auction.auctionId), {
+    onHeartbeat: synchronize,
     onState: (state) => {
       setResponse((current) => {
         if (!current) return current
@@ -93,7 +96,7 @@ function HomePage() {
   })
 
   if (isLoading) {
-    return <HomeMessage message="경매를 불러오는 중…" />
+    return <HomeSkeleton />
   }
 
   if (error) {
@@ -202,7 +205,7 @@ function SpotlightBanner({
 
         <div className="flex items-center gap-lg">
           <div className="text-right">
-            <div key={currentPrice} className="text-2xl font-bold text-down">
+            <div key={currentPrice} className="whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down">
               {formatWon(currentPrice)}
             </div>
             <div className={`flex items-center justify-end gap-1 text-sm font-semibold ${isUrgent ? 'text-down' : 'text-body'}`}>
@@ -286,6 +289,7 @@ function SummaryCardView({
   isUrgent: boolean
 }) {
   const isDown = auction.auctionType === 'DOWN'
+  const priceText = formatWon(price)
   return (
     <Link to={`/auctions/${auction.auctionId}`} className="block">
       <Card className="flex h-full flex-col gap-sm hover:shadow-soft">
@@ -294,12 +298,12 @@ function SummaryCardView({
           {isDown ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
           {isDown ? DOWN_AUCTION_LABEL : UP_AUCTION_LABEL}
         </Badge>
-        <h2 className="line-clamp-2 min-h-[2.5em] text-sm font-semibold text-ink">
+        <h2 className="line-clamp-2 text-sm font-semibold text-ink">
           {auction.title}
         </h2>
-        <div className="mt-auto flex items-end justify-between">
-          <span className={`text-lg font-bold ${isDown ? 'text-down' : 'text-ink'}`}>
-            {formatWon(price)}
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className={`whitespace-nowrap font-bold tracking-tight ${priceText.length > 14 ? 'text-xs' : 'text-sm'} ${isDown ? 'text-down' : 'text-ink'}`}>
+            {priceText}
           </span>
           <span className={`flex items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
             <Clock size={12} />
@@ -438,7 +442,7 @@ function ListRowView({
       <Link to={`/auctions/${auction.auctionId}`} className="flex items-center gap-sm py-sm first:pt-0 last:pb-0">
         <AuctionThumbnail url={auction.thumbnailUrl} compact />
         <span className="line-clamp-1 flex-1 text-sm font-medium text-ink">{auction.title}</span>
-        <span className={`shrink-0 text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}>
+        <span className={`shrink-0 whitespace-nowrap text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}>
           {formatWon(price)}
         </span>
         <span className={`flex shrink-0 items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
@@ -447,6 +451,52 @@ function ListRowView({
         </span>
       </Link>
     </li>
+  )
+}
+
+function HomeSkeleton() {
+  return (
+    <main
+      role="status"
+      aria-label="홈 경매를 불러오는 중"
+      className="mx-auto max-w-[1200px] px-lg py-xl"
+    >
+      <span className="sr-only">홈 경매를 불러오는 중…</span>
+      <section className="mt-xl motion-safe:animate-pulse">
+        <div className="h-8 w-64 rounded-pill bg-surface-strong" />
+        <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
+        <div className="mt-lg grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {HOME_SKELETON_KEYS.map((key) => (
+            <Card key={key} className="flex h-full flex-col gap-sm">
+              <div className="aspect-square w-full rounded-md bg-surface-strong" />
+              <div className="h-6 w-2/3 rounded-pill bg-surface-strong" />
+              <div className="h-4 w-4/5 rounded-pill bg-surface-strong" />
+              <div className="h-4 w-full rounded-pill bg-surface-strong" />
+              <div className="h-3 w-16 rounded-pill bg-surface-strong" />
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-section grid grid-cols-1 gap-lg lg:grid-cols-2">
+        {[0, 1].map((panelKey) => (
+          <div key={panelKey} className="motion-safe:animate-pulse rounded-xl border border-hairline-soft bg-canvas p-lg">
+            <div className="h-6 w-40 rounded-pill bg-surface-strong" />
+            <div className="mt-sm h-4 w-3/4 rounded-pill bg-surface-strong" />
+            <div className="mt-base flex flex-col gap-sm">
+              {HOME_PANEL_SKELETON_KEYS.map((key) => (
+                <div key={key} className="flex items-center gap-sm py-xs">
+                  <div className="h-11 w-11 shrink-0 rounded-md bg-surface-strong" />
+                  <div className="h-4 flex-1 rounded-pill bg-surface-strong" />
+                  <div className="h-4 w-20 rounded-pill bg-surface-strong" />
+                  <div className="h-3 w-14 rounded-pill bg-surface-strong" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+    </main>
   )
 }
 

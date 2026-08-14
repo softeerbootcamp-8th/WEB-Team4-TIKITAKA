@@ -199,10 +199,6 @@ export function requestAuctionCategories(
   return getJson<AuctionCategoryOption[]>(CATEGORY_API_PATH, signal)
 }
 
-export function requestAuctionClock(signal?: AbortSignal): Promise<ApiResult<number>> {
-  return getJson<number>(`${API_PATH}/clock`, signal)
-}
-
 export function requestAuctionDetail(
   auctionId: number,
   signal?: AbortSignal,

@@ -56,8 +56,6 @@ export const FILTER_MODAL_TEXT = {
 } as const
 
 export const CARD_TEXT = {
-  bookmarkOn: '관심 경매에서 빼기',
-  bookmarkOff: '관심 경매에 담기',
   bidCountSuffix: '회 입찰',
   noBid: '입찰 없음',
   viewCountLabel: '조회수',
