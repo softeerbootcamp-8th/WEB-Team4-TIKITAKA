@@ -67,10 +67,16 @@ public class MyPageAccountUpdateController {
             servletRequest.changeSessionId();
             session.setAttribute(AuthConstant.SESSION_KEY, refreshedAuth);
         } catch (DataAccessException exception) {
-            // 비밀번호 변경 자체는 이미 성공(커밋)했다. 이 세션만 새 authVersion을
-            // 반영하지 못해 예전 버전을 그대로 들고 있게 되므로, 다음 인증 요청까지
-            // 기다리지 않고 지금 바로 재로그인하도록 안내한다(다른 기기 세션도
-            // 이미 예전 버전인 채로 같은 방식으로 거부된다).
+            // 비밀번호 변경 자체는 이미 성공(커밋)했다. changeSessionId()는 세션ID를 이미
+            // 바꿔놨고 IMMEDIATE flush라 다음 세션 쓰기에서 그 rename이 Redis에 반영될 수
+            // 있는데, 그 직후 이 catch로 빠졌다는 건 뒤이은 setAttribute()가 실패했다는
+            // 뜻이다. SessionRepositoryFilter의 최종 커밋이 이 반쯤 바뀐 세션을 다시 저장
+            // 시도하지 않도록 지금 명시적으로 폐기하고, 예전 버전을 그대로 들고 있던
+            // 세션이 아니라 재로그인이 필요한 상태임을 바로 알린다.
+            try {
+                session.invalidate();
+            } catch (IllegalStateException | DataAccessException ignored) {
+            }
             throw new AuthException(ErrorCode.UNAUTHENTICATED);
         }
 
