@@ -294,6 +294,7 @@ function AuctionListPage() {
           initialGroupId={openGroupId}
           selection={selection}
           onApply={applyFilters}
+          onReset={resetFilters}
           onClose={() => setOpenGroupId(null)}
         />
       )}

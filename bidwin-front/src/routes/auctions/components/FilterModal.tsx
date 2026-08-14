@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import Button from '../../../components/ui/Button'
 import { FILTER_MODAL_TEXT } from '../constants'
 import {
-  DEFAULT_FILTER_SELECTION,
   clearGroup,
   getSelectedIds,
   summarizeGroup,
@@ -25,12 +24,14 @@ function FilterModal({
   initialGroupId,
   selection,
   onApply,
+  onReset,
   onClose,
 }: {
   groups: readonly FilterGroup[]
   initialGroupId: string
   selection: FilterSelection
   onApply: (selection: FilterSelection) => void
+  onReset: () => void
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<FilterSelection>(selection)
@@ -190,7 +191,7 @@ function FilterModal({
 
           <button
             type="button"
-            onClick={() => onApply(DEFAULT_FILTER_SELECTION)}
+            onClick={onReset}
             className="flex items-center gap-xs px-sm text-sm font-semibold text-body transition-colors hover:text-ink"
           >
             <RotateCcw size={14} />

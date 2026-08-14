@@ -109,24 +109,6 @@ function HomePage() {
     },
   })
 
-  if (isLoading) {
-    return <HomeSkeleton categories={categories} />
-  }
-
-  if (error) {
-    return (
-      <HomeMessage message={error}>
-        <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
-          다시 시도
-        </Button>
-      </HomeMessage>
-    )
-  }
-
-  if (!response || auctions.length === 0) {
-    return <HomeMessage message="현재 진행 중인 경매가 없어요." />
-  }
-
   const popularAuctions = auctions.slice(0, POPULAR_AUCTION_LIMIT)
   const upAuctions = auctions
     .filter((auction) => auction.auctionType === 'UP')
@@ -147,44 +129,60 @@ function HomePage() {
       <HomeHeroBanner />
       <CategoryNavigation categories={categories} />
 
-      {spotlight && (
-        <div className="mt-xl">
-          <SpotlightBanner auction={spotlight} serverOffsetMs={serverOffsetMs} />
-        </div>
-      )}
+      {isLoading ? (
+        <HomeSkeleton />
+      ) : error ? (
+        <HomeMessage message={error}>
+          <Button variant="secondary" onClick={() => setRetryToken((value) => value + 1)}>
+            다시 시도
+          </Button>
+        </HomeMessage>
+      ) : auctions.length === 0 ? (
+        <section className="mt-section py-xxl text-center">
+          <p className="text-base text-body">현재 진행 중인 경매가 없어요.</p>
+        </section>
+      ) : (
+        <>
+          {spotlight && (
+            <div className="mt-xl">
+              <SpotlightBanner auction={spotlight} serverOffsetMs={serverOffsetMs} />
+            </div>
+          )}
 
-      <section className="mt-xl">
-        <h1 className="text-2xl font-bold text-ink">지금 인기 있는 경매 TOP 5</h1>
-        <p className="mt-xs text-sm text-body">
-          입찰이 활발한 경매예요. 하락 중인 경매는 시간이 지날수록 가격이 떨어집니다.
-        </p>
+          <section className="mt-xl">
+            <h1 className="text-2xl font-bold text-ink">지금 인기 있는 경매 TOP 5</h1>
+            <p className="mt-xs text-sm text-body">
+              입찰이 활발한 경매예요. 하락 중인 경매는 시간이 지날수록 가격이 떨어집니다.
+            </p>
 
-        <div className="mt-lg grid grid-cols-2 gap-sm sm:gap-lg lg:grid-cols-3 xl:grid-cols-5">
-          {popularAuctions.map((auction) => (
-            <AuctionSummaryCard
-              key={auction.auctionId}
-              auction={auction}
+            <div className="mt-lg grid grid-cols-2 gap-sm sm:gap-lg lg:grid-cols-3 xl:grid-cols-5">
+              {popularAuctions.map((auction) => (
+                <AuctionSummaryCard
+                  key={auction.auctionId}
+                  auction={auction}
+                  serverOffsetMs={serverOffsetMs}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-section grid grid-cols-1 gap-lg lg:grid-cols-2">
+            <AuctionListPanel
+              title="상승 중인 경매"
+              description="입찰이 들어올수록 가격이 오르는 일반 경매예요."
+              auctions={upAuctions}
               serverOffsetMs={serverOffsetMs}
             />
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-section grid grid-cols-1 gap-lg lg:grid-cols-2">
-        <AuctionListPanel
-          title="상승 중인 경매"
-          description="입찰이 들어올수록 가격이 오르는 일반 경매예요."
-          auctions={upAuctions}
-          serverOffsetMs={serverOffsetMs}
-        />
-        <AuctionListPanel
-          title="가격이 빠르게 떨어지는 중"
-          description="시간이 지날수록 가격이 내려가요. 원하는 가격일 때 바로 잡으세요."
-          auctions={downAuctions}
-          serverOffsetMs={serverOffsetMs}
-          accent
-        />
-      </section>
+            <AuctionListPanel
+              title="가격이 빠르게 떨어지는 중"
+              description="시간이 지날수록 가격이 내려가요. 원하는 가격일 때 바로 잡으세요."
+              auctions={downAuctions}
+              serverOffsetMs={serverOffsetMs}
+              accent
+            />
+          </section>
+        </>
+      )}
     </main>
   )
 }
@@ -289,10 +287,10 @@ function CategoryNavigation({
 
 function HomeMessage({ message, children }: { message: string; children?: React.ReactNode }) {
   return (
-    <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center gap-base px-lg text-center">
+    <section className="mt-section flex flex-col items-center justify-center gap-base py-xxl text-center">
       <p className="text-base text-body">{message}</p>
       {children}
-    </main>
+    </section>
   )
 }
 
@@ -573,16 +571,13 @@ function ListRowView({
   )
 }
 
-function HomeSkeleton({ categories }: { categories: AuctionCategoryOption[] | null }) {
+function HomeSkeleton() {
   return (
-    <main
+    <div
       role="status"
       aria-label="홈 경매를 불러오는 중"
-      className="mx-auto max-w-[1200px] px-lg py-xl"
     >
       <span className="sr-only">홈 경매를 불러오는 중…</span>
-      <HomeHeroBanner />
-      <CategoryNavigation categories={categories} />
       <section className="mt-section motion-safe:animate-pulse">
         <div className="h-8 w-64 rounded-pill bg-surface-strong" />
         <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
@@ -617,7 +612,7 @@ function HomeSkeleton({ categories }: { categories: AuctionCategoryOption[] | nu
           </div>
         ))}
       </section>
-    </main>
+    </div>
   )
 }
 
