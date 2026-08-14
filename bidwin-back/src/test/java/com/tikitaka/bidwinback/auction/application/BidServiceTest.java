@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -48,6 +49,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,6 +75,7 @@ class BidServiceTest {
     private static final long PRICE = 232_000L;
     private static final long START_PRICE = 100_000L;
     private static final long DEPOSIT_AMOUNT = 30_000L;
+    private static final long PRICE_LIMIT = 100_000_000_000L;
     private static final LocalDateTime DATABASE_TIME =
             LocalDateTime.of(2026, 7, 30, 12, 34, 55);
     private static final LocalDateTime BID_AT = DATABASE_TIME.plusSeconds(1);
@@ -152,6 +155,31 @@ class BidServiceTest {
                 () -> assertThat(result.status()).isEqualTo(BidStatus.UP),
                 () -> assertThat(result.bidAt()).isEqualTo(BID_AT)
         );
+    }
+
+    @ParameterizedTest
+    @EnumSource(BidType.class)
+    void 공개입찰과_밀봉입찰은_1000억_원부터_거절한다(BidType bidType) {
+        // given
+        long price = PRICE_LIMIT;
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> bidService.place(MEMBER_ID, AUCTION_ID, price, bidType)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_LIMIT_EXCEEDED);
+        verifyNoInteractions(
+                memberRepository,
+                auctionRepository,
+                auctionDepositRepository,
+                bidRepository,
+                eventPublisher,
+                sealedBidRepository
+        );
+        verify(bidPriceCache, never()).tryWinRace(any(), anyLong());
     }
 
     @Test
@@ -464,32 +492,6 @@ class BidServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(SELF_BID_NOT_ALLOWED);
-        verifyNoInteractions(memberRepository, bidRepository);
-    }
-
-    @Test
-    void 현재가가_long_상한에_가까워도_오버플로_없이_낮은_입찰로_거절한다() {
-        long maxUnitPrice = Long.MAX_VALUE - Long.MAX_VALUE % BID_UNIT;
-        when(auctionRepository.updateCurrentPriceForBid(
-                AUCTION_ID,
-                MEMBER_ID,
-                maxUnitPrice,
-                BID_UNIT
-        )).thenReturn(0);
-        when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
-        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
-        when(auction.getEndedAt()).thenReturn(DATABASE_TIME.plusDays(1));
-        when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
-        when(auction.hasCurrentPrice()).thenReturn(true);
-        when(auction.getCurrentPrice()).thenReturn(maxUnitPrice);
-        stubSeller(2L);
-
-        BidException exception = assertThrows(
-                BidException.class,
-                () -> bidService.place(MEMBER_ID, AUCTION_ID, maxUnitPrice, BidType.OPEN)
-        );
-
-        assertThat(exception.getErrorCode()).isEqualTo(BID_PRICE_TOO_LOW);
         verifyNoInteractions(memberRepository, bidRepository);
     }
 

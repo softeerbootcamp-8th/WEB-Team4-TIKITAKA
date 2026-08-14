@@ -209,6 +209,11 @@ public enum ErrorCode {
             "AUCTION_400_9",
             "지원하지 않는 정렬 기준입니다."
     ),
+    PRICE_LIMIT_EXCEEDED(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_10",
+            "가격은 1,000억 원 미만이어야 합니다."
+    ),
 
     // Upload
     UNSUPPORTED_IMAGE_TYPE(

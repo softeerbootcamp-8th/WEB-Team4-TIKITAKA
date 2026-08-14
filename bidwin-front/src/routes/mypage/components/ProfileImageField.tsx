@@ -11,12 +11,12 @@ import {
   requestProfileImagePresign,
   uploadProfileImage,
 } from '../../../lib/api/profileImage'
+import { isAuthenticImageFile } from '../../../lib/imageValidation'
 import { MY_INFO_TEXT, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_MAX_BYTES } from '../constants'
 import ProfileAvatar from './ProfileAvatar'
 
 const AVATAR_CLASS = 'h-16 w-16 text-xl'
 const CAMERA_ICON_SIZE = 16
-const IMAGE_MIME_PREFIX = 'image/'
 
 function ProfileImageField({
   nickname,
@@ -37,12 +37,12 @@ function ProfileImageField({
     event.target.value = ''
     if (!file || isSubmitting) return
 
-    if (!file.type.startsWith(IMAGE_MIME_PREFIX)) {
-      setError(MY_INFO_TEXT.imageNotSupported)
-      return
-    }
     if (file.size > PROFILE_IMAGE_MAX_BYTES) {
       setError(MY_INFO_TEXT.imageTooLarge)
+      return
+    }
+    if (!(await isAuthenticImageFile(file))) {
+      setError(MY_INFO_TEXT.imageNotSupported)
       return
     }
 

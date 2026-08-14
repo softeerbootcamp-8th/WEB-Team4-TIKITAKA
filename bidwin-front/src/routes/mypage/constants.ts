@@ -42,7 +42,7 @@ export const DRAWER_TRANSITION_MS = 300
 const BYTES_PER_MB = 1024 * 1024
 export const PROFILE_IMAGE_MAX_MB = 5
 export const PROFILE_IMAGE_MAX_BYTES = PROFILE_IMAGE_MAX_MB * BYTES_PER_MB
-export const PROFILE_IMAGE_ACCEPT = 'image/*'
+export const PROFILE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 
 export const MYPAGE_TEXT = {
   title: '마이페이지',
