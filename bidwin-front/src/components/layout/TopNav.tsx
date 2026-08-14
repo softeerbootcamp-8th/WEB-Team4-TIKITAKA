@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { requestLogout } from '../../lib/api/auth'
 import { requestMyPage } from '../../lib/api/mypage'
+import { DEPOSIT_CHANGED_EVENT } from '../../lib/depositEvents'
 import { formatWon } from '../../lib/format'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
@@ -55,18 +56,28 @@ function TopNav() {
       return
     }
 
-    const controller = new AbortController()
-    requestMyPage(controller.signal).then((result) => {
-      if (controller.signal.aborted) return
-      if (result.ok) {
-        setAvailableDeposit(result.data.deposit.balance)
-        return
-      }
-      if (result.status === 401) setAuthenticated(false)
-    })
+    let controller: AbortController | null = null
+    const refreshAvailableDeposit = () => {
+      controller?.abort()
+      controller = new AbortController()
+      const signal = controller.signal
+
+      requestMyPage(signal).then((result) => {
+        if (signal.aborted) return
+        if (result.ok) {
+          setAvailableDeposit(result.data.deposit.balance)
+          return
+        }
+        if (result.status === 401) setAuthenticated(false)
+      })
+    }
+
+    refreshAvailableDeposit()
+    window.addEventListener(DEPOSIT_CHANGED_EVENT, refreshAvailableDeposit)
 
     return () => {
-      controller.abort()
+      window.removeEventListener(DEPOSIT_CHANGED_EVENT, refreshAvailableDeposit)
+      controller?.abort()
     }
   }, [isAuthenticated, setAuthenticated])
 
