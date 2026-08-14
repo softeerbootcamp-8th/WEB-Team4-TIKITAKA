@@ -867,7 +867,9 @@ function UpBidPanel({
 
       <div>
         <p className="text-xs text-muted">현재 공개 최고가</p>
-        <p className="text-3xl font-bold text-ink">{formatWon(auction.currentPrice)}</p>
+        <p className="whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-ink">
+          {formatWon(auction.currentPrice)}
+        </p>
         <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
           deadline.isUrgent ? 'text-down' : 'text-body'
         }`}>
@@ -1010,9 +1012,11 @@ function DownBuyPanel({
         <p className="text-xs text-muted">
           {ended && auction.status === 'COMPLETED' ? '최종 구매가' : '지금 이 가격'}
         </p>
-        <p className="flex items-center gap-1.5">
-          <span className="text-3xl font-bold text-down">{formatWon(currentPrice)}</span>
-          {!ended && !clock.atFloor && <TrendingDown size={20} className="text-down" />}
+        <p className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <span className="shrink-0 whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down">
+            {formatWon(currentPrice)}
+          </span>
+          {!ended && !clock.atFloor && <TrendingDown size={20} className="shrink-0 text-down" />}
         </p>
         {!ended && !clock.atFloor && (
           <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${

@@ -14,7 +14,7 @@ const CATEGORY_LABEL = {
   FURNITURE: '가구',
 } as const
 const PERCENT_BASE = 100
-const THUMBNAIL_CLASS = 'h-28 w-28 shrink-0 md:h-auto md:w-full md:aspect-square'
+const THUMBNAIL_CLASS = 'aspect-square w-28 shrink-0 overflow-hidden rounded-lg md:w-full'
 const CARD_SURFACE_CLASS = 'rounded-xl border border-hairline-soft bg-canvas'
 
 function isOngoing(auction: AuctionSummary) {
@@ -77,6 +77,7 @@ function AuctionCardView({
   serverOffsetMs,
   currentPrice,
 }: AuctionCardProps & { currentPrice: number }) {
+  const priceText = formatWon(currentPrice)
   const localDeadline = useMemo(
     () => auction.deadline - serverOffsetMs,
     [auction.deadline, serverOffsetMs],
@@ -89,7 +90,7 @@ function AuctionCardView({
   ))
 
   return (
-    <article className={`relative flex gap-sm p-sm transition-shadow hover:shadow-card md:flex-col ${CARD_SURFACE_CLASS}`}>
+    <article className={`relative flex h-full gap-sm p-sm transition-shadow hover:shadow-card md:flex-col ${CARD_SURFACE_CLASS}`}>
       <Link
         to={`/auctions/${auction.auctionId}`}
         aria-label={auction.title}
@@ -98,9 +99,9 @@ function AuctionCardView({
 
       <div className={`relative ${THUMBNAIL_CLASS}`}>
         {auction.thumbnailUrl ? (
-          <img src={auction.thumbnailUrl} alt="" className="h-full w-full rounded-lg object-cover" />
+          <img src={auction.thumbnailUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center rounded-lg bg-surface-soft text-muted-soft">
+          <span className="flex h-full w-full items-center justify-center bg-surface-soft text-muted-soft">
             <ImageIcon size={28} />
           </span>
         )}
@@ -110,30 +111,32 @@ function AuctionCardView({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1 md:mt-1 md:flex-none">
-        <div className="min-w-0 pr-8 md:pr-0">
+        <div className="min-w-0">
           <p className="line-clamp-1 text-xs font-semibold text-ink">{auction.sellerName}</p>
           <p className="line-clamp-1 text-[11px] text-primary">
             {CATEGORY_LABEL[auction.category]}
           </p>
         </div>
 
-        <h2 className="line-clamp-2 text-sm font-bold leading-snug text-ink md:min-h-[2.75em]">
+        <h2 className="line-clamp-2 text-sm font-bold leading-snug text-ink">
           {auction.title}
         </h2>
 
-        <div className="flex flex-wrap items-end gap-x-1">
-          <span className={`whitespace-nowrap text-base font-bold ${isDown ? 'text-down' : 'text-ink'}`}>
-            {formatWon(currentPrice)}
+        <div className="flex min-w-0 flex-col items-start gap-0.5">
+          <span className={`shrink-0 whitespace-nowrap text-base font-bold tracking-tight ${isDown ? 'text-down' : 'text-ink'}`}>
+            {priceText}
           </span>
           {isDown ? (
-            <span className="flex items-center gap-0.5 whitespace-nowrap pb-0.5 text-[11px] font-semibold text-down">
+            <span className="flex min-w-0 items-center gap-0.5 whitespace-nowrap text-[11px] font-semibold text-down">
               <TrendingDown size={11} />
               {dropRate}%
             </span>
           ) : (
-            <span className="flex items-center gap-0.5 whitespace-nowrap pb-0.5 text-[11px] text-muted">
-              <Gavel size={11} />
-              {auction.bidCount > 0 ? `${auction.bidCount}${CARD_TEXT.bidCountSuffix}` : CARD_TEXT.noBid}
+            <span className="flex min-w-0 items-center gap-0.5 whitespace-nowrap text-[11px] text-muted">
+              <Gavel size={11} className="shrink-0" />
+              <span>
+                {auction.bidCount > 0 ? `${auction.bidCount}${CARD_TEXT.bidCountSuffix}` : CARD_TEXT.noBid}
+              </span>
             </span>
           )}
         </div>

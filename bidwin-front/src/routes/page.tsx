@@ -203,7 +203,7 @@ function SpotlightBanner({
 
         <div className="flex items-center gap-lg">
           <div className="text-right">
-            <div key={currentPrice} className="text-2xl font-bold text-down">
+            <div key={currentPrice} className="whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down">
               {formatWon(currentPrice)}
             </div>
             <div className={`flex items-center justify-end gap-1 text-sm font-semibold ${isUrgent ? 'text-down' : 'text-body'}`}>
@@ -287,6 +287,7 @@ function SummaryCardView({
   isUrgent: boolean
 }) {
   const isDown = auction.auctionType === 'DOWN'
+  const priceText = formatWon(price)
   return (
     <Link to={`/auctions/${auction.auctionId}`} className="block">
       <Card className="flex h-full flex-col gap-sm hover:shadow-soft">
@@ -295,12 +296,12 @@ function SummaryCardView({
           {isDown ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
           {isDown ? DOWN_AUCTION_LABEL : UP_AUCTION_LABEL}
         </Badge>
-        <h2 className="line-clamp-2 min-h-[2.5em] text-sm font-semibold text-ink">
+        <h2 className="line-clamp-2 text-sm font-semibold text-ink">
           {auction.title}
         </h2>
-        <div className="mt-auto flex items-end justify-between">
-          <span className={`text-lg font-bold ${isDown ? 'text-down' : 'text-ink'}`}>
-            {formatWon(price)}
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className={`whitespace-nowrap font-bold tracking-tight ${priceText.length > 14 ? 'text-xs' : 'text-sm'} ${isDown ? 'text-down' : 'text-ink'}`}>
+            {priceText}
           </span>
           <span className={`flex items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
             <Clock size={12} />
@@ -439,7 +440,7 @@ function ListRowView({
       <Link to={`/auctions/${auction.auctionId}`} className="flex items-center gap-sm py-sm first:pt-0 last:pb-0">
         <AuctionThumbnail url={auction.thumbnailUrl} compact />
         <span className="line-clamp-1 flex-1 text-sm font-medium text-ink">{auction.title}</span>
-        <span className={`shrink-0 text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}>
+        <span className={`shrink-0 whitespace-nowrap text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}>
           {formatWon(price)}
         </span>
         <span className={`flex shrink-0 items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
