@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionCreated;
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
@@ -46,6 +47,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_U
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 
 @Service
 @RequiredArgsConstructor
@@ -131,6 +133,7 @@ public class AuctionCreateService {
     }
 
     private void validatePriceUnit(long price, String fieldName) {
+        validatePriceLimit(price);
         if (price % PRICE_UNIT != 0) {
             throw new AuctionException(INVALID_PRICE_UNIT, fieldName + "는 1,000원 단위로 입력해주세요.");
         }
@@ -172,8 +175,15 @@ public class AuctionCreateService {
     }
 
     private void validateStartPriceUnit(long startPrice) {
+        validatePriceLimit(startPrice);
         if (startPrice % PRICE_UNIT != 0) {
             throw new AuctionException(INVALID_START_PRICE_UNIT);
+        }
+    }
+
+    private void validatePriceLimit(long price) {
+        if (!AuctionPricePolicy.isAllowed(price)) {
+            throw new AuctionException(PRICE_LIMIT_EXCEEDED);
         }
     }
 

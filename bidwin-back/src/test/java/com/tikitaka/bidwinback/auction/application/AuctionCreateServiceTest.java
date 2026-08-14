@@ -47,6 +47,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_U
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -356,6 +357,22 @@ class AuctionCreateServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 즉시구매가가_1000억_원이면_경매를_등록할_수_없다() {
+        // given
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+
+        // when
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, upRequest(100_000_000_000L))
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_LIMIT_EXCEEDED);
         verify(auctionRepository, never()).save(any());
     }
 
