@@ -91,7 +91,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("bidUnit") long bidUnit
     );
 
-    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 시작가·일반·밀봉 최고가보다 높은 입찰만 허용한다.
+    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 일반 입찰 최고가보다 높은 입찰을 모두 허용한다.
     // revision은 첫 밀봉입찰의 공개 상태 전환 때만 올린다. 이후 밀봉입찰마다 올리면
     // revision만으로 비공개 입찰 횟수와 시점을 추측할 수 있다.
     @Modifying
