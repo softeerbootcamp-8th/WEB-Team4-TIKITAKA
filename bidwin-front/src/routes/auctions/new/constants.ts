@@ -1,5 +1,3 @@
-import { SUPPORTED_IMAGE_MIME_TYPES } from '../../../lib/imageValidation'
-
 /*
  * 경매 등록 폼 상수.
  * 길이·용량 제한은 백엔드 Auction 엔티티, AuctionImagePresignRequest 검증값과 같게 맞춘다.
@@ -10,7 +8,7 @@ export const CONTACT_MAX_LENGTH = 100
 
 export const MAX_IMAGE_COUNT = 10
 export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
-export const ALLOWED_IMAGE_CONTENT_TYPES = SUPPORTED_IMAGE_MIME_TYPES
+export const ALLOWED_IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 /* 시작가·최저가·즉시 구매가에 공통으로 적용하는 최소 금액. */
 export const MIN_PRICE = 1000

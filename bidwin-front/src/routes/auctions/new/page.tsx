@@ -17,10 +17,10 @@ import {
 import type { AuctionImagePresignResponse } from '../../../lib/api/auctionImage'
 import { requestAuctionCreate } from '../../../lib/api/auctions'
 import type { AuctionCategory } from '../../../lib/api/auctions'
-import { isAuthenticImageFile } from '../../../lib/imageValidation'
 import ImageUploader from './ImageUploader'
 import type { AuctionImageItem } from './ImageUploader'
 import {
+  ALLOWED_IMAGE_CONTENT_TYPES,
   AUCTION_DURATION_OPTIONS,
   AUCTION_TYPE_OPTIONS,
   CATEGORY_OPTIONS,
@@ -114,7 +114,7 @@ function AuctionRegisterPage() {
         setError(ERROR_MESSAGE.imageTooLarge)
         continue
       }
-      if (!(await isAuthenticImageFile(file))) {
+      if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type)) {
         setError(ERROR_MESSAGE.unsupportedImageType)
         continue
       }
@@ -290,15 +290,14 @@ function AuctionRegisterPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-lg py-xl lg:py-lg">
+    <main className="mx-auto w-full max-w-[640px] px-lg py-xl">
       <div className="mb-lg flex flex-col gap-xxs">
         <h1 className="text-2xl font-bold text-ink">{TEXT.pageTitle}</h1>
         <p className="text-sm text-body">{TEXT.pageSubtitle}</p>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-lg lg:grid lg:grid-cols-2 lg:items-start lg:gap-xl">
-        <div className="flex flex-col gap-lg lg:gap-base">
-          <Card className="flex flex-col gap-base">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-lg">
+        <Card className="flex flex-col gap-base">
           <TextInput
             label={TEXT.titleLabel}
             value={title}
@@ -332,20 +331,18 @@ function AuctionRegisterPage() {
             placeholder={TEXT.contactPlaceholder}
             maxLength={100}
           />
-          </Card>
+        </Card>
 
-          <Card className="flex flex-col gap-base">
-            <ImageUploader
-              items={images}
-              onAddFiles={handleAddFiles}
-              onRemove={handleRemoveImage}
-              disabled={draftId === null}
-            />
-          </Card>
-        </div>
+        <Card className="flex flex-col gap-base">
+          <ImageUploader
+            items={images}
+            onAddFiles={handleAddFiles}
+            onRemove={handleRemoveImage}
+            disabled={draftId === null}
+          />
+        </Card>
 
-        <div className="flex flex-col gap-lg">
-          <Card className="flex flex-col gap-base">
+        <Card className="flex flex-col gap-base">
           <SegmentedControl
             label={TEXT.auctionTypeLabel}
             options={AUCTION_TYPE_OPTIONS}
@@ -364,68 +361,65 @@ function AuctionRegisterPage() {
             value={tradeType}
             onChange={setTradeType}
           />
-          <div className="flex flex-col gap-base lg:grid lg:grid-cols-2">
+          <TextInput
+            label={TEXT.startPriceLabel}
+            type="text"
+            inputMode="numeric"
+            suffix="원"
+            value={formatPriceDigits(startPrice)}
+            onChange={handlePriceChange(setStartPrice)}
+          />
+
+          {auctionType === 'UP' ? (
             <TextInput
-              label={TEXT.startPriceLabel}
+              label={TEXT.buyNowPriceLabel}
               type="text"
               inputMode="numeric"
               suffix="원"
-              value={formatPriceDigits(startPrice)}
-              onChange={handlePriceChange(setStartPrice)}
+              value={formatPriceDigits(buyNowPrice)}
+              onChange={handlePriceChange(setBuyNowPrice)}
             />
-
-            {auctionType === 'UP' ? (
+          ) : (
+            <>
               <TextInput
-                label={TEXT.buyNowPriceLabel}
+                label={TEXT.minimumPriceLabel}
                 type="text"
                 inputMode="numeric"
                 suffix="원"
-                value={formatPriceDigits(buyNowPrice)}
-                onChange={handlePriceChange(setBuyNowPrice)}
+                value={formatPriceDigits(minimumPrice)}
+                onChange={handlePriceChange(setMinimumPrice)}
               />
-            ) : (
-              <>
-                <TextInput
-                  label={TEXT.minimumPriceLabel}
-                  type="text"
-                  inputMode="numeric"
-                  suffix="원"
-                  value={formatPriceDigits(minimumPrice)}
-                  onChange={handlePriceChange(setMinimumPrice)}
-                />
-                <TextInput
-                  label={TEXT.dropPriceLabel}
-                  type="text"
-                  inputMode="numeric"
-                  suffix="원"
-                  value={formatPriceDigits(dropPrice)}
-                  onChange={handlePriceChange(setDropPrice)}
-                />
-                <TextInput
-                  label={TEXT.priceDropIntervalLabel}
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  suffix="분"
-                  value={priceDropInterval}
-                  onChange={handleFieldChange(setPriceDropInterval)}
-                  placeholder={TEXT.priceDropIntervalPlaceholder}
-                />
-              </>
-            )}
-          </div>
-          </Card>
-
-          {error && (
-            <p role="alert" className="rounded-sm bg-down-tint px-base py-sm text-sm font-medium text-down">
-              {error}
-            </p>
+              <TextInput
+                label={TEXT.dropPriceLabel}
+                type="text"
+                inputMode="numeric"
+                suffix="원"
+                value={formatPriceDigits(dropPrice)}
+                onChange={handlePriceChange(setDropPrice)}
+              />
+              <TextInput
+                label={TEXT.priceDropIntervalLabel}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                suffix="분"
+                value={priceDropInterval}
+                onChange={handleFieldChange(setPriceDropInterval)}
+                placeholder={TEXT.priceDropIntervalPlaceholder}
+              />
+            </>
           )}
+        </Card>
 
-          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? TEXT.submitting : TEXT.submit}
-          </Button>
-        </div>
+        {error && (
+          <p role="alert" className="rounded-sm bg-down-tint px-base py-sm text-sm font-medium text-down">
+            {error}
+          </p>
+        )}
+
+        <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? TEXT.submitting : TEXT.submit}
+        </Button>
       </form>
     </main>
   )
