@@ -2,10 +2,14 @@ import {
   BadgeCheck,
   Clock,
   ImageOff,
+  RotateCcw,
   ShieldCheck,
   TrendingDown,
   Truck,
   WifiOff,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import type { ChangeEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -527,27 +531,36 @@ function AuctionHeader({
 function AuctionGallery({ images, title }: { images: string[]; title: string }) {
   const [active, setActive] = useState(0)
   const [broken, setBroken] = useState<Record<number, boolean>>({})
+  const [isViewerOpen, setIsViewerOpen] = useState(false)
   const hasImages = images.length > 0
+  const canOpenViewer = hasImages && !broken[active]
 
   return (
     <div className="flex flex-col gap-sm">
-      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-surface-soft">
-        {!hasImages || broken[active] ? (
-          <div className="flex flex-col items-center gap-xs text-muted">
-            <ImageOff size={32} />
-            <span className="text-xs">
-              {hasImages ? '이미지를 불러오지 못했어요' : '등록된 이미지가 없어요'}
-            </span>
-          </div>
-        ) : (
+      {canOpenViewer ? (
+        <button
+          type="button"
+          onClick={() => setIsViewerOpen(true)}
+          aria-label="이미지 전체화면으로 보기"
+          className="flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-xl bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
           <img
             src={images[active]}
             alt={title}
             className="h-full w-full object-cover"
             onError={() => setBroken((current) => ({ ...current, [active]: true }))}
           />
-        )}
-      </div>
+        </button>
+      ) : (
+        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-surface-soft">
+          <div className="flex flex-col items-center gap-xs text-muted">
+            <ImageOff size={32} />
+            <span className="text-xs">
+              {hasImages ? '이미지를 불러오지 못했어요' : '등록된 이미지가 없어요'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {hasImages && (
         <div className="flex gap-sm overflow-x-auto">
@@ -575,6 +588,124 @@ function AuctionGallery({ images, title }: { images: string[]; title: string }) 
           ))}
         </div>
       )}
+
+      {isViewerOpen && canOpenViewer && (
+        <ImageViewer
+          src={images[active]}
+          title={title}
+          onClose={() => setIsViewerOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+const MIN_IMAGE_ZOOM = 1
+const MAX_IMAGE_ZOOM = 3
+const IMAGE_ZOOM_STEP = 0.25
+
+function ImageViewer({
+  src,
+  title,
+  onClose,
+}: {
+  src: string
+  title: string
+  onClose: () => void
+}) {
+  const [zoom, setZoom] = useState(MIN_IMAGE_ZOOM)
+  const viewerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const previouslyFocused = document.activeElement
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const controls = viewerRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+      if (!controls?.length) return
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus()
+    }
+  }, [onClose])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} 이미지 전체화면`}
+      ref={viewerRef}
+      className="fixed inset-0 z-50 flex flex-col bg-surface-dark/95"
+    >
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 px-base text-on-dark sm:px-lg">
+        <span className="truncate text-sm font-semibold">{title}</span>
+        <div className="ml-base flex shrink-0 items-center gap-xs">
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.max(MIN_IMAGE_ZOOM, current - IMAGE_ZOOM_STEP))}
+            disabled={zoom === MIN_IMAGE_ZOOM}
+            aria-label="축소"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomOut size={20} />
+          </button>
+          <span className="w-12 text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.min(MAX_IMAGE_ZOOM, current + IMAGE_ZOOM_STEP))}
+            disabled={zoom === MAX_IMAGE_ZOOM}
+            aria-label="확대"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomIn size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(MIN_IMAGE_ZOOM)}
+            aria-label="크기 초기화"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10"
+          >
+            <RotateCcw size={19} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="전체화면 닫기"
+            autoFocus
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <X size={22} />
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div
+          className="flex items-center justify-center p-base sm:p-lg"
+          style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+        >
+          <img src={src} alt={title} className="h-full w-full object-contain" />
+        </div>
+      </div>
     </div>
   )
 }
