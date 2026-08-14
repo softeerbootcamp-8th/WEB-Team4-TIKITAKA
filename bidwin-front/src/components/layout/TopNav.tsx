@@ -6,6 +6,8 @@ import bidwinLogo from '../../assets/bidwin-logo.png'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { requestLogout } from '../../lib/api/auth'
+import { requestMyPage } from '../../lib/api/mypage'
+import { formatWon } from '../../lib/format'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 
@@ -26,6 +28,7 @@ function TopNav() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [availableBalance, setAvailableBalance] = useState<number | null>(null)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
   useEffect(() => {
@@ -42,6 +45,26 @@ function TopNav() {
       mediaQuery.removeEventListener('change', closeOnDesktop)
     }
   }, [])
+  useEffect(() => {
+    if (isAuthenticated !== true) {
+      setAvailableBalance(null)
+      return
+    }
+
+    const controller = new AbortController()
+    requestMyPage(controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      if (result.ok) {
+        setAvailableBalance(result.data.deposit.balance + result.data.deposit.inUse)
+        return
+      }
+      if (result.status === 401) setAuthenticated(false)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [isAuthenticated, setAuthenticated])
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -147,6 +170,11 @@ function TopNav() {
                     {isLoggingOut ? '로그아웃 중…' : '로그아웃'}
                   </span>
                 </button>
+                {availableBalance !== null && (
+                  <span className="hidden h-9 items-center rounded-pill border border-hairline bg-surface-soft px-sm text-sm font-semibold text-ink md:inline-flex">
+                    {formatWon(availableBalance)}
+                  </span>
+                )}
               </>
             ) : (
               <Link
@@ -203,6 +231,11 @@ function TopNav() {
               >
                 마이페이지
               </Link>
+              {availableBalance !== null && (
+                <p className="rounded-lg px-sm py-2 text-sm font-semibold text-ink">
+                  현재 잔액: <span className="text-primary">{formatWon(availableBalance)}</span>
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => {
