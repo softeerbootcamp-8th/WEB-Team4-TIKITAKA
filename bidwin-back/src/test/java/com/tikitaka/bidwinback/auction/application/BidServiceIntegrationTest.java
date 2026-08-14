@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
@@ -46,7 +47,9 @@ class BidServiceIntegrationTest {
     private static final long INITIAL_POINT = 2_000_000L;
     private static final long FIRST_BID_PRICE = 101_000L;
     private static final long SECOND_BID_PRICE = 102_000L;
-    private static final long MAX_UNIT_PRICE = Long.MAX_VALUE - Long.MAX_VALUE % 1_000L;
+    private static final long MAX_BIGINT_UNIT_PRICE = Long.MAX_VALUE - Long.MAX_VALUE % 1_000L;
+    private static final long MAX_ALLOWED_UNIT_PRICE =
+            AuctionPricePolicy.MAX_PRICE_EXCLUSIVE - 1_000L;
 
     @Autowired
     private BidService bidService;
@@ -607,6 +610,7 @@ class BidServiceIntegrationTest {
 
     @Test
     void 현재가가_bigint_상한에_가까워도_오버플로_없이_입찰을_거절한다() {
+        // given
         Fixture fixture = createFixture(1);
         executeInTransaction(entityManager -> {
             entityManager.createNativeQuery("""
@@ -615,19 +619,21 @@ class BidServiceIntegrationTest {
                                 status = 'BID_ONGOING'
                             WHERE id = :auctionId
                             """)
-                    .setParameter("currentPrice", MAX_UNIT_PRICE)
+                    .setParameter("currentPrice", MAX_BIGINT_UNIT_PRICE)
                     .setParameter("auctionId", fixture.auctionId())
                     .executeUpdate();
             return null;
         });
 
+        // when
         Throwable thrown = catchThrowable(() -> bidService.place(
                 fixture.bidderIds().getFirst(),
                 fixture.auctionId(),
-                MAX_UNIT_PRICE,
+                MAX_ALLOWED_UNIT_PRICE,
                 BidType.OPEN
         ));
 
+        // then
         assertThat(thrown).isInstanceOfSatisfying(
                 BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
@@ -636,7 +642,7 @@ class BidServiceIntegrationTest {
         assertThat(findBidPrices(fixture.auctionId())).isEmpty();
         assertThat(findAuctionSnapshot(fixture.auctionId()))
                 .isEqualTo(new AuctionSnapshot(
-                        MAX_UNIT_PRICE,
+                        MAX_BIGINT_UNIT_PRICE,
                         AuctionStatus.BID_ONGOING
                 ));
     }
