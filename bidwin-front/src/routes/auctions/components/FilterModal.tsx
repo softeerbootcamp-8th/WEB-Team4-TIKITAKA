@@ -190,7 +190,7 @@ function FilterModal({
 
           <button
             type="button"
-            onClick={() => setDraft(DEFAULT_FILTER_SELECTION)}
+            onClick={() => onApply(DEFAULT_FILTER_SELECTION)}
             className="flex items-center gap-xs px-sm text-sm font-semibold text-body transition-colors hover:text-ink"
           >
             <RotateCcw size={14} />

@@ -169,6 +169,12 @@ function AuctionListPage() {
   function resetFilters() {
     setSelection(DEFAULT_FILTER_SELECTION)
     setIsFilterEnabled(true)
+    setOpenGroupId(null)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete(CATEGORY_QUERY_PARAM)
+      return next
+    }, { replace: true })
     listRef.current?.scrollTo({ top: 0 })
   }
 
