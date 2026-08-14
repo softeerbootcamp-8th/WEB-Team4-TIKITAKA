@@ -75,7 +75,7 @@ class SseConnectionTest {
     }
 
     @Test
-    void 애플리케이션_전송_오류는_emitter를_오류로_완료한다() throws Exception {
+    void 애플리케이션_전송_오류는_일반_오류_본문_없이_스트림을_종료한다() throws Exception {
         // given
         SseEmitter emitter = mock(SseEmitter.class);
         IllegalStateException failure = new IllegalStateException("serialization failed");
@@ -88,7 +88,8 @@ class SseConnectionTest {
         connection.send(message(AUCTION_CHANNEL, "price-changed", 1L));
 
         // then
-        verify(emitter, timeout(1_000)).completeWithError(failure);
+        verify(emitter, timeout(1_000)).complete();
+        verify(emitter, after(100).never()).completeWithError(failure);
     }
 
     @Test
