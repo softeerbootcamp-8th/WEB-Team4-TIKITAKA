@@ -13,9 +13,16 @@ import FilterModal from './components/FilterModal'
 import FilterPanel from './components/FilterPanel'
 import FilterSheet from './components/FilterSheet'
 import Pagination from './components/Pagination'
-import { FIRST_PAGE, LIST_TEXT, PAGE_SIZE, SEARCH_QUERY_PARAM } from './constants'
+import {
+  CATEGORY_QUERY_PARAM,
+  FIRST_PAGE,
+  LIST_TEXT,
+  PAGE_SIZE,
+  SEARCH_QUERY_PARAM,
+} from './constants'
 import {
   DEFAULT_FILTER_SELECTION,
+  FILTER_GROUP_ID,
   countSelectedOptions,
   createFilterGroups,
   toAuctionListFilters,
@@ -33,9 +40,13 @@ function AuctionListPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const keyword = searchParams.get(SEARCH_QUERY_PARAM) ?? ''
+  const initialCategory = searchParams.get(CATEGORY_QUERY_PARAM)
   const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [isFilterEnabled, setIsFilterEnabled] = useState(true)
-  const [selection, setSelection] = useState<FilterSelection>(DEFAULT_FILTER_SELECTION)
+  const [selection, setSelection] = useState<FilterSelection>(() => ({
+    ...DEFAULT_FILTER_SELECTION,
+    ...(initialCategory ? { [FILTER_GROUP_ID.category]: [initialCategory] } : {}),
+  }))
   const [openGroupId, setOpenGroupId] = useState<string | null>(null)
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
   const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)

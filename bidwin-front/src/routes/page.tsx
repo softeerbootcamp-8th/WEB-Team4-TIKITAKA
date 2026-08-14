@@ -8,8 +8,9 @@ import { useAuctionEvents } from '../hooks/useAuctionEvents'
 import { useCountdown } from '../hooks/useCountdown'
 import { useDownAuctionClock } from '../hooks/useDownAuctionClock'
 import { useServerClock } from '../hooks/useServerClock'
-import { requestAuctionList } from '../lib/api/auctions'
+import { requestAuctionCategories, requestAuctionList } from '../lib/api/auctions'
 import type {
+  AuctionCategoryOption,
   AuctionDownPricing,
   AuctionListResponse,
   AuctionSummary,
@@ -23,6 +24,7 @@ import {
   homeBannerTransitionDuration,
   nextHomeBannerIndex,
 } from '../lib/homeBanner'
+import { CATEGORY_QUERY_PARAM } from './auctions/constants'
 
 const POPULAR_AUCTION_LIMIT = 5
 const SPLIT_LIST_LIMIT = 4
@@ -54,6 +56,7 @@ function HomePage() {
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)
   const [retryToken, setRetryToken] = useState(0)
   const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
 
@@ -61,6 +64,11 @@ function HomePage() {
     const controller = new AbortController()
     setIsLoading(true)
     setError(null)
+
+    requestAuctionCategories(controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      setCategories(result.ok ? result.data : [])
+    })
 
     requestAuctionList({
       keyword: '',
@@ -102,7 +110,7 @@ function HomePage() {
   })
 
   if (isLoading) {
-    return <HomeSkeleton />
+    return <HomeSkeleton categories={categories} />
   }
 
   if (error) {
@@ -137,6 +145,7 @@ function HomePage() {
   return (
     <main className="mx-auto max-w-[1200px] px-lg py-xl">
       <HomeHeroBanner />
+      <CategoryNavigation categories={categories} />
 
       {spotlight && (
         <div className="mt-xl">
@@ -243,6 +252,37 @@ function HomeHeroBanner() {
           </span>
         </span>
       </span>
+    </section>
+  )
+}
+
+function CategoryNavigation({
+  categories,
+}: {
+  categories: AuctionCategoryOption[] | null
+}) {
+  return (
+    <section className="mt-xl" aria-labelledby="home-category-title">
+      <h2 id="home-category-title" className="text-lg font-bold text-ink">
+        카테고리로 둘러보기
+      </h2>
+      <div className="mt-base flex flex-wrap gap-sm">
+        {categories === null && (
+          <span className="text-sm text-muted">카테고리를 불러오는 중…</span>
+        )}
+        {categories?.map((category) => (
+          <Link
+            key={category.code}
+            to={`/auctions?${CATEGORY_QUERY_PARAM}=${category.code}`}
+            className="rounded-pill border border-hairline-strong bg-canvas px-lg py-sm text-sm font-semibold text-body transition-colors hover:border-primary hover:bg-primary hover:text-on-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {category.label}
+          </Link>
+        ))}
+        {categories?.length === 0 && (
+          <span className="text-sm text-muted">사용 가능한 카테고리가 없어요.</span>
+        )}
+      </div>
     </section>
   )
 }
@@ -533,7 +573,7 @@ function ListRowView({
   )
 }
 
-function HomeSkeleton() {
+function HomeSkeleton({ categories }: { categories: AuctionCategoryOption[] | null }) {
   return (
     <main
       role="status"
@@ -542,7 +582,8 @@ function HomeSkeleton() {
     >
       <span className="sr-only">홈 경매를 불러오는 중…</span>
       <HomeHeroBanner />
-      <section className="mt-xl motion-safe:animate-pulse">
+      <CategoryNavigation categories={categories} />
+      <section className="mt-section motion-safe:animate-pulse">
         <div className="h-8 w-64 rounded-pill bg-surface-strong" />
         <div className="mt-sm h-4 w-96 max-w-full rounded-pill bg-surface-strong" />
         <div className="mt-lg grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
