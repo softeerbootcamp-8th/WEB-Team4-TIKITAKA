@@ -34,6 +34,7 @@ function TopNav() {
   const [availableDeposit, setAvailableDeposit] = useState<number | null>(null)
 
   useEffect(() => setKeyword(currentKeyword), [currentKeyword])
+  useEffect(() => setIsMenuOpen(false), [location.pathname, location.search])
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)')
 
