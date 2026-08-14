@@ -1,5 +1,5 @@
 import { SearchX } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Button from '../../components/ui/Button'
 import { useAuctionEvents } from '../../hooks/useAuctionEvents'
@@ -41,7 +41,10 @@ function AuctionListPage() {
   const [auctionType, setAuctionType] = useState<AuctionTypeFilter>('ALL')
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT)
   const filterGroups = createFilterGroups(categories)
-  const appliedFilters = toAuctionListFilters(selection, isFilterEnabled)
+  const appliedFilters = useMemo(
+    () => toAuctionListFilters(selection, isFilterEnabled),
+    [isFilterEnabled, selection],
+  )
   const categoryKey = appliedFilters.categories.join(',')
   const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${categoryKey}\u0000${sort}`
   const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
