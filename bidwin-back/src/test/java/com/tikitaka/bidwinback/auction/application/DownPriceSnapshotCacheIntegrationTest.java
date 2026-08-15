@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapsho
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -32,6 +33,7 @@ class DownPriceSnapshotCacheIntegrationTest {
 
     private LettuceConnectionFactory connectionFactory;
     private StringRedisTemplate redisTemplate;
+    private SimpleMeterRegistry meterRegistry;
     private DownPriceSnapshotCache cache;
 
     @BeforeEach
@@ -49,7 +51,8 @@ class DownPriceSnapshotCacheIntegrationTest {
         connectionFactory.afterPropertiesSet();
         redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
-        cache = new DownPriceSnapshotCache(redisTemplate, TTL);
+        meterRegistry = new SimpleMeterRegistry();
+        cache = new DownPriceSnapshotCache(redisTemplate, TTL, meterRegistry);
     }
 
     @AfterEach
@@ -62,6 +65,7 @@ class DownPriceSnapshotCacheIntegrationTest {
             ));
             redisTemplate.opsForZSet().remove(KEY_PREFIX + "generations", generation);
         }
+        meterRegistry.close();
         connectionFactory.destroy();
     }
 

@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.infrastructure;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotCache;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,17 +23,21 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DownPriceSnapshotSchedulerTest {
 
+    private static final String CAPTURE_METRIC = "auction.down.price.snapshot.capture";
+
     @Mock
     private DownPriceSnapshotService service;
 
     @Mock
     private DownPriceSnapshotCache cache;
 
+    private SimpleMeterRegistry meterRegistry;
     private DownPriceSnapshotScheduler scheduler;
 
     @BeforeEach
     void setUp() {
-        scheduler = new DownPriceSnapshotScheduler(service, cache);
+        meterRegistry = new SimpleMeterRegistry();
+        scheduler = new DownPriceSnapshotScheduler(service, cache, meterRegistry);
     }
 
     @Test
@@ -44,6 +49,8 @@ class DownPriceSnapshotSchedulerTest {
         verify(service, never()).capture();
         verify(cache, never()).publish(org.mockito.ArgumentMatchers.any());
         verify(cache, never()).releaseCaptureLock(anyString());
+        assertTimerCount("success", 0L);
+        assertTimerCount("failure", 0L);
     }
 
     @Test
@@ -64,6 +71,8 @@ class DownPriceSnapshotSchedulerTest {
         order.verify(service).capture();
         order.verify(cache).publish(snapshot);
         order.verify(cache).releaseCaptureLock(anyString());
+        assertTimerCount("success", 1L);
+        assertTimerCount("failure", 0L);
     }
 
     @Test
@@ -74,5 +83,14 @@ class DownPriceSnapshotSchedulerTest {
         scheduler.capture();
 
         verify(cache).releaseCaptureLock(anyString());
+        assertTimerCount("success", 0L);
+        assertTimerCount("failure", 1L);
+    }
+
+    private void assertTimerCount(String result, long expected) {
+        org.assertj.core.api.Assertions.assertThat(meterRegistry.get(CAPTURE_METRIC)
+                .tag("result", result)
+                .timer()
+                .count()).isEqualTo(expected);
     }
 }

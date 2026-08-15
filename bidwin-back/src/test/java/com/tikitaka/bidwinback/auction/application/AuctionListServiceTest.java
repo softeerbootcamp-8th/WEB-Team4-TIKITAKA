@@ -12,16 +12,26 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapsho
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.ListOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.ZSetOperations;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,6 +45,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AuctionListServiceTest {
 
+    private static final String LOOKUP_METRIC = "auction.down.price.snapshot.lookup";
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime AS_OF = LocalDateTime.of(2026, 8, 1, 12, 0);
     private static final LocalDateTime SERVER_TIME = AS_OF.plusMinutes(1);
@@ -53,6 +64,18 @@ class AuctionListServiceTest {
 
     @Mock
     private ImageUrlResolver imageUrlResolver;
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
+
+    @Mock
+    private ZSetOperations<String, String> zSetOperations;
+
+    @Mock
+    private ListOperations<String, String> listOperations;
 
     private AuctionListService auctionListService;
 
@@ -232,6 +255,12 @@ class AuctionListServiceTest {
                 .thenReturn(Optional.of(metadata));
         when(downPriceSnapshotCache.findLatestAtNotAfter(snapshotAt))
                 .thenReturn(Optional.of(metadata));
+        when(downPriceSnapshotCache.findPage(
+                metadata,
+                AuctionSort.PRICE_HIGH,
+                0L,
+                16
+        )).thenReturn(Optional.of(List.of()));
 
         AuctionListResponse first = auctionListService.getList(
                 query(AuctionType.DOWN, AuctionSort.PRICE_HIGH, null, 1, 16, AS_OF)
@@ -285,6 +314,105 @@ class AuctionListServiceTest {
 
         verify(downPriceSnapshotCache, never()).findLatestAtNotAfter(any());
         verify(auctionListQueryRepository).count(condition);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = AuctionSort.class, names = {"PRICE_LOW", "PRICE_HIGH"})
+    void 적격_하향_가격순_hit은_요청당_lookup을_정확히_한번_기록한다(
+            AuctionSort sort
+    ) {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        AuctionListService service = meteredService(meterRegistry);
+        LocalDateTime snapshotAt = AS_OF.minusSeconds(30);
+        String generation = Long.toString(toEpochMilli(snapshotAt));
+        List<AuctionPriceSnapshot> snapshots = List.of(
+                new AuctionPriceSnapshot(1L, 170_000L)
+        );
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(zSetOperations.reverseRangeByScore(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                anyLong(),
+                anyLong()
+        )).thenReturn(Set.of(generation));
+        when(valueOperations.get(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("1");
+        when(listOperations.range(
+                org.mockito.ArgumentMatchers.anyString(),
+                eq(0L),
+                eq(0L)
+        )).thenReturn(List.of("1:170000"));
+        when(auctionListQueryRepository.findRowsByPriceSnapshots(snapshots, snapshotAt))
+                .thenReturn(List.of(downRow(1L, null, 170_000L)));
+
+        service.getList(query(AuctionType.DOWN, sort, null, 1, 16));
+
+        assertThat(lookupTotal(meterRegistry)).isEqualTo(1D);
+        assertThat(lookupCount(meterRegistry, "hit", "none")).isEqualTo(1D);
+    }
+
+    @Test
+    void 적격_하향_가격순_miss도_요청당_lookup을_정확히_한번_기록한다() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        AuctionListService service = meteredService(meterRegistry);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(zSetOperations.reverseRangeByScore(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                anyLong(),
+                anyLong()
+        )).thenReturn(Set.of());
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        service.getList(query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16));
+
+        assertThat(lookupTotal(meterRegistry)).isEqualTo(1D);
+        assertThat(lookupCount(meterRegistry, "miss", "no_generation")).isEqualTo(1D);
+    }
+
+    @Test
+    void 전체_건수가_0인_세대도_요청당_lookup_hit을_정확히_한번_기록한다() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        AuctionListService service = meteredService(meterRegistry);
+        LocalDateTime snapshotAt = AS_OF.minusSeconds(30);
+        String generation = Long.toString(toEpochMilli(snapshotAt));
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(zSetOperations.reverseRangeByScore(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(),
+                anyLong(),
+                anyLong()
+        )).thenReturn(Set.of(generation));
+        when(valueOperations.get(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("0");
+        when(auctionListQueryRepository.findRowsByPriceSnapshots(List.of(), snapshotAt))
+                .thenReturn(List.of());
+
+        service.getList(query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16));
+
+        assertThat(lookupTotal(meterRegistry)).isEqualTo(1D);
+        assertThat(lookupCount(meterRegistry, "hit", "none")).isEqualTo(1D);
+        verify(redisTemplate, never()).opsForList();
+    }
+
+    @Test
+    void 적격이_아닌_목록_요청은_lookup을_기록하지_않는다() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        AuctionListService service = meteredService(meterRegistry);
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        service.getList(query(null, AuctionSort.PRICE_LOW, null, 1, 16));
+        service.getList(query(AuctionType.UP, AuctionSort.PRICE_HIGH, null, 1, 16));
+        service.getList(query(AuctionType.DOWN, AuctionSort.PRICE_LOW, "상품", 1, 16));
+
+        assertThat(lookupTotal(meterRegistry)).isZero();
+        verify(redisTemplate, never()).opsForZSet();
     }
 
     @Test
@@ -422,4 +550,37 @@ class AuctionListServiceTest {
         return dateTime.atZone(SEOUL).toInstant().toEpochMilli();
     }
 
+    private AuctionListService meteredService(SimpleMeterRegistry meterRegistry) {
+        DownPriceSnapshotCache cache = new DownPriceSnapshotCache(
+                redisTemplate,
+                Duration.ofMinutes(10),
+                meterRegistry
+        );
+        return new AuctionListService(
+                auctionRepository,
+                auctionListQueryRepository,
+                auctionPricePageQuery,
+                cache,
+                imageUrlResolver
+        );
+    }
+
+    private double lookupTotal(SimpleMeterRegistry meterRegistry) {
+        return meterRegistry.find(LOOKUP_METRIC)
+                .counters()
+                .stream()
+                .mapToDouble(Counter::count)
+                .sum();
+    }
+
+    private double lookupCount(
+            SimpleMeterRegistry meterRegistry,
+            String result,
+            String reason
+    ) {
+        return meterRegistry.get(LOOKUP_METRIC)
+                .tags("result", result, "reason", reason)
+                .counter()
+                .count();
+    }
 }

@@ -110,9 +110,13 @@ public class AuctionListService {
         int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
         long offset = (long) (currentPage - FIRST_PAGE) * size;
 
-        Optional<List<AuctionPriceSnapshot>> snapshots = metadata.totalCount() == 0
-                ? Optional.of(List.of())
-                : downPriceSnapshotCache.findPage(metadata, query.sort(), offset, size);
+        Optional<List<AuctionPriceSnapshot>> snapshots =
+                downPriceSnapshotCache.findPage(
+                        metadata,
+                        query.sort(),
+                        offset,
+                        size
+                );
         if (snapshots.isEmpty()) {
             return Optional.empty();
         }

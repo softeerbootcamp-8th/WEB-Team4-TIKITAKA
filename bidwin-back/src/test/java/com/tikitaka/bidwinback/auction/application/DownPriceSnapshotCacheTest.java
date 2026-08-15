@@ -2,6 +2,8 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -36,6 +39,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DownPriceSnapshotCacheTest {
 
+    private static final String LOOKUP_METRIC = "auction.down.price.snapshot.lookup";
+    private static final String PUBLISH_METRIC = "auction.down.price.snapshot.publish";
+    private static final String STALENESS_METRIC = "auction.down.price.snapshot.staleness";
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final Duration TTL = Duration.ofMinutes(10);
     private static final LocalDateTime SNAPSHOT_AT =
@@ -53,15 +59,17 @@ class DownPriceSnapshotCacheTest {
     @Mock
     private ListOperations<String, String> listOperations;
 
+    private SimpleMeterRegistry meterRegistry;
     private DownPriceSnapshotCache cache;
 
     @BeforeEach
     void setUp() {
-        cache = new DownPriceSnapshotCache(redisTemplate, TTL);
+        meterRegistry = new SimpleMeterRegistry();
+        cache = new DownPriceSnapshotCache(redisTemplate, TTL, meterRegistry);
     }
 
     @Test
-    void 조회할_세대가_없으면_캐시_미스로_처리한다() {
+    void 조회할_세대가_없으면_no_generation_miss를_한번_기록한다() {
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(zSetOperations.reverseRangeByScore(
                 anyString(),
@@ -75,10 +83,11 @@ class DownPriceSnapshotCacheTest {
                 cache.findLatestAtNotAfter(SNAPSHOT_AT);
 
         assertThat(result).isEmpty();
+        assertSingleLookup("miss", "no_generation");
     }
 
     @Test
-    void 세대의_count가_없으면_캐시_미스로_처리한다() {
+    void 세대의_count가_없으면_no_count_miss를_한번_기록한다() {
         String generation = Long.toString(toEpochMilli(SNAPSHOT_AT));
         when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -94,6 +103,7 @@ class DownPriceSnapshotCacheTest {
                 cache.findLatestAtNotAfter(SNAPSHOT_AT);
 
         assertThat(result).isEmpty();
+        assertSingleLookup("miss", "no_count");
     }
 
     @Test
@@ -162,10 +172,11 @@ class DownPriceSnapshotCacheTest {
 
         assertThat(result).isEmpty();
         verify(redisTemplate, never()).opsForList();
+        assertSingleLookup("miss", "beyond_cache");
     }
 
     @Test
-    void 저장된_목록_길이가_요청한_길이와_다르면_캐시_미스로_처리한다() {
+    void 저장된_목록_길이가_요청한_길이와_다르면_length_mismatch_miss를_기록한다() {
         DownPriceSnapshotCache.Metadata metadata =
                 new DownPriceSnapshotCache.Metadata(SNAPSHOT_AT, 2L);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
@@ -176,6 +187,19 @@ class DownPriceSnapshotCacheTest {
                 cache.findPage(metadata, AuctionSort.PRICE_LOW, 0L, 2);
 
         assertThat(result).isEmpty();
+        assertSingleLookup("miss", "length_mismatch");
+    }
+
+    @Test
+    void 전체_건수가_0이면_빈_페이지를_hit으로_한번_기록한다() {
+        DownPriceSnapshotCache.Metadata metadata =
+                new DownPriceSnapshotCache.Metadata(SNAPSHOT_AT, 0L);
+
+        Optional<List<AuctionPriceSnapshot>> result =
+                cache.findPage(metadata, AuctionSort.PRICE_LOW, 0L, 16);
+
+        assertThat(result).contains(List.of());
+        assertSingleLookup("hit", "none");
     }
 
     @Test
@@ -188,6 +212,7 @@ class DownPriceSnapshotCacheTest {
                 cache.findLatestAtNotAfter(SNAPSHOT_AT);
 
         assertThat(result).isEmpty();
+        assertSingleLookup("miss", "redis_error");
     }
 
     @Test
@@ -209,6 +234,8 @@ class DownPriceSnapshotCacheTest {
                 anyList(),
                 any(Object[].class)
         )).thenReturn(1L);
+
+        assertThat(meterRegistry.get(STALENESS_METRIC).gauge().value()).isNaN();
 
         cache.publish(snapshot);
 
@@ -239,6 +266,63 @@ class DownPriceSnapshotCacheTest {
                 generation,
                 Long.toString(toEpochMilli(SNAPSHOT_AT) - TTL.toMillis())
         );
+        assertThat(publishCount("success")).isEqualTo(1D);
+        assertThat(publishCount("failure")).isZero();
+        assertThat(meterRegistry.get(STALENESS_METRIC).gauge().value()).isFinite();
+    }
+
+    @Test
+    void 발행_실패를_기록하고_발행_전_staleness를_갱신하지_않는다() {
+        DownPriceSnapshot snapshot = emptySnapshot(SNAPSHOT_AT);
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                anyList(),
+                any(Object[].class)
+        )).thenReturn(0L);
+
+        assertThatThrownBy(() -> cache.publish(snapshot))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(publishCount("success")).isZero();
+        assertThat(publishCount("failure")).isEqualTo(1D);
+        assertThat(meterRegistry.get(STALENESS_METRIC).gauge().value()).isNaN();
+    }
+
+    @Test
+    void Redis_예외로_발행에_실패해도_failure를_기록한다() {
+        DownPriceSnapshot snapshot = emptySnapshot(SNAPSHOT_AT);
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                anyList(),
+                any(Object[].class)
+        )).thenThrow(new RedisConnectionFailureException("Redis 장애"));
+
+        assertThatThrownBy(() -> cache.publish(snapshot))
+                .isInstanceOf(RedisConnectionFailureException.class);
+
+        assertThat(publishCount("success")).isZero();
+        assertThat(publishCount("failure")).isEqualTo(1D);
+        assertThat(meterRegistry.get(STALENESS_METRIC).gauge().value()).isNaN();
+    }
+
+    @Test
+    void 발행에_실패해도_마지막_성공_시각을_갱신하지_않는다() throws InterruptedException {
+        DownPriceSnapshot snapshot = emptySnapshot(SNAPSHOT_AT);
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                anyList(),
+                any(Object[].class)
+        )).thenReturn(1L, 0L);
+        cache.publish(snapshot);
+        Thread.sleep(20L);
+        double beforeFailure = meterRegistry.get(STALENESS_METRIC).gauge().value();
+
+        assertThatThrownBy(() -> cache.publish(snapshot))
+                .isInstanceOf(IllegalStateException.class);
+
+        double afterFailure = meterRegistry.get(STALENESS_METRIC).gauge().value();
+        assertThat(beforeFailure).isGreaterThanOrEqualTo(10D);
+        assertThat(afterFailure).isGreaterThanOrEqualTo(beforeFailure);
     }
 
     @Test
@@ -256,4 +340,27 @@ class DownPriceSnapshotCacheTest {
         return dateTime.atZone(SEOUL).toInstant().toEpochMilli();
     }
 
+    private DownPriceSnapshot emptySnapshot(LocalDateTime snapshotAt) {
+        return new DownPriceSnapshot(snapshotAt, 0L, List.of(), List.of());
+    }
+
+    private void assertSingleLookup(String result, String reason) {
+        assertThat(meterRegistry.get(LOOKUP_METRIC)
+                .tags("result", result, "reason", reason)
+                .counter()
+                .count()).isEqualTo(1D);
+        double total = meterRegistry.find(LOOKUP_METRIC)
+                .counters()
+                .stream()
+                .mapToDouble(Counter::count)
+                .sum();
+        assertThat(total).isEqualTo(1D);
+    }
+
+    private double publishCount(String result) {
+        return meterRegistry.get(PUBLISH_METRIC)
+                .tag("result", result)
+                .counter()
+                .count();
+    }
 }
