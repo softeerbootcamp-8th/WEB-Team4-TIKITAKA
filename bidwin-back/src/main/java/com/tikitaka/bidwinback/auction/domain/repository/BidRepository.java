@@ -44,18 +44,20 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
             """)
     long countByAuctionId(@Param("auctionId") long auctionId);
 
-    @Query("""
-        select bid.id,
-               bidder.id,
-               bidder.nickname,
-               bid.price,
-               bid.createdAt
-        from Bid bid
-        join bid.bidder bidder
-        where bid.auction.id = :auctionId
-        order by bid.createdAt desc, bid.id desc
-        limit 10
-        """)
+    // MySQL이 member부터 훑지 않도록 입찰 이력 인덱스 순서로 최근 10건을 먼저 읽는다.
+    @Query(value = """
+            SELECT STRAIGHT_JOIN
+                   bid.id,
+                   member.id,
+                   member.nickname,
+                   bid.price,
+                   bid.created_at
+            FROM bid
+            JOIN member ON member.id = bid.bidder_id
+            WHERE bid.auction_id = :auctionId
+            ORDER BY bid.created_at DESC, bid.id DESC
+            LIMIT 10
+            """, nativeQuery = true)
     List<BidHistoryRow> findHistoryByAuctionId(@Param("auctionId") long auctionId);
 
     // 일반·밀봉입찰을 모두 포함하되 같은 경매 참여는 한 번만 센다.
