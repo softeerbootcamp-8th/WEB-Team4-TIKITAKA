@@ -1,6 +1,10 @@
 spring:
   application:
     name: bidwin-back
+  task:
+    scheduling:
+      pool:
+        size: 2
   mail:
     host: smtp.gmail.com
     port: 587

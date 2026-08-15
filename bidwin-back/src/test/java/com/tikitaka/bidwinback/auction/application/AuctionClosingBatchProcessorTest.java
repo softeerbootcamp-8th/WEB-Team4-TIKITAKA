@@ -27,12 +27,25 @@ class AuctionClosingBatchProcessorTest {
     @Test
     void 한_배치에서_마감_후보를_100번_처리한다() {
         // given
+        when(auctionClosingService.closeOneCandidate()).thenReturn(true);
 
         // when
         processor.closeEndedAuctions();
 
         // then
         verify(auctionClosingService, times(100)).closeOneCandidate();
+    }
+
+    @Test
+    void 마감할_후보가_없으면_배치를_즉시_끝낸다() {
+        // given
+        when(auctionClosingService.closeOneCandidate()).thenReturn(false);
+
+        // when
+        processor.closeEndedAuctions();
+
+        // then
+        verify(auctionClosingService).closeOneCandidate();
     }
 
     @Test

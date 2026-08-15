@@ -14,7 +14,9 @@ public class AuctionClosingBatchProcessor {
     public void closeEndedAuctions() {
         for (int attempt = 0; attempt < 100; attempt++) {
             try {
-                auctionClosingService.closeOneCandidate();
+                if (!auctionClosingService.closeOneCandidate()) {
+                    break;
+                }
             } catch (RuntimeException exception) {
                 log.error("경매 마감 실패", exception);
             }
