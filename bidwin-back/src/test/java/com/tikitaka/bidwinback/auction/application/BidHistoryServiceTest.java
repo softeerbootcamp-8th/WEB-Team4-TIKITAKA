@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -58,7 +59,8 @@ class BidHistoryServiceTest {
         LocalDateTime latestBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
         LocalDateTime previousBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
         when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
-        when(bidRepository.countByAuctionId(1L)).thenReturn(15L);
+        when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
+        when(auction.getBidCount()).thenReturn(15L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
                 new BidHistoryRow(13L, 7L, "내닉네임", 210_000L, latestBidAt),
                 new BidHistoryRow(12L, 8L, "민준마켓", 200_000L, previousBidAt),
@@ -83,14 +85,14 @@ class BidHistoryServiceTest {
                 bid -> assertThat(bid.bidder()).isEqualTo("*"),
                 bid -> assertThat(bid.bidder()).isEqualTo("김*")
         );
-        verify(bidRepository).countByAuctionId(1L);
         verify(bidRepository).findHistoryByAuctionId(1L);
     }
 
     @Test
     void 입찰이_없으면_빈_목록과_0건을_응답한다() {
-        when(auctionRepository.findById(1L)).thenReturn(Optional.of(mock(UpAuction.class)));
-        when(bidRepository.countByAuctionId(1L)).thenReturn(0L);
+        UpAuction auction = mock(UpAuction.class);
+        when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of());
 
         BidHistoryResponse response = bidHistoryService.getBidHistory(1L);
@@ -105,10 +107,10 @@ class BidHistoryServiceTest {
         LocalDateTime openBidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
         LocalDateTime latestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 2);
         LocalDateTime oldestSealedBidAt = LocalDateTime.of(2026, 8, 2, 18, 0);
-        when(auction.isSealedBidRevealed()).thenReturn(true);
         when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
-        when(bidRepository.countByAuctionId(1L)).thenReturn(1L);
-        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(2L);
+        when(auction.getStatus()).thenReturn(AuctionStatus.WINNER_DETERMINING);
+        when(auction.getBidCount()).thenReturn(1L);
+        when(auction.getSealedBidCount()).thenReturn(2L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
                 new BidHistoryRow(13L, 8L, "일반입찰자", 210_000L, openBidAt)
         ));
@@ -147,15 +149,15 @@ class BidHistoryServiceTest {
                 .isEqualTo(ErrorCode.AUCTION_NOT_FOUND);
 
         verify(bidRepository, never()).findHistoryByAuctionId(999L);
-        verify(bidRepository, never()).countByAuctionId(999L);
         verify(sealedBidRepository, never()).findHistoryByAuctionId(999L);
-        verify(sealedBidRepository, never()).countByAuctionId(999L);
     }
 
     @Test
     void 하락_경매도_구매_기록을_입찰_내역으로_조회한다() {
-        when(auctionRepository.findById(2L)).thenReturn(Optional.of(mock(DownAuction.class)));
-        when(bidRepository.countByAuctionId(2L)).thenReturn(1L);
+        DownAuction auction = mock(DownAuction.class);
+        when(auctionRepository.findById(2L)).thenReturn(Optional.of(auction));
+        when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        when(auction.getBidCount()).thenReturn(1L);
         when(bidRepository.findHistoryByAuctionId(2L)).thenReturn(List.of(
                 new BidHistoryRow(
                         14L,
@@ -178,10 +180,10 @@ class BidHistoryServiceTest {
     void 일반입찰과_밀봉입찰의_숫자_ID가_같아도_entryId는_충돌하지_않는다() {
         UpAuction auction = mock(UpAuction.class);
         LocalDateTime bidAt = LocalDateTime.of(2026, 8, 2, 18, 1);
-        when(auction.isSealedBidRevealed()).thenReturn(true);
         when(auctionRepository.findById(1L)).thenReturn(Optional.of(auction));
-        when(bidRepository.countByAuctionId(1L)).thenReturn(1L);
-        when(sealedBidRepository.countByAuctionId(1L)).thenReturn(1L);
+        when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
+        when(auction.getBidCount()).thenReturn(1L);
+        when(auction.getSealedBidCount()).thenReturn(1L);
         when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of(
                 new BidHistoryRow(7L, 8L, "일반입찰자", 210_000L, bidAt)
         ));

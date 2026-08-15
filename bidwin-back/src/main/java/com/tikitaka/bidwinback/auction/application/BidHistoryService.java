@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -38,12 +39,25 @@ public class BidHistoryService {
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new AuctionException(ErrorCode.AUCTION_NOT_FOUND));
 
-        long bidCount = bidRepository.countByAuctionId(auctionId);
+        AuctionStatus status = auction.getStatus();
+        long bidCount = auction.getBidCount();
+        if (isSealedBidRevealed(status)) {
+            bidCount += auction.getSealedBidCount();
+        }
+        return getBidHistory(auctionId, status, bidCount);
+    }
+
+    /** SSE 초기 상태에서 이미 검증한 경매 상태와 입찰 수를 재사용한다. */
+    @Transactional(readOnly = true)
+    public BidHistoryResponse getBidHistory(
+            long auctionId,
+            AuctionStatus status,
+            long bidCount
+    ) {
         Stream<BidHistoryItemResponse> bidHistory = bidRepository.findHistoryByAuctionId(auctionId)
                 .stream()
                 .map(row -> toResponse(row, BID_ENTRY_PREFIX));
-        if (auction.isSealedBidRevealed()) {
-            bidCount += sealedBidRepository.countByAuctionId(auctionId);
+        if (isSealedBidRevealed(status)) {
             bidHistory = mergeWithSealedBids(auctionId, bidHistory);
         }
 
@@ -53,6 +67,12 @@ public class BidHistoryService {
                 .toList();
 
         return new BidHistoryResponse(bidCount, bidLog);
+    }
+
+    private boolean isSealedBidRevealed(AuctionStatus status) {
+        return status == AuctionStatus.WINNER_DETERMINING
+                || status == AuctionStatus.COMPLETED
+                || status == AuctionStatus.UNSOLD;
     }
 
     private Stream<BidHistoryItemResponse> mergeWithSealedBids(
