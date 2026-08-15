@@ -20,10 +20,11 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
+    // ended_at 인덱스는 완료된 과거 경매까지 먼저 훑으므로 상태 인덱스로 대상 범위를 제한한다.
     // 여러 서버가 같은 후보를 기다리지 않도록 잠긴 행을 건너뛰며 한 건만 선점한다.
     @Query(value = """
             SELECT id
-            FROM auction
+            FROM auction FORCE INDEX (idx_auction_status_ended_at)
             WHERE status IN ('OPEN', 'BID_ONGOING')
               AND ended_at <= NOW(6)
             ORDER BY ended_at, id
