@@ -272,7 +272,7 @@ class BidServiceTest {
     }
 
     @Test
-    void 성공한_밀봉입찰은_공개_상태_변경_이벤트를_발행한다() {
+    void 첫_밀봉입찰은_공개_상태_변경_이벤트를_발행한다() {
         // given
         stubSuccessfulSealedBid();
 
@@ -284,12 +284,27 @@ class BidServiceTest {
     }
 
     @Test
+    void 후속_밀봉입찰은_같은_revision의_상태_이벤트를_발행하지_않는다() {
+        // given
+        stubSuccessfulSubsequentSealedBid();
+
+        // when
+        BidResult result = bidService.place(MEMBER_ID, AUCTION_ID, PRICE, BidType.SEALED);
+
+        // then
+        assertThat(result.bidId()).isEqualTo(BID_ID);
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
     void 같은_회원의_밀봉입찰이_이미_있으면_거절한다() {
         when(auctionRepository.tryUpdateAuctionForSealedBid(
                 AUCTION_ID,
                 MEMBER_ID,
                 PRICE,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         )).thenReturn(1);
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
@@ -323,7 +338,17 @@ class BidServiceTest {
                 AUCTION_ID,
                 MEMBER_ID,
                 PRICE,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
+        );
+        verify(auctionRepository, never()).tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
         );
         verifyNoInteractions(memberRepository, bidRepository, sealedBidRepository);
     }
@@ -334,7 +359,9 @@ class BidServiceTest {
                 AUCTION_ID,
                 MEMBER_ID,
                 PRICE,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         )).thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
@@ -362,7 +389,9 @@ class BidServiceTest {
                 AUCTION_ID,
                 MEMBER_ID,
                 PRICE,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         )).thenReturn(0);
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(auction));
         when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
@@ -581,8 +610,34 @@ class BidServiceTest {
                 AUCTION_ID,
                 MEMBER_ID,
                 PRICE,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         )).thenReturn(1);
+        stubSuccessfulSealedBidPersistence();
+    }
+
+    private void stubSuccessfulSubsequentSealedBid() {
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
+        )).thenReturn(0);
+        when(auctionRepository.tryUpdateAuctionForSealedBid(
+                AUCTION_ID,
+                MEMBER_ID,
+                PRICE,
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
+        )).thenReturn(1);
+        stubSuccessfulSealedBidPersistence();
+    }
+
+    private void stubSuccessfulSealedBidPersistence() {
         when(auctionRepository.getReferenceById(AUCTION_ID)).thenReturn(auction);
         when(memberRepository.getReferenceById(MEMBER_ID)).thenReturn(bidder);
         stubExistingDeposit();

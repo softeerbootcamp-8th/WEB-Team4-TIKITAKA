@@ -89,7 +89,9 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 bidder.getId(),
                 START_PRICE + BID_UNIT,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         );
 
         // then
@@ -109,7 +111,9 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 firstBidder.getId(),
                 START_PRICE + BID_UNIT,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         );
 
         // when
@@ -117,7 +121,9 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 secondBidder.getId(),
                 START_PRICE + (BID_UNIT * 2),
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
         );
 
         // then
@@ -139,13 +145,17 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 firstBidder.getId(),
                 START_PRICE + BID_UNIT,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         );
         auctionRepository.tryUpdateAuctionForSealedBid(
                 auction.getId(),
                 secondBidder.getId(),
                 START_PRICE + (BID_UNIT * 2),
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
         );
 
         // then
