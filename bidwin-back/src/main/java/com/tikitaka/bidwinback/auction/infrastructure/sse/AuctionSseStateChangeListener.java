@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.global.sse.SseHub;
@@ -14,13 +15,16 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class AuctionSseStateChangeListener {
 
     private final AuctionLiveStateService stateService;
+    private final AuctionLiveStateCache stateCache;
     private final SseHub sseHub;
 
     public AuctionSseStateChangeListener(
             AuctionLiveStateService stateService,
+            AuctionLiveStateCache stateCache,
             SseHub sseHub
     ) {
         this.stateService = stateService;
+        this.stateCache = stateCache;
         this.sseHub = sseHub;
     }
 
@@ -30,6 +34,8 @@ public class AuctionSseStateChangeListener {
     )
     public void publishCommittedState(AuctionStateChanged event) {
         long auctionId = event.auctionId();
+        // 구독자가 없더라도 다음 연결이 커밋 전 snapshot을 받지 않게 먼저 무효화한다.
+        stateCache.invalidate(auctionId);
         if (!sseHub.hasSubscribers(AuctionSseMessages.channel(auctionId))) {
             return;
         }

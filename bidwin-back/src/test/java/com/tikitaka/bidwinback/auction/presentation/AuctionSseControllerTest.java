@@ -2,7 +2,7 @@ package com.tikitaka.bidwinback.auction.presentation;
 
 import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 class AuctionSseControllerTest {
 
     @Mock
-    private AuctionLiveStateService stateService;
+    private AuctionLiveStateCache stateCache;
     @Mock
     private BidHistoryService bidHistoryService;
     @Mock
@@ -45,7 +45,7 @@ class AuctionSseControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AuctionSseController(stateService, bidHistoryService, sseHub);
+        controller = new AuctionSseController(stateCache, bidHistoryService, sseHub);
     }
 
     @Test
@@ -73,7 +73,7 @@ class AuctionSseControllerTest {
         // given
         AuctionLiveState state = state(1L);
         BidHistoryResponse history = new BidHistoryResponse(3L, List.of());
-        when(stateService.getState(1L)).thenReturn(state);
+        when(stateCache.getState(1L)).thenReturn(state);
         when(bidHistoryService.getBidHistory(1L, state.status(), state.bidCount()))
                 .thenReturn(history);
         when(sseHub.subscribe(
@@ -95,7 +95,7 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getState(1L);
+        verify(stateCache).getState(1L);
         verify(bidHistoryService).getBidHistory(1L, state.status(), state.bidCount());
     }
 
@@ -104,7 +104,7 @@ class AuctionSseControllerTest {
         // given
         List<Long> auctionIds = List.of(1L, 2L);
         List<AuctionLiveState> states = List.of(state(1L), state(2L));
-        when(stateService.getStates(auctionIds)).thenReturn(states);
+        when(stateCache.getStates(auctionIds)).thenReturn(states);
         List<SseChannel> channels = auctionIds.stream()
                 .map(AuctionSseMessages::channel)
                 .toList();
@@ -124,7 +124,7 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getStates(auctionIds);
+        verify(stateCache).getStates(auctionIds);
     }
 
     @Test
@@ -133,7 +133,7 @@ class AuctionSseControllerTest {
         List<Long> requested = List.of(1L, 1L, 2L, 2L, 1L);
         List<Long> distinct = List.of(1L, 2L);
         List<AuctionLiveState> states = List.of(state(1L), state(2L));
-        when(stateService.getStates(distinct)).thenReturn(states);
+        when(stateCache.getStates(distinct)).thenReturn(states);
         List<SseChannel> channels = distinct.stream()
                 .map(AuctionSseMessages::channel)
                 .toList();
@@ -153,7 +153,7 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getStates(distinct);
+        verify(stateCache).getStates(distinct);
     }
 
     @Test

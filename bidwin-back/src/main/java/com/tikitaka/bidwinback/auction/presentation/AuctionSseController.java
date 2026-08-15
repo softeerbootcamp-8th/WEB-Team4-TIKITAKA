@@ -2,7 +2,7 @@ package com.tikitaka.bidwinback.auction.presentation;
 
 import com.tikitaka.bidwinback.auction.application.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
@@ -36,7 +36,7 @@ import java.util.List;
 @RequestMapping("/api/v1/auctions")
 public class AuctionSseController {
 
-    private final AuctionLiveStateService stateService;
+    private final AuctionLiveStateCache stateCache;
     private final BidHistoryService bidHistoryService;
     private final SseHub sseHub;
 
@@ -66,7 +66,7 @@ public class AuctionSseController {
         List<Long> distinctIds = auctionIds.stream().distinct().toList();
         SseEmitter emitter = sseHub.subscribe(
                 distinctIds.stream().map(AuctionSseMessages::channel).toList(),
-                () -> stateService.getStates(distinctIds).stream()
+                () -> stateCache.getStates(distinctIds).stream()
                         .map(AuctionSseMessages::state)
                         .toList()
         );
@@ -106,7 +106,7 @@ public class AuctionSseController {
     }
 
     private List<SseMessage<?>> initialAuctionMessages(long auctionId) {
-        AuctionLiveState state = stateService.getState(auctionId);
+        AuctionLiveState state = stateCache.getState(auctionId);
         List<SseMessage<?>> messages = new ArrayList<>();
         messages.add(AuctionSseMessages.state(state));
         if (state.auctionType() == AuctionType.UP) {

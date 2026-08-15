@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -42,6 +43,8 @@ class AuctionSseStateChangeListenerTransactionTest {
     @Autowired
     private AuctionLiveStateService stateService;
     @Autowired
+    private AuctionLiveStateCache stateCache;
+    @Autowired
     private SseHub sseHub;
 
     private final AuctionLiveState state = new AuctionLiveState(
@@ -55,7 +58,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
     @BeforeEach
     void setUp() {
-        reset(stateService, sseHub);
+        reset(stateService, stateCache, sseHub);
     }
 
     @Test
@@ -72,6 +75,7 @@ class AuctionSseStateChangeListenerTransactionTest {
         });
 
         // then
+        verify(stateCache).invalidate(1L);
         verify(sseHub).publish(AuctionSseMessages.state(state));
     }
 
@@ -88,6 +92,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
         // then
         verifyNoInteractions(stateService, sseHub);
+        verifyNoInteractions(stateCache);
     }
 
     @Test
@@ -115,6 +120,7 @@ class AuctionSseStateChangeListenerTransactionTest {
         );
 
         // then
+        verify(stateCache).invalidate(1L);
         verifyNoInteractions(stateService);
         verify(sseHub, never()).publish(any());
     }
@@ -134,6 +140,11 @@ class AuctionSseStateChangeListenerTransactionTest {
         }
 
         @Bean
+        AuctionLiveStateCache stateCache() {
+            return mock(AuctionLiveStateCache.class);
+        }
+
+        @Bean
         SseHub sseHub() {
             return mock(SseHub.class);
         }
@@ -141,10 +152,12 @@ class AuctionSseStateChangeListenerTransactionTest {
         @Bean
         AuctionSseStateChangeListener auctionSseStateChangeListener(
                 AuctionLiveStateService stateService,
+                AuctionLiveStateCache stateCache,
                 SseHub sseHub
         ) {
             return new AuctionSseStateChangeListener(
                     stateService,
+                    stateCache,
                     sseHub
             );
         }
