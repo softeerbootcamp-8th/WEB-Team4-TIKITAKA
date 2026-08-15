@@ -2,10 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
-import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDownPricingResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
@@ -13,7 +10,6 @@ import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryR
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -30,13 +26,10 @@ public class AuctionListService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
 
-    private final AuctionRepository auctionRepository;
-    private final AuctionListQueryRepository auctionListQueryRepository;
-    private final AuctionPricePageQuery auctionPricePageQuery;
+    private final AuctionListDbQuery auctionListDbQuery;
     private final DownPriceSnapshotCache downPriceSnapshotCache;
     private final ImageUrlResolver imageUrlResolver;
 
-    @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
         int size = normalizedSize(query.size());
 
@@ -48,38 +41,7 @@ public class AuctionListService {
             return snapshotResponse.get();
         }
 
-        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
-                ? serverTime
-                : query.asOf() != null ? query.asOf() : serverTime;
-
-        // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
-        AuctionListSearchCondition condition = new AuctionListSearchCondition(
-                query.auctionType(),
-                query.sort(),
-                query.keyword(),
-                asOf
-        );
-        long totalCount = auctionListQueryRepository.count(condition);
-        int totalPages = totalPages(totalCount, size);
-        int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
-        long offset = (long) (currentPage - FIRST_PAGE) * size;
-
-        List<AuctionSummaryResponse> pageItems = totalCount == 0
-                ? List.of()
-                : findPage(condition, currentPage, size, totalCount, offset)
-                        .stream()
-                        .map(this::toSummary)
-                        .toList();
-
-        return new AuctionListResponse(
-                pageItems,
-                toEpochMilli(serverTime),
-                toEpochMilli(asOf),
-                currentPage,
-                totalPages,
-                totalCount
-        );
+        return toResponse(auctionListDbQuery.findPage(query, size));
     }
 
     private Optional<AuctionListResponse> findDownPriceSnapshotList(
@@ -119,15 +81,17 @@ public class AuctionListService {
             return Optional.empty();
         }
 
-        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        List<AuctionSummaryResponse> pageItems = auctionListQueryRepository
-                .findDownRowsByPriceSnapshots(snapshots.get(), metadata.snapshotAt())
+        AuctionListDbQuery.SnapshotPage page = auctionListDbQuery
+                .assembleSnapshotPage(snapshots.get(), metadata.snapshotAt());
+        // AuctionListRow는 @QueryProjection 레코드라 지연 로딩 프록시 없이
+        // 트랜잭션 밖에서 안전하게 응답으로 매핑할 수 있다.
+        List<AuctionSummaryResponse> pageItems = page.rows()
                 .stream()
                 .map(this::toSummary)
                 .toList();
         return Optional.of(new AuctionListResponse(
                 pageItems,
-                toEpochMilli(serverTime),
+                toEpochMilli(page.serverTime()),
                 toEpochMilli(metadata.snapshotAt()),
                 currentPage,
                 totalPages,
@@ -135,23 +99,20 @@ public class AuctionListService {
         ));
     }
 
-    private List<AuctionListRow> findPage(
-            AuctionListSearchCondition condition,
-            int currentPage,
-            int size,
-            long totalCount,
-            long offset
-    ) {
-        return switch (condition.sort()) {
-            case PRICE_LOW, PRICE_HIGH -> auctionPricePageQuery.findPage(
-                    condition,
-                    currentPage,
-                    size,
-                    totalCount
-            );
-            case RECOMMENDED, DEADLINE, LATEST ->
-                    auctionListQueryRepository.findPage(condition, offset, size);
-        };
+    private AuctionListResponse toResponse(AuctionListDbQuery.DbPage page) {
+        // AuctionListRow는 @QueryProjection 레코드라 지연 로딩 프록시 없이
+        // 트랜잭션 밖에서 안전하게 응답으로 매핑할 수 있다.
+        List<AuctionSummaryResponse> pageItems = page.rows().stream()
+                .map(this::toSummary)
+                .toList();
+        return new AuctionListResponse(
+                pageItems,
+                toEpochMilli(page.serverTime()),
+                toEpochMilli(page.asOf()),
+                page.currentPage(),
+                page.totalPages(),
+                page.totalCount()
+        );
     }
 
     private AuctionSummaryResponse toSummary(AuctionListRow row) {

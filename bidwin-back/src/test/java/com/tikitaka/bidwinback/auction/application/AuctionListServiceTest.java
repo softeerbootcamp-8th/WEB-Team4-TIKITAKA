@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,14 +80,18 @@ class AuctionListServiceTest {
     @Mock
     private ListOperations<String, String> listOperations;
 
+    private AuctionListDbQuery auctionListDbQuery;
     private AuctionListService auctionListService;
 
     @BeforeEach
     void setUp() {
-        auctionListService = new AuctionListService(
+        auctionListDbQuery = spy(new AuctionListDbQuery(
                 auctionRepository,
                 auctionListQueryRepository,
-                auctionPricePageQuery,
+                auctionPricePageQuery
+        ));
+        auctionListService = new AuctionListService(
+                auctionListDbQuery,
                 downPriceSnapshotCache,
                 imageUrlResolver
         );
@@ -248,17 +253,21 @@ class AuctionListServiceTest {
         verify(auctionPricePageQuery, never()).findPage(any(), anyInt(), anyInt(), anyLong());
         InOrder order = inOrder(
                 downPriceSnapshotCache,
+                auctionListDbQuery,
                 auctionRepository,
                 auctionListQueryRepository
         );
         order.verify(downPriceSnapshotCache).findLatestAtNotAfter(AS_OF);
         order.verify(downPriceSnapshotCache)
                 .findPage(metadata, AuctionSort.PRICE_LOW, 0L, 16);
+        order.verify(auctionListDbQuery)
+                .assembleSnapshotPage(snapshots, snapshotAt);
         order.verify(auctionRepository).currentDatabaseTime();
         order.verify(auctionListQueryRepository)
                 .findDownRowsByPriceSnapshots(snapshots, snapshotAt);
         verify(auctionListQueryRepository, never())
                 .findRowsByPriceSnapshots(any(), any());
+        verify(auctionListDbQuery, never()).findPage(any(), anyInt());
     }
 
     @Test
@@ -337,11 +346,13 @@ class AuctionListServiceTest {
         verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
         InOrder order = inOrder(
                 downPriceSnapshotCache,
+                auctionListDbQuery,
                 auctionRepository,
                 auctionListQueryRepository,
                 auctionPricePageQuery
         );
         order.verify(downPriceSnapshotCache).findLatestAtNotAfter(AS_OF);
+        order.verify(auctionListDbQuery).findPage(any(), eq(16));
         order.verify(auctionRepository).currentDatabaseTime();
         order.verify(auctionListQueryRepository).count(condition);
         order.verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
@@ -365,6 +376,7 @@ class AuctionListServiceTest {
 
         verify(downPriceSnapshotCache, never()).findLatestAtNotAfter(any());
         verify(downPriceSnapshotCache, never()).findLatest();
+        verify(auctionListDbQuery).findPage(any(), eq(16));
         verify(auctionListQueryRepository).count(condition);
     }
 
@@ -490,11 +502,18 @@ class AuctionListServiceTest {
 
         assertThat(lookupTotal(meterRegistry)).isZero();
         verify(redisTemplate, never()).opsForZSet();
-        InOrder order = inOrder(auctionRepository, auctionListQueryRepository);
+        InOrder order = inOrder(
+                auctionListDbQuery,
+                auctionRepository,
+                auctionListQueryRepository
+        );
+        order.verify(auctionListDbQuery).findPage(any(), eq(16));
         order.verify(auctionRepository).currentDatabaseTime();
         order.verify(auctionListQueryRepository).count(allCondition);
+        order.verify(auctionListDbQuery).findPage(any(), eq(16));
         order.verify(auctionRepository).currentDatabaseTime();
         order.verify(auctionListQueryRepository).count(upCondition);
+        order.verify(auctionListDbQuery).findPage(any(), eq(16));
         order.verify(auctionRepository).currentDatabaseTime();
         order.verify(auctionListQueryRepository).count(keywordCondition);
     }
@@ -641,9 +660,7 @@ class AuctionListServiceTest {
                 meterRegistry
         );
         return new AuctionListService(
-                auctionRepository,
-                auctionListQueryRepository,
-                auctionPricePageQuery,
+                auctionListDbQuery,
                 cache,
                 imageUrlResolver
         );
