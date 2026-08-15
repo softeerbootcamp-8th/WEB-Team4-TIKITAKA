@@ -55,7 +55,7 @@ class AuctionClosingServiceTest {
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
 
         // when
-        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+        boolean closed = auctionClosingService.closeOneCandidate();
 
         // then
         assertThat(closed).isTrue();
@@ -71,7 +71,7 @@ class AuctionClosingServiceTest {
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
 
         // when
-        auctionClosingService.closeIfAvailable(AUCTION_ID);
+        auctionClosingService.closeOneCandidate();
 
         // then
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
@@ -85,7 +85,7 @@ class AuctionClosingServiceTest {
         when(upAuction.getRevision()).thenReturn(8L);
 
         // when
-        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+        boolean closed = auctionClosingService.closeOneCandidate();
 
         // then
         assertThat(closed).isTrue();
@@ -97,11 +97,11 @@ class AuctionClosingServiceTest {
     @Test
     void 다른_작업이_경매를_선점했다면_상태를_바꾸지_않는다() {
         // given
-        when(auctionRepository.findClosingCandidateIdForUpdateSkipLocked(AUCTION_ID))
+        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked())
                 .thenReturn(Optional.empty());
 
         // when
-        boolean closed = auctionClosingService.closeIfAvailable(AUCTION_ID);
+        boolean closed = auctionClosingService.closeOneCandidate();
 
         // then
         assertThat(closed).isFalse();
@@ -114,7 +114,7 @@ class AuctionClosingServiceTest {
     }
 
     private void stubLockedAuction(Auction lockedAuction, AuctionStatus status) {
-        when(auctionRepository.findClosingCandidateIdForUpdateSkipLocked(AUCTION_ID))
+        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked())
                 .thenReturn(Optional.of(AUCTION_ID));
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(lockedAuction));
         when(lockedAuction.getStatus()).thenReturn(status);

@@ -20,29 +20,17 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // 매초 실행되는 조회가 이미 종료된 경매 전체를 훑지 않도록 상태와 DB 시각으로 후보만 찾는다.
+    // 여러 서버가 같은 후보를 기다리지 않도록 잠긴 행을 건너뛰며 한 건만 선점한다.
     @Query(value = """
             SELECT id
             FROM auction
             WHERE status IN ('OPEN', 'BID_ONGOING')
-              AND ended_at <= SYSDATE(6)
+              AND ended_at <= NOW(6)
             ORDER BY ended_at, id
-            """, nativeQuery = true)
-    List<Long> findClosingCandidateIds();
-
-    // 후보 조회 뒤 상태가 바뀔 수 있으므로 현재 조건을 다시 검사하며 한 행만 선점한다.
-    // 다른 트랜잭션이 입찰·즉시구매·마감을 진행 중이면 기다리지 않고 다음 주기에 재시도한다.
-    @Query(value = """
-            SELECT id
-            FROM auction
-            WHERE id = :auctionId
-              AND status IN ('OPEN', 'BID_ONGOING')
-              AND ended_at <= SYSDATE(6)
+            LIMIT 1
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    Optional<Long> findClosingCandidateIdForUpdateSkipLocked(
-            @Param("auctionId") long auctionId
-    );
+    Optional<Long> findOneClosingCandidateIdForUpdateSkipLocked();
 
     // 입찰가 캐시(Redis)가 실패한 선점을 되돌릴 때, 커밋된 DB 현재가로 재동기화하기 위해 쓴다.
     // current_price가 없는 기존 경매는 조건부 UPDATE와 동일한 기준(Bid 최고가, 없으면 시작가)으로 보정한다.

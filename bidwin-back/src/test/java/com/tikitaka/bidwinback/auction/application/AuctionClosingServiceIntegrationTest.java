@@ -73,7 +73,7 @@ class AuctionClosingServiceIntegrationTest {
 
             // when
             long startedAt = System.nanoTime();
-            boolean skipped = auctionClosingService.closeIfAvailable(auctionId);
+            boolean skipped = auctionClosingService.closeOneCandidate();
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(
                     System.nanoTime() - startedAt
             );
@@ -88,7 +88,7 @@ class AuctionClosingServiceIntegrationTest {
             // when
             release.countDown();
             lockHolder.get(5, TimeUnit.SECONDS);
-            boolean closed = auctionClosingService.closeIfAvailable(auctionId);
+            boolean closed = auctionClosingService.closeOneCandidate();
 
             // then
             assertThat(closed).isTrue();

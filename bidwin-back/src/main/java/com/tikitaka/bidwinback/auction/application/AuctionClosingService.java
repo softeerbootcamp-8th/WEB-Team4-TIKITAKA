@@ -10,6 +10,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class AuctionClosingService {
@@ -19,12 +21,14 @@ public class AuctionClosingService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public boolean closeIfAvailable(long auctionId) {
-        if (auctionRepository.findClosingCandidateIdForUpdateSkipLocked(auctionId)
-                .isEmpty()) {
+    public boolean closeOneCandidate() {
+        Optional<Long> candidateId =
+                auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked();
+        if (candidateId.isEmpty()) {
             return false;
         }
 
+        long auctionId = candidateId.get();
         Auction auction = auctionRepository.findById(auctionId)
                 .orElseThrow(() -> new IllegalStateException(
                         "선점한 마감 대상 경매를 찾을 수 없습니다."
