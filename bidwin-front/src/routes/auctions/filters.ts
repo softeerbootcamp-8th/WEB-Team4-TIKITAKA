@@ -56,8 +56,8 @@ export const DEFAULT_FILTER_SELECTION: FilterSelection = {
 
 const DISABLED_FILTERS: {
   status?: AuctionListStatusFilter
-  categories: AuctionCategory[]
-} = { categories: [] }
+  category?: AuctionCategory
+} = {}
 
 export function createFilterGroups(
   categories: readonly AuctionCategoryOption[] | null,
@@ -82,8 +82,8 @@ export function createFilterGroups(
     {
       id: FILTER_GROUP_ID.category,
       label: '카테고리',
-      guide: '여러 개 선택할 수 있어요',
-      multiple: true,
+      guide: '하나를 선택하세요',
+      multiple: false,
       sections: [
         {
           id: FILTER_GROUP_ID.category,
@@ -103,14 +103,16 @@ export function toAuctionListFilters(
   isEnabled: boolean,
 ): {
   status?: AuctionListStatusFilter
-  categories: AuctionCategory[]
+  category?: AuctionCategory
 } {
   if (!isEnabled) return DISABLED_FILTERS
   return {
     status: getSelectedIds(selection, FILTER_GROUP_ID.status)[0] as
       | AuctionListStatusFilter
       | undefined,
-    categories: getSelectedIds(selection, FILTER_GROUP_ID.category) as AuctionCategory[],
+    category: getSelectedIds(selection, FILTER_GROUP_ID.category)[0] as
+      | AuctionCategory
+      | undefined,
   }
 }
 

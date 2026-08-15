@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
@@ -41,11 +42,12 @@ public class AuctionListService {
                 : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
 
-        // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
                 query.auctionType(),
                 query.sort(),
                 query.keyword(),
+                query.status() != null ? query.status() : AuctionListStatusFilter.ACTIVE,
+                query.category(),
                 asOf
         );
         long totalCount = auctionListQueryRepository.count(condition);

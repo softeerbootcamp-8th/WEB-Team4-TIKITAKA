@@ -15,6 +15,8 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.QImage;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
@@ -36,7 +38,6 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.tikitaka.bidwinback.auction.domain.entity.QAuction.auction;
 import static com.tikitaka.bidwinback.auction.domain.entity.QBid.bid;
@@ -95,7 +96,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         Long count = queryFactory
                 .select(auction.count())
                 .from(auction)
-                .where(searchPredicateForSort(condition))
+                .where(searchPredicate(condition))
                 .setHint(
                         HibernateHints.HINT_QUERY_DATABASE,
                         "idx_auction_count"
@@ -242,14 +243,14 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionPriceCursor cursor,
             int limit
     ) {
-        return mergeAcrossCompletionStates(
+        return mergeAcrossStatusBranches(
                 condition,
                 limit,
-                (completedAtPredicate, branchLimit) -> findDownStartPriceCandidatesInBranch(
+                (statusPredicate, branchLimit) -> findDownStartPriceCandidatesInBranch(
                         condition,
                         cursor,
                         branchLimit,
-                        completedAtPredicate
+                        statusPredicate
                 ),
                 DOWN_START_PRICE_ORDER
         );
@@ -259,10 +260,10 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             AuctionPriceCursor cursor,
             long branchLimit,
-            Predicate completedAtPredicate
+            Predicate statusPredicate
     ) {
         return candidateQueryFromAuction(
-                searchPredicate(condition, completedAtPredicate)
+                searchPredicate(condition, statusPredicate)
         )
                 .where(
                         startPriceCursorAfter(cursor)
@@ -428,13 +429,13 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         }
 
         // 정렬 인덱스에서 페이지 후보만 먼저 고르고, 집계 쿼리는 선택된 ID에만 수행한다.
-        List<Long> auctionIds = mergeAcrossCompletionStates(
+        List<Long> auctionIds = mergeAcrossStatusBranches(
                 condition,
                 offset,
                 limit,
-                (completedAtPredicate, branchLimit) -> findColumnSortCandidatesInBranch(
+                (statusPredicate, branchLimit) -> findColumnSortCandidatesInBranch(
                         condition,
-                        completedAtPredicate,
+                        statusPredicate,
                         branchLimit,
                         sortSpec
                 ),
@@ -466,7 +467,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     private List<AuctionColumnSortCandidate> findColumnSortCandidatesInBranch(
             AuctionListSearchCondition condition,
-            Predicate completedAtPredicate,
+            Predicate statusPredicate,
             long branchLimit,
             ColumnSortSpec sortSpec
     ) {
@@ -476,7 +477,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         sortSpec.sortExpression()
                 ))
                 .from(auction)
-                .where(searchPredicate(condition, completedAtPredicate))
+                .where(searchPredicate(condition, statusPredicate))
                 .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
                 .limit(branchLimit)
                 // completed_at 분기별로 정렬에 맞는 복합 인덱스를 사용한다.
@@ -487,35 +488,27 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .fetch();
     }
 
-    private <T> List<T> mergeAcrossCompletionStates(
+    private <T> List<T> mergeAcrossStatusBranches(
             AuctionListSearchCondition condition,
             int limit,
             BiFunction<Predicate, Long, List<T>> branchQuery,
             Comparator<T> comparator
     ) {
-        return mergeAcrossCompletionStates(condition, 0, limit, branchQuery, comparator);
+        return mergeAcrossStatusBranches(condition, 0, limit, branchQuery, comparator);
     }
 
-    private <T> List<T> mergeAcrossCompletionStates(
+    private <T> List<T> mergeAcrossStatusBranches(
             AuctionListSearchCondition condition,
             long offset,
             int limit,
             BiFunction<Predicate, Long, List<T>> branchQuery,
             Comparator<T> comparator
     ) {
-        // 활성 조건의 OR을 인덱스로 처리하기 위해 completed_at IS NULL / > asOf로 나눈다.
-        // QueryDSL JPA가 UNION ALL을 지원하지 않으므로 각 분기에서 offset + limit만큼 읽고 병합한다.
+        // 상태 조건의 OR을 인덱스로 처리할 수 있도록 서로 겹치지 않는 분기로 나눈다.
+        // QueryDSL JPA가 UNION ALL을 지원하지 않으므로 각 분기의 후보만 읽고 병합한다.
         long branchLimit = Math.addExact(offset, limit);
-        List<T> notYetCompleted = branchQuery.apply(
-                auction.completedAt.isNull(),
-                branchLimit
-        );
-        List<T> completedAfterAsOf = branchQuery.apply(
-                auction.completedAt.gt(condition.asOf()),
-                branchLimit
-        );
-
-        return Stream.concat(notYetCompleted.stream(), completedAfterAsOf.stream())
+        return statusBranchPredicates(condition).stream()
+                .flatMap(predicate -> branchQuery.apply(predicate, branchLimit).stream())
                 .sorted(comparator)
                 .skip(offset)
                 .limit(limit)
@@ -581,7 +574,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         List<Long> auctionIds = queryFactory
                 .select(auction.id)
                 .from(auction)
-                .where(currentSearchPredicate(condition))
+                .where(searchPredicate(condition))
                 .orderBy(auction.bidCount.desc(), auction.id.desc())
                 .offset(offset)
                 .limit(limit)
@@ -653,42 +646,99 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     }
 
     private Predicate searchPredicate(AuctionListSearchCondition condition) {
-        return searchPredicate(
-                condition,
-                auction.completedAt.isNull()
-                        .or(auction.completedAt.gt(condition.asOf()))
-        );
-    }
-
-    private Predicate searchPredicateForSort(AuctionListSearchCondition condition) {
-        return condition.sort() == AuctionSort.RECOMMENDED
-                ? currentSearchPredicate(condition)
-                : searchPredicate(condition);
-    }
-
-    private Predicate currentSearchPredicate(AuctionListSearchCondition condition) {
-        return searchPredicate(condition, auction.completedAt.isNull());
+        return searchPredicate(condition, statusPredicate(condition));
     }
 
     private Predicate searchPredicate(
             AuctionListSearchCondition condition,
-            Predicate completedAtPredicate
+            Predicate statusPredicate
     ) {
         return new BooleanBuilder()
                 .and(auction.startedAt.loe(condition.asOf()))
-                .and(completedAtPredicate)
-                .and(auction.endedAt.gt(condition.asOf()))
+                .and(statusPredicate)
                 .and(auctionTypeEq(condition.auctionType()))
+                .and(categoryEq(condition.category()))
                 .and(titleContains(auction.title, condition.keyword()));
     }
 
     private Predicate downAuctionSearchPredicate(AuctionListSearchCondition condition) {
         return new BooleanBuilder()
                 .and(downAuction.startedAt.loe(condition.asOf()))
-                .and(downAuction.completedAt.isNull()
-                        .or(downAuction.completedAt.gt(condition.asOf())))
-                .and(downAuction.endedAt.gt(condition.asOf()))
+                .and(downAuctionStatusPredicate(condition))
+                .and(condition.category() != null
+                        ? downAuction.category.eq(condition.category())
+                        : null)
                 .and(titleContains(downAuction.title, condition.keyword()));
+    }
+
+    private Predicate statusPredicate(AuctionListSearchCondition condition) {
+        AuctionListStatusFilter status = condition.status() != null
+                ? condition.status()
+                : AuctionListStatusFilter.ACTIVE;
+        if (condition.sort() == AuctionSort.RECOMMENDED) {
+            return status == AuctionListStatusFilter.ENDED
+                    ? auction.completedAt.isNotNull()
+                            .or(auction.endedAt.loe(condition.asOf()))
+                    : auction.completedAt.isNull()
+                            .and(auction.endedAt.gt(condition.asOf()));
+        }
+        return status == AuctionListStatusFilter.ENDED
+                ? auction.completedAt.loe(condition.asOf())
+                        .or(auction.endedAt.loe(condition.asOf()))
+                : auction.completedAt.isNull()
+                        .or(auction.completedAt.gt(condition.asOf()))
+                        .and(auction.endedAt.gt(condition.asOf()));
+    }
+
+    private Predicate downAuctionStatusPredicate(AuctionListSearchCondition condition) {
+        AuctionListStatusFilter status = condition.status() != null
+                ? condition.status()
+                : AuctionListStatusFilter.ACTIVE;
+        if (condition.sort() == AuctionSort.RECOMMENDED) {
+            return status == AuctionListStatusFilter.ENDED
+                    ? downAuction.completedAt.isNotNull()
+                            .or(downAuction.endedAt.loe(condition.asOf()))
+                    : downAuction.completedAt.isNull()
+                            .and(downAuction.endedAt.gt(condition.asOf()));
+        }
+        return status == AuctionListStatusFilter.ENDED
+                ? downAuction.completedAt.loe(condition.asOf())
+                        .or(downAuction.endedAt.loe(condition.asOf()))
+                : downAuction.completedAt.isNull()
+                        .or(downAuction.completedAt.gt(condition.asOf()))
+                        .and(downAuction.endedAt.gt(condition.asOf()));
+    }
+
+    private List<Predicate> statusBranchPredicates(AuctionListSearchCondition condition) {
+        AuctionListStatusFilter status = condition.status() != null
+                ? condition.status()
+                : AuctionListStatusFilter.ACTIVE;
+        if (condition.sort() == AuctionSort.RECOMMENDED) {
+            return status == AuctionListStatusFilter.ENDED
+                    ? List.of(
+                            auction.completedAt.isNotNull(),
+                            auction.completedAt.isNull()
+                                    .and(auction.endedAt.loe(condition.asOf()))
+                    )
+                    : List.of(
+                            auction.completedAt.isNull()
+                                    .and(auction.endedAt.gt(condition.asOf()))
+                    );
+        }
+        return status == AuctionListStatusFilter.ENDED
+                ? List.of(
+                        auction.completedAt.loe(condition.asOf()),
+                        auction.completedAt.isNull()
+                                .and(auction.endedAt.loe(condition.asOf())),
+                        auction.completedAt.gt(condition.asOf())
+                                .and(auction.endedAt.loe(condition.asOf()))
+                )
+                : List.of(
+                        auction.completedAt.isNull()
+                                .and(auction.endedAt.gt(condition.asOf())),
+                        auction.completedAt.gt(condition.asOf())
+                                .and(auction.endedAt.gt(condition.asOf()))
+                );
     }
 
     private BooleanExpression titleContains(StringExpression title, String keyword) {
@@ -711,6 +761,10 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             case UP -> auction.instanceOf(UpAuction.class);
             case DOWN -> auction.instanceOf(DownAuction.class);
         };
+    }
+
+    private BooleanExpression categoryEq(AuctionCategory category) {
+        return category != null ? auction.category.eq(category) : null;
     }
 
     private ColumnSortSpec columnSortSpec(AuctionSort sort) {

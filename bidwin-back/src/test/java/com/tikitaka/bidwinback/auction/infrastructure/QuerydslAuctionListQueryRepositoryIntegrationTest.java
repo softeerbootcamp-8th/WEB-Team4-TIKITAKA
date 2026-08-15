@@ -8,6 +8,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -115,6 +116,68 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         );
 
         assertThat(auctionListQueryRepository.count(condition)).isEqualTo(2L);
+    }
+
+    @Test
+    void 상태와_단일_카테고리를_asOf_기준으로_건수와_목록에_적용한다() {
+        Member seller = persistMember("filter-seller");
+        UpAuction activeHousehold = persistUp(
+                seller,
+                "활성 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction activeFood = persistUp(seller, "활성 식품 경매", AuctionCategory.FOOD);
+        UpAuction completedBefore = persistUp(
+                seller,
+                "조기 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction endedBefore = persistUp(
+                seller,
+                "마감 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction completedAfter = persistUp(
+                seller,
+                "스냅샷 이후 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+
+        setAuctionTimeline(activeHousehold, AS_OF.minusHours(5), AS_OF.minusDays(1));
+        setAuctionTimeline(activeFood, AS_OF.minusHours(4), AS_OF.minusDays(1));
+        setAuctionTimeline(completedBefore, AS_OF.minusHours(3), AS_OF.minusDays(1));
+        setAuctionTimeline(endedBefore, AS_OF.minusHours(2), AS_OF.minusDays(1));
+        setAuctionTimeline(completedAfter, AS_OF.minusHours(1), AS_OF.minusDays(1));
+        setCompletedAt(completedBefore, AS_OF.minusMinutes(1));
+        setEndedAt(endedBefore, AS_OF.minusMinutes(1));
+        setCompletedAt(completedAfter, AS_OF.plusMinutes(1));
+        entityManager.clear();
+
+        AuctionListSearchCondition active = new AuctionListSearchCondition(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ACTIVE,
+                AuctionCategory.HOUSEHOLD,
+                AS_OF
+        );
+        AuctionListSearchCondition ended = new AuctionListSearchCondition(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ENDED,
+                AuctionCategory.HOUSEHOLD,
+                AS_OF
+        );
+
+        assertThat(auctionListQueryRepository.count(active)).isEqualTo(2L);
+        assertThat(findPage(active, 0, 10))
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(completedAfter.getId(), activeHousehold.getId());
+        assertThat(auctionListQueryRepository.count(ended)).isEqualTo(2L);
+        assertThat(findPage(ended, 0, 10))
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(endedBefore.getId(), completedBefore.getId());
     }
 
     @Test
