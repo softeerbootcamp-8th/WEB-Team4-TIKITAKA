@@ -299,6 +299,62 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void ALL_정렬은_UP_DOWN_후보를_병합한_뒤_offset을_적용한다() {
+        Member seller = persistMember("all-sort-seller");
+        Member bidder = persistMember("all-sort-bidder");
+        DownAuction oldestDown = persistDown(
+                seller,
+                "가장 오래된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        UpAuction oneBidUp = persistUp(
+                seller,
+                "입찰 한 건 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        DownAuction newerDown = persistDown(
+                seller,
+                "두 번째 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        UpAuction twoBidsUp = persistUp(
+                seller,
+                "입찰 두 건 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+
+        setAuctionTimeline(oldestDown, AS_OF.minusHours(4), AS_OF.minusDays(1));
+        setAuctionTimeline(newerDown, AS_OF.minusHours(2), AS_OF.minusDays(1));
+        setAuctionTimeline(oneBidUp, AS_OF.minusHours(1), AS_OF.minusDays(1));
+        setAuctionTimeline(twoBidsUp, AS_OF.minusMinutes(30), AS_OF.minusDays(1));
+        setEndedAt(twoBidsUp, AS_OF.plusHours(1));
+        setEndedAt(oneBidUp, AS_OF.plusHours(2));
+        setEndedAt(newerDown, AS_OF.plusHours(3));
+        setEndedAt(oldestDown, AS_OF.plusHours(4));
+        persistBid(oneBidUp, bidder, 120_000L);
+        persistBid(twoBidsUp, bidder, 120_000L);
+        persistBid(twoBidsUp, bidder, 130_000L);
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(
+                AuctionSort.RECOMMENDED,
+                AuctionSort.LATEST,
+                AuctionSort.DEADLINE
+        )) {
+            assertThat(findPage(condition(sort), 1, 2))
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::auctionId)
+                    .containsExactly(oneBidUp.getId(), newerDown.getId());
+        }
+    }
+
+    @Test
     void 모든_정렬은_동률이어도_auction_id로_순서를_고정한다() {
         Member seller = persistMember("sort-seller");
         UpAuction first = persistUp(seller, "동률 경매 A", AuctionCategory.HOUSEHOLD);

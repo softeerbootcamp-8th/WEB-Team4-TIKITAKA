@@ -71,6 +71,13 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private static final Comparator<AuctionColumnSortCandidate> DEADLINE_ORDER =
             Comparator.comparing(AuctionColumnSortCandidate::sortAt)
                     .thenComparingLong(AuctionColumnSortCandidate::auctionId);
+    private static final Comparator<AuctionRecommendedCandidate> RECOMMENDED_ORDER =
+            Comparator.comparingLong(AuctionRecommendedCandidate::bidCount)
+                    .reversed()
+                    .thenComparing(
+                            Comparator.comparingLong(AuctionRecommendedCandidate::auctionId)
+                                    .reversed()
+                    );
     private static final Comparator<DownAuctionPriceCandidateDetails> DOWN_START_PRICE_ORDER =
             Comparator.comparingLong(DownAuctionPriceCandidateDetails::startPrice)
                     .reversed()
@@ -419,17 +426,34 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             int limit
     ) {
         ColumnSortSpec sortSpec = columnSortSpec(condition.sort());
-        if (condition.auctionType() == null) {
-            return findPageByColumnSortAcrossTypes(
-                    condition,
-                    offset,
-                    limit,
-                    sortSpec
-            );
-        }
+        List<AuctionColumnSortCandidate> candidates = condition.auctionType() == null
+                ? mergeAcrossAuctionTypes(
+                        condition,
+                        offset,
+                        limit,
+                        (typedCondition, branchLimit) -> findColumnSortCandidates(
+                                typedCondition,
+                                0,
+                                branchLimit,
+                                sortSpec
+                        ),
+                        sortSpec.comparator()
+                )
+                : findColumnSortCandidates(condition, offset, limit, sortSpec);
+        List<Long> auctionIds = candidates.stream()
+                .map(AuctionColumnSortCandidate::auctionId)
+                .toList();
+        return findMetricsInPageOrder(auctionIds, condition.asOf());
+    }
 
+    private List<AuctionColumnSortCandidate> findColumnSortCandidates(
+            AuctionListSearchCondition condition,
+            long offset,
+            long limit,
+            ColumnSortSpec sortSpec
+    ) {
         // 정렬 인덱스에서 페이지 후보만 먼저 고르고, 집계 쿼리는 선택된 ID에만 수행한다.
-        List<Long> auctionIds = mergeAcrossStatusBranches(
+        return mergeAcrossStatusBranches(
                 condition,
                 offset,
                 limit,
@@ -440,29 +464,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         sortSpec
                 ),
                 sortSpec.comparator()
-        )
-                .stream()
-                .map(AuctionColumnSortCandidate::auctionId)
-                .toList();
-        return findMetricsInPageOrder(auctionIds, condition.asOf());
-    }
-
-    private List<AuctionListMetrics> findPageByColumnSortAcrossTypes(
-            AuctionListSearchCondition condition,
-            long offset,
-            int limit,
-            ColumnSortSpec sortSpec
-    ) {
-        // auction_type이 정해지지 않으면 유형별 인덱스 결과를 한 번에 정렬할 수 없어 OFFSET을 사용한다.
-        List<Long> auctionIds = queryFactory
-                .select(auction.id)
-                .from(auction)
-                .where(searchPredicate(condition))
-                .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
-                .offset(offset)
-                .limit(limit)
-                .fetch();
-        return findMetricsInPageOrder(auctionIds, condition.asOf());
+        );
     }
 
     private List<AuctionColumnSortCandidate> findColumnSortCandidatesInBranch(
@@ -490,7 +492,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     private <T> List<T> mergeAcrossStatusBranches(
             AuctionListSearchCondition condition,
-            int limit,
+            long limit,
             BiFunction<Predicate, Long, List<T>> branchQuery,
             Comparator<T> comparator
     ) {
@@ -500,7 +502,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private <T> List<T> mergeAcrossStatusBranches(
             AuctionListSearchCondition condition,
             long offset,
-            int limit,
+            long limit,
             BiFunction<Predicate, Long, List<T>> branchQuery,
             Comparator<T> comparator
     ) {
@@ -513,6 +515,37 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .skip(offset)
                 .limit(limit)
                 .toList();
+    }
+
+    private <T> List<T> mergeAcrossAuctionTypes(
+            AuctionListSearchCondition condition,
+            long offset,
+            long limit,
+            BiFunction<AuctionListSearchCondition, Long, List<T>> typeQuery,
+            Comparator<T> comparator
+    ) {
+        long branchLimit = Math.addExact(offset, limit);
+        return List.of(AuctionType.UP, AuctionType.DOWN).stream()
+                .map(auctionType -> conditionWithType(condition, auctionType))
+                .flatMap(typedCondition -> typeQuery.apply(typedCondition, branchLimit).stream())
+                .sorted(comparator)
+                .skip(offset)
+                .limit(limit)
+                .toList();
+    }
+
+    private AuctionListSearchCondition conditionWithType(
+            AuctionListSearchCondition condition,
+            AuctionType auctionType
+    ) {
+        return new AuctionListSearchCondition(
+                auctionType,
+                condition.sort(),
+                condition.keyword(),
+                condition.status(),
+                condition.category(),
+                condition.asOf()
+        );
     }
 
     private List<AuctionListMetrics> findMetricsInPageOrder(
@@ -571,14 +604,22 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long offset,
             int limit
     ) {
-        List<Long> auctionIds = queryFactory
-                .select(auction.id)
-                .from(auction)
-                .where(searchPredicate(condition))
-                .orderBy(auction.bidCount.desc(), auction.id.desc())
-                .offset(offset)
-                .limit(limit)
-                .fetch();
+        List<AuctionRecommendedCandidate> candidates = condition.auctionType() == null
+                ? mergeAcrossAuctionTypes(
+                        condition,
+                        offset,
+                        limit,
+                        (typedCondition, branchLimit) -> findRecommendedCandidates(
+                                typedCondition,
+                                0,
+                                branchLimit
+                        ),
+                        RECOMMENDED_ORDER
+                )
+                : findRecommendedCandidates(condition, offset, limit);
+        List<Long> auctionIds = candidates.stream()
+                .map(AuctionRecommendedCandidate::auctionId)
+                .toList();
         if (auctionIds.isEmpty()) {
             return List.of();
         }
@@ -586,6 +627,57 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         Map<Long, AuctionListMetrics> metricsByAuctionId =
                 findRecommendedMetricsByAuctionId(auctionIds, condition.asOf());
         return metricsInOrder(auctionIds, metricsByAuctionId);
+    }
+
+    private List<AuctionRecommendedCandidate> findRecommendedCandidates(
+            AuctionListSearchCondition condition,
+            long offset,
+            long limit
+    ) {
+        List<Predicate> statusPredicates = statusBranchPredicates(condition);
+        if (statusPredicates.size() == 1) {
+            return findRecommendedCandidatesInBranch(
+                    condition,
+                    statusPredicates.getFirst(),
+                    offset,
+                    limit
+            );
+        }
+        return mergeAcrossStatusBranches(
+                condition,
+                offset,
+                limit,
+                (statusPredicate, branchLimit) -> findRecommendedCandidatesInBranch(
+                        condition,
+                        statusPredicate,
+                        0,
+                        branchLimit
+                ),
+                RECOMMENDED_ORDER
+        );
+    }
+
+    private List<AuctionRecommendedCandidate> findRecommendedCandidatesInBranch(
+            AuctionListSearchCondition condition,
+            Predicate statusPredicate,
+            long offset,
+            long limit
+    ) {
+        return queryFactory
+                .select(new QAuctionRecommendedCandidate(
+                        auction.id,
+                        auction.bidCount
+                ))
+                .from(auction)
+                .where(searchPredicate(condition, statusPredicate))
+                .orderBy(auction.bidCount.desc(), auction.id.desc())
+                .offset(offset)
+                .limit(limit)
+                .setHint(
+                        HibernateHints.HINT_QUERY_DATABASE,
+                        "idx_auction_recommended"
+                )
+                .fetch();
     }
 
     private Map<Long, AuctionListMetrics> findRecommendedMetricsByAuctionId(
