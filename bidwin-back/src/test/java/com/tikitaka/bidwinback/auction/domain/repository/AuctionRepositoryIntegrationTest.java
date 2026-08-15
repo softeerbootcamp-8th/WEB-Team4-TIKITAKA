@@ -126,6 +126,33 @@ class AuctionRepositoryIntegrationTest {
     }
 
     @Test
+    void 승인된_밀봉입찰은_공개입찰과_별도인_밀봉입찰수를_누적한다() {
+        // given
+        Member seller = persistMember("sealed-count-seller");
+        Member firstBidder = persistMember("sealed-count-first");
+        Member secondBidder = persistMember("sealed-count-second");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+
+        // when
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                firstBidder.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT
+        );
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                secondBidder.getId(),
+                START_PRICE + (BID_UNIT * 2),
+                BID_UNIT
+        );
+
+        // then
+        assertThat(sealedBidCountOf(auction.getId())).isEqualTo(2L);
+    }
+
+    @Test
     void 판매_물품은_최신_3건까지만_조회한다() {
         // given
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -174,6 +201,18 @@ class AuctionRepositoryIntegrationTest {
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
         return revision.longValue();
+    }
+
+    private long sealedBidCountOf(Long auctionId) {
+        entityManager.clear();
+        Number bidCount = (Number) entityManager.createNativeQuery("""
+                        SELECT sealed_bid_count
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return bidCount.longValue();
     }
 
     private UpAuction persistAuction(Member seller) {

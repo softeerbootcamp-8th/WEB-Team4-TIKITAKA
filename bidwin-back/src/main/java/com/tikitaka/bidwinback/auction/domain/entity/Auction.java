@@ -81,6 +81,10 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "bid_count", nullable = false)
     private long bidCount;
 
+    // 공개 전 밀봉 입찰 수가 추천순 bid_count에 섞여 노출되지 않도록 별도로 누적한다.
+    @Column(name = "sealed_bid_count", nullable = false)
+    private long sealedBidCount;
+
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
 

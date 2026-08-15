@@ -99,7 +99,8 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
             UPDATE auction
-            SET revision = revision + CASE WHEN status = 'OPEN' THEN 1 ELSE 0 END,
+            SET sealed_bid_count = sealed_bid_count + 1,
+                revision = revision + CASE WHEN status = 'OPEN' THEN 1 ELSE 0 END,
                 status = 'BID_ONGOING',
                 last_modified_at = SYSDATE(6)
             WHERE id = :auctionId
