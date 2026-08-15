@@ -75,12 +75,12 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
             """)
     List<AuctionBidSummary> summarizeSealedByAuctionIds(@Param("auctionIds") List<Long> auctionIds);
 
-    @Query("""
-            select sealedBid
-            from SealedBid sealedBid
-            where sealedBid.auction.id = :auctionId
-            order by sealedBid.price desc, sealedBid.submittedAt asc, sealedBid.id asc
-            limit 1
-            """)
+    @Query(value = """
+            SELECT sealed_bid.*
+            FROM sealed_bid FORCE INDEX (idx_sealed_bid_winner)
+            WHERE sealed_bid.auction_id = :auctionId
+            ORDER BY sealed_bid.price DESC, sealed_bid.submitted_at ASC, sealed_bid.id ASC
+            LIMIT 1
+            """, nativeQuery = true)
     Optional<SealedBid> findWinnerByAuctionId(@Param("auctionId") long auctionId);
 }
