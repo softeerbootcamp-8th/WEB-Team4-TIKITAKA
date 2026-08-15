@@ -21,6 +21,6 @@ public record UpAuctionPriceSnapshotDetails(
     }
 
     AuctionPriceSnapshot toSnapshot() {
-        return new AuctionPriceSnapshot(auctionId, currentPrice);
+        return new AuctionPriceSnapshot(auctionId, currentPrice, currentPrice);
     }
 }

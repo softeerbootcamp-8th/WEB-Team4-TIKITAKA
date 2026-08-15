@@ -14,6 +14,7 @@ public record DownAuctionPriceCandidateDetails(
         long dropPrice,
         long priceDropInterval,
         AuctionStatus status,
+        LocalDateTime completedAt,
         Long currentPrice
 ) {
 
@@ -26,6 +27,7 @@ public record DownAuctionPriceCandidateDetails(
             long dropPrice,
             long priceDropInterval,
             AuctionStatus status,
+            LocalDateTime completedAt,
             Long currentPrice
     ) {
         this.auctionId = auctionId;
@@ -35,6 +37,7 @@ public record DownAuctionPriceCandidateDetails(
         this.dropPrice = dropPrice;
         this.priceDropInterval = priceDropInterval;
         this.status = status;
+        this.completedAt = completedAt;
         this.currentPrice = currentPrice;
     }
 
@@ -47,6 +50,7 @@ public record DownAuctionPriceCandidateDetails(
                 dropPrice,
                 priceDropInterval,
                 status,
+                completedAt,
                 currentPrice
         );
     }

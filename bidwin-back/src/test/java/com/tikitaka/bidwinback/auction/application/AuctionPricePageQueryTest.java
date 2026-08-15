@@ -239,8 +239,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = upCondition(AuctionSort.PRICE_HIGH);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(2L, 800L),
-                        new AuctionPriceSnapshot(3L, 700L)
+                        new AuctionPriceSnapshot(2L, 800L, 800L),
+                        new AuctionPriceSnapshot(3L, 700L, 700L)
                 ));
 
         // when
@@ -248,7 +248,7 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(800L, 700L);
     }
 
@@ -258,8 +258,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = upCondition(AuctionSort.PRICE_LOW);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(1L, 100L),
-                        new AuctionPriceSnapshot(2L, 200L)
+                        new AuctionPriceSnapshot(1L, 100L, 100L),
+                        new AuctionPriceSnapshot(2L, 200L, 200L)
                 ));
 
         // when
@@ -267,7 +267,7 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(100L, 200L);
         verify(auctionListQueryRepository, never()).findDownPriceCandidates(
                 any(),
@@ -282,8 +282,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = condition(null, AuctionSort.PRICE_HIGH);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(1L, 500L),
-                        new AuctionPriceSnapshot(2L, 300L)
+                        new AuctionPriceSnapshot(1L, 500L, 500L),
+                        new AuctionPriceSnapshot(2L, 300L, 300L)
                 ));
         when(auctionListQueryRepository.findDownPriceCandidates(
                 eq(condition),
@@ -350,8 +350,56 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(80_000L);
+    }
+
+    @Test
+    void 하향_스냅샷_이후_완료된_경매는_정렬가는_asOf_계산가를_표시가는_낙찰가를_사용한다() {
+        // given
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
+        DownAuctionPriceCandidate completedAfterAsOf = new DownAuctionPriceCandidate(
+                1L,
+                100_000L,
+                40_000L,
+                AS_OF.minusMinutes(10),
+                10_000L,
+                5L,
+                AuctionStatus.COMPLETED,
+                AS_OF.plusMinutes(1),
+                60_000L
+        );
+        DownAuctionPriceCandidate ongoing = new DownAuctionPriceCandidate(
+                2L,
+                100_000L,
+                40_000L,
+                AS_OF.minusMinutes(15),
+                10_000L,
+                5L,
+                AuctionStatus.OPEN,
+                null,
+                null
+        );
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(List.of(completedAfterAsOf, ongoing));
+
+        // when
+        auctionPricePageQuery.findPage(condition, 1, 2, 2);
+
+        // then
+        List<AuctionPriceSnapshot> snapshots = capturedSnapshots();
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(2L, 1L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::sortPrice)
+                .containsExactly(70_000L, 80_000L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::displayPrice)
+                .containsExactly(70_000L, 60_000L);
     }
 
     private List<AuctionPriceSnapshot> capturedSnapshots() {
@@ -400,6 +448,7 @@ class AuctionPricePageQueryTest {
                 dropPrice,
                 priceDropInterval,
                 AuctionStatus.OPEN,
+                null,
                 null
         );
     }

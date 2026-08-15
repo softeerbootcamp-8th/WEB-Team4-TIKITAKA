@@ -14,18 +14,27 @@ public record DownAuctionPriceCandidate(
         long dropPrice,
         long priceDropInterval,
         AuctionStatus status,
+        LocalDateTime completedAt,
         Long storedCurrentPrice
 ) {
 
-    public long currentPriceAt(LocalDateTime asOf) {
-        if (status == AuctionStatus.COMPLETED) {
-            if (storedCurrentPrice == null) {
-                throw new IllegalStateException(
-                        "완료된 하향 경매의 저장 현재가가 없습니다. auctionId=" + auctionId
-                );
-            }
-            return storedCurrentPrice;
+    public long sortPriceAt(LocalDateTime asOf) {
+        if (status == AuctionStatus.COMPLETED
+                && completedAt != null
+                && !completedAt.isAfter(asOf)) {
+            return requiredStoredCurrentPrice();
         }
+        return calculatedPriceAt(asOf);
+    }
+
+    public long displayPriceAt(LocalDateTime asOf) {
+        if (status == AuctionStatus.COMPLETED) {
+            return requiredStoredCurrentPrice();
+        }
+        return calculatedPriceAt(asOf);
+    }
+
+    private long calculatedPriceAt(LocalDateTime asOf) {
         return calculate(
                 startPrice,
                 minimumPrice,
@@ -34,5 +43,14 @@ public record DownAuctionPriceCandidate(
                 startedAt,
                 asOf
         );
+    }
+
+    private long requiredStoredCurrentPrice() {
+        if (storedCurrentPrice == null) {
+            throw new IllegalStateException(
+                    "완료된 하향 경매의 저장 현재가가 없습니다. auctionId=" + auctionId
+            );
+        }
+        return storedCurrentPrice;
     }
 }

@@ -765,6 +765,72 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void 가격순_스냅샷_이후_완료된_DOWN은_정렬은_asOf_가격_표시는_낙찰가를_사용한다() {
+        Member seller = persistMember("price-snapshot-completed-after-seller");
+        DownAuction completedAfterAsOf = persistDown(
+                seller,
+                "스냅샷 이후 완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        DownAuction ongoing = persistDown(
+                seller,
+                "진행 중 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(completedAfterAsOf, AS_OF.minusMinutes(10), AS_OF.minusMinutes(10));
+        setAuctionTimeline(ongoing, AS_OF.minusMinutes(15), AS_OF.minusMinutes(15));
+        setCompletedAt(completedAfterAsOf, AS_OF.plusMinutes(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 60_000L)
+                .setParameter("auctionId", completedAfterAsOf.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(AuctionSort.PRICE_LOW, AuctionSort.PRICE_HIGH)) {
+            List<AuctionListRow> rows = findPage(
+                    new AuctionListSearchCondition(
+                            AuctionType.DOWN,
+                            sort,
+                            null,
+                            AS_OF
+                    ),
+                    0,
+                    2
+            );
+
+            List<Long> expectedIds = sort == AuctionSort.PRICE_LOW
+                    ? List.of(ongoing.getId(), completedAfterAsOf.getId())
+                    : List.of(completedAfterAsOf.getId(), ongoing.getId());
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::auctionId)
+                    .containsExactlyElementsOf(expectedIds);
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::currentPrice)
+                    .containsExactly(
+                            sort == AuctionSort.PRICE_LOW
+                                    ? 70_000L
+                                    : 60_000L,
+                            sort == AuctionSort.PRICE_LOW
+                                    ? 60_000L
+                                    : 70_000L
+                    );
+        }
+    }
+
+    @Test
     void 최소_image_id의_object_key와_목록_projection을_조회한다() {
         Member seller = persistMember("image-seller");
         UpAuction auction = persistUp(seller, "대표 이미지 경매", AuctionCategory.HOUSEHOLD);

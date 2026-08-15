@@ -12,7 +12,7 @@ public record AuctionSummaryResponse(
         AuctionCategory category,
         // 업로드된 이미지가 없으면 null. 프론트가 자리표시자를 그린다.
         String thumbnailUrl,
-        // 상향: 최고 입찰가(없으면 시작가). 하향: asOf 시점까지 내려간 가격.
+        // 진행 중 경매의 목록 가격. COMPLETED는 asOf와 무관하게 저장된 확정 낙찰가.
         long currentPrice,
         long startPrice,
         long bidCount,

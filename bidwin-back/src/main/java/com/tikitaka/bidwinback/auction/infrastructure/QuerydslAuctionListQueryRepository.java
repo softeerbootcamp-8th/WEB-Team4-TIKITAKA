@@ -243,6 +243,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.dropPrice,
                         downAuction.priceDropInterval,
                         downAuction.status,
+                        downAuction.completedAt,
                         downAuction.currentPrice
                 ))
                 .from(downAuction);
@@ -312,6 +313,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.dropPrice,
                         downAuction.priceDropInterval,
                         auction.status,
+                        auction.completedAt,
                         auction.currentPrice
                 ))
                 .from(auction)
@@ -350,7 +352,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                     AuctionBidSummary bidSummary = bidSummaries.get(snapshot.auctionId());
                     return new AuctionListMetrics(
                             snapshot.auctionId(),
-                            snapshot.currentPrice(),
+                            snapshot.displayPrice(),
                             bidSummary != null ? bidSummary.bidCount() : 0L
                     );
                 })
