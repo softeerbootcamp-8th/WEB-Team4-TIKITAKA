@@ -19,7 +19,6 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     @Query("""
             select bid
             from Bid bid
-            join fetch bid.bidder
             where bid.auction.id = :auctionId
               and bid.status = :status
             order by bid.price desc, bid.createdAt asc, bid.id asc

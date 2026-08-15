@@ -78,7 +78,6 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
     @Query("""
             select sealedBid
             from SealedBid sealedBid
-            join fetch sealedBid.bidder
             where sealedBid.auction.id = :auctionId
             order by sealedBid.price desc, sealedBid.submittedAt asc, sealedBid.id asc
             limit 1
