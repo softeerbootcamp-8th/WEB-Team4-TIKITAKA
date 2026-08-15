@@ -363,6 +363,7 @@ class AuctionPricePageQueryTest {
                 100_000L,
                 40_000L,
                 AS_OF.minusMinutes(10),
+                AS_OF.plusHours(1),
                 10_000L,
                 5L,
                 AuctionStatus.COMPLETED,
@@ -374,6 +375,7 @@ class AuctionPricePageQueryTest {
                 100_000L,
                 40_000L,
                 AS_OF.minusMinutes(15),
+                AS_OF.plusHours(1),
                 10_000L,
                 5L,
                 AuctionStatus.OPEN,
@@ -400,6 +402,41 @@ class AuctionPricePageQueryTest {
         assertThat(snapshots)
                 .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(70_000L, 60_000L);
+    }
+
+    @Test
+    void 하향_미완료_경매는_asOf가_endedAt을_지나도_endedAt_가격을_사용한다() {
+        // given
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
+        DownAuctionPriceCandidate ended = new DownAuctionPriceCandidate(
+                1L,
+                100_000L,
+                20_000L,
+                AS_OF.minusMinutes(5),
+                AS_OF.minusMinutes(1),
+                10_000L,
+                5L,
+                AuctionStatus.OPEN,
+                null,
+                null
+        );
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(List.of(ended));
+
+        // when
+        auctionPricePageQuery.findPage(condition, 1, 1, 1);
+
+        // then
+        List<AuctionPriceSnapshot> snapshots = capturedSnapshots();
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::sortPrice)
+                .containsExactly(100_000L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::displayPrice)
+                .containsExactly(100_000L);
     }
 
     private List<AuctionPriceSnapshot> capturedSnapshots() {
@@ -445,6 +482,7 @@ class AuctionPricePageQueryTest {
                 startPrice,
                 minimumPrice,
                 AS_OF.minusMinutes(elapsedMinutes),
+                AS_OF.plusDays(1),
                 dropPrice,
                 priceDropInterval,
                 AuctionStatus.OPEN,

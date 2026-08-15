@@ -11,6 +11,7 @@ public record DownAuctionPriceCandidateDetails(
         long startPrice,
         long minimumPrice,
         LocalDateTime startedAt,
+        LocalDateTime endedAt,
         long dropPrice,
         long priceDropInterval,
         AuctionStatus status,
@@ -24,6 +25,7 @@ public record DownAuctionPriceCandidateDetails(
             long startPrice,
             long minimumPrice,
             LocalDateTime startedAt,
+            LocalDateTime endedAt,
             long dropPrice,
             long priceDropInterval,
             AuctionStatus status,
@@ -34,6 +36,7 @@ public record DownAuctionPriceCandidateDetails(
         this.startPrice = startPrice;
         this.minimumPrice = minimumPrice;
         this.startedAt = startedAt;
+        this.endedAt = endedAt;
         this.dropPrice = dropPrice;
         this.priceDropInterval = priceDropInterval;
         this.status = status;
@@ -47,6 +50,7 @@ public record DownAuctionPriceCandidateDetails(
                 startPrice,
                 minimumPrice,
                 startedAt,
+                endedAt,
                 dropPrice,
                 priceDropInterval,
                 status,

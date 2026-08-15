@@ -11,6 +11,7 @@ public record DownAuctionPriceCandidate(
         long startPrice,
         long minimumPrice,
         LocalDateTime startedAt,
+        LocalDateTime endedAt,
         long dropPrice,
         long priceDropInterval,
         AuctionStatus status,
@@ -35,13 +36,14 @@ public record DownAuctionPriceCandidate(
     }
 
     private long calculatedPriceAt(LocalDateTime asOf) {
+        LocalDateTime priceAt = endedAt.isBefore(asOf) ? endedAt : asOf;
         return calculate(
                 startPrice,
                 minimumPrice,
                 dropPrice,
                 priceDropInterval,
                 startedAt,
-                asOf
+                priceAt
         );
     }
 

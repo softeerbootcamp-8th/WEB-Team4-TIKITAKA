@@ -53,7 +53,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             LocalDateTime.class,
             "auctionListPriceAsOf"
     );
-    // {0}=minimumPrice, {1}=startPrice, {2}=startedAt, {3}=asOf, {4}=priceDropInterval, {5}=dropPrice
+    // {0}=minimumPrice, {1}=startPrice, {2}=startedAt, {3}=priceAt, {4}=priceDropInterval, {5}=dropPrice
     private static final String DOWN_CURRENT_PRICE_TEMPLATE = """
             greatest(
                 {0},
@@ -240,6 +240,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.startPrice,
                         downAuction.minimumPrice,
                         downAuction.startedAt,
+                        downAuction.endedAt,
                         downAuction.dropPrice,
                         downAuction.priceDropInterval,
                         downAuction.status,
@@ -310,6 +311,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         auction.startPrice,
                         downAuction.minimumPrice,
                         auction.startedAt,
+                        auction.endedAt,
                         downAuction.dropPrice,
                         downAuction.priceDropInterval,
                         auction.status,
@@ -691,17 +693,10 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             List<Long> auctionIds,
             LocalDateTime asOf
     ) {
-        NumberExpression<Long> downCurrentPrice = Expressions.numberTemplate(
-                Long.class,
-                DOWN_CURRENT_PRICE_TEMPLATE,
-                downAuction.minimumPrice,
-                auction.startPrice,
-                auction.startedAt,
-                PRICE_AS_OF,
-                downAuction.priceDropInterval,
-                downAuction.dropPrice
-        );
+        NumberExpression<Long> downCurrentPrice = downCurrentPriceExpression();
         NumberExpression<Long> currentPrice = Expressions.cases()
+                .when(auction.status.eq(AuctionStatus.COMPLETED))
+                .then(auction.currentPrice)
                 .when(auction.instanceOf(UpAuction.class))
                 .then(auction.currentPrice.coalesce(auction.startPrice))
                 .otherwise(downCurrentPrice);
@@ -722,6 +717,23 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         AuctionListMetrics::auctionId,
                         Function.identity()
                 ));
+    }
+
+    private NumberExpression<Long> downCurrentPriceExpression() {
+        Expression<LocalDateTime> priceAt = Expressions.cases()
+                .when(auction.endedAt.lt(PRICE_AS_OF))
+                .then(auction.endedAt)
+                .otherwise(PRICE_AS_OF);
+        return Expressions.numberTemplate(
+                Long.class,
+                DOWN_CURRENT_PRICE_TEMPLATE,
+                downAuction.minimumPrice,
+                auction.startPrice,
+                auction.startedAt,
+                priceAt,
+                downAuction.priceDropInterval,
+                downAuction.dropPrice
+        );
     }
 
     private JPAQuery<AuctionListMetrics> baseMetricQuery(
@@ -890,16 +902,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
     private AuctionListMetricExpressions metricExpressions() {
         NumberExpression<Long> bidCount = bid.id.count();
         NumberExpression<Long> upCurrentPrice = bid.price.max().coalesce(auction.startPrice);
-        NumberExpression<Long> downCurrentPrice = Expressions.numberTemplate(
-                Long.class,
-                DOWN_CURRENT_PRICE_TEMPLATE,
-                downAuction.minimumPrice,
-                auction.startPrice,
-                auction.startedAt,
-                PRICE_AS_OF,
-                downAuction.priceDropInterval,
-                downAuction.dropPrice
-        );
+        NumberExpression<Long> downCurrentPrice = downCurrentPriceExpression();
         NumberExpression<Long> currentPrice = Expressions.cases()
                 .when(auction.status.eq(AuctionStatus.COMPLETED))
                 .then(auction.currentPrice)
@@ -913,6 +916,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         auction.id,
                         auction.startPrice,
                         auction.startedAt,
+                        auction.endedAt,
                         downAuction.minimumPrice,
                         downAuction.dropPrice,
                         downAuction.priceDropInterval
