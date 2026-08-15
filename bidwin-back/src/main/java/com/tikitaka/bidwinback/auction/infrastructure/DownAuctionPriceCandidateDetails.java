@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
 import com.querydsl.core.annotations.QueryProjection;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 
 import java.time.LocalDateTime;
@@ -11,7 +12,9 @@ public record DownAuctionPriceCandidateDetails(
         long minimumPrice,
         LocalDateTime startedAt,
         long dropPrice,
-        long priceDropInterval
+        long priceDropInterval,
+        AuctionStatus status,
+        Long currentPrice
 ) {
 
     @QueryProjection
@@ -21,7 +24,9 @@ public record DownAuctionPriceCandidateDetails(
             long minimumPrice,
             LocalDateTime startedAt,
             long dropPrice,
-            long priceDropInterval
+            long priceDropInterval,
+            AuctionStatus status,
+            Long currentPrice
     ) {
         this.auctionId = auctionId;
         this.startPrice = startPrice;
@@ -29,6 +34,8 @@ public record DownAuctionPriceCandidateDetails(
         this.startedAt = startedAt;
         this.dropPrice = dropPrice;
         this.priceDropInterval = priceDropInterval;
+        this.status = status;
+        this.currentPrice = currentPrice;
     }
 
     DownAuctionPriceCandidate toCandidate() {
@@ -38,7 +45,9 @@ public record DownAuctionPriceCandidateDetails(
                 minimumPrice,
                 startedAt,
                 dropPrice,
-                priceDropInterval
+                priceDropInterval,
+                status,
+                currentPrice
         );
     }
 }

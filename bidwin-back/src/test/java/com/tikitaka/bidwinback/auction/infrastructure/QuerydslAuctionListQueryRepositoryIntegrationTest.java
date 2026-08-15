@@ -717,6 +717,54 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void 완료된_DOWN_경매는_시간이_지나도_저장된_낙찰가를_조회한다() {
+        Member seller = persistMember("completed-down-price-seller");
+        DownAuction auction = persistDown(
+                seller,
+                "완료된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(auction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice,
+                            completed_at = :completedAt
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 87_000L)
+                .setParameter("completedAt", AS_OF.minusMinutes(1))
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        AuctionListSearchCondition latest = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                AS_OF
+        );
+        AuctionListSearchCondition priceLow = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                AS_OF
+        );
+
+        assertThat(findPage(latest, 0, 10)).singleElement().satisfies(row ->
+                assertThat(row.currentPrice()).isEqualTo(87_000L));
+        assertThat(findPage(priceLow, 0, 10)).singleElement().satisfies(row ->
+                assertThat(row.currentPrice()).isEqualTo(87_000L));
+    }
+
+    @Test
     void 최소_image_id의_object_key와_목록_projection을_조회한다() {
         Member seller = persistMember("image-seller");
         UpAuction auction = persistUp(seller, "대표 이미지 경매", AuctionCategory.HOUSEHOLD);

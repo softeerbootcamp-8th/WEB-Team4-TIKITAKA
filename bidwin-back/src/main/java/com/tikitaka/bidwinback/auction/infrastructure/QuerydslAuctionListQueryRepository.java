@@ -18,6 +18,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.BidRepository;
@@ -240,7 +241,9 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.minimumPrice,
                         downAuction.startedAt,
                         downAuction.dropPrice,
-                        downAuction.priceDropInterval
+                        downAuction.priceDropInterval,
+                        downAuction.status,
+                        downAuction.currentPrice
                 ))
                 .from(downAuction);
     }
@@ -307,7 +310,9 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         downAuction.minimumPrice,
                         auction.startedAt,
                         downAuction.dropPrice,
-                        downAuction.priceDropInterval
+                        downAuction.priceDropInterval,
+                        auction.status,
+                        auction.currentPrice
                 ))
                 .from(auction)
                 .innerJoin(downAuction).on(downAuction.id.eq(auction.id))
@@ -894,6 +899,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 downAuction.dropPrice
         );
         NumberExpression<Long> currentPrice = Expressions.cases()
+                .when(auction.status.eq(AuctionStatus.COMPLETED))
+                .then(auction.currentPrice)
                 .when(auction.instanceOf(UpAuction.class))
                 .then(upCurrentPrice)
                 .otherwise(downCurrentPrice);

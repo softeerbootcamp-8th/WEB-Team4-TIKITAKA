@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
@@ -397,7 +398,9 @@ class AuctionPricePageQueryTest {
                 minimumPrice,
                 AS_OF.minusMinutes(elapsedMinutes),
                 dropPrice,
-                priceDropInterval
+                priceDropInterval,
+                AuctionStatus.OPEN,
+                null
         );
     }
 }
