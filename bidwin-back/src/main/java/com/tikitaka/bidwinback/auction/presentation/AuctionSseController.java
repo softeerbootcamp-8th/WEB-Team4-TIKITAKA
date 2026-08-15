@@ -113,7 +113,11 @@ public class AuctionSseController {
             messages.add(AuctionSseMessages.bidHistorySnapshot(
                     auctionId,
                     state.revision(),
-                    bidHistoryService.getBidHistory(auctionId)
+                    bidHistoryService.getBidHistory(
+                            auctionId,
+                            state.status(),
+                            state.bidCount()
+                    )
             ));
         }
         return messages;

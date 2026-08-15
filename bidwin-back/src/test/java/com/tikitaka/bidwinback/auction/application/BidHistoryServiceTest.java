@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -196,6 +197,25 @@ class BidHistoryServiceTest {
         assertThat(response.bidLog())
                 .extracting(bid -> bid.entryId())
                 .containsExactly("SEALED:7", "BID:7");
+    }
+
+    @Test
+    void SSE_초기_입찰내역은_검증된_상태와_입찰수를_재사용한다() {
+        // given
+        when(bidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of());
+        when(sealedBidRepository.findHistoryByAuctionId(1L)).thenReturn(List.of());
+
+        // when
+        BidHistoryResponse response = bidHistoryService.getBidHistory(
+                1L,
+                AuctionStatus.COMPLETED,
+                17L
+        );
+
+        // then
+        assertThat(response.bidCount()).isEqualTo(17L);
+        verifyNoInteractions(auctionRepository);
+        verify(sealedBidRepository).findHistoryByAuctionId(1L);
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {

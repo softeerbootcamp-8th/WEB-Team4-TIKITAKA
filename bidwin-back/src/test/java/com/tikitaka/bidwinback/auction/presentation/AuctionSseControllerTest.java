@@ -74,7 +74,8 @@ class AuctionSseControllerTest {
         AuctionLiveState state = state(1L);
         BidHistoryResponse history = new BidHistoryResponse(3L, List.of());
         when(stateService.getState(1L)).thenReturn(state);
-        when(bidHistoryService.getBidHistory(1L)).thenReturn(history);
+        when(bidHistoryService.getBidHistory(1L, state.status(), state.bidCount()))
+                .thenReturn(history);
         when(sseHub.subscribe(
                 eq(List.of(AuctionSseMessages.channel(1L))),
                 any()
@@ -95,7 +96,7 @@ class AuctionSseControllerTest {
         // then
         assertThat(response.getBody()).isSameAs(emitter);
         verify(stateService).getState(1L);
-        verify(bidHistoryService).getBidHistory(1L);
+        verify(bidHistoryService).getBidHistory(1L, state.status(), state.bidCount());
     }
 
     @Test
