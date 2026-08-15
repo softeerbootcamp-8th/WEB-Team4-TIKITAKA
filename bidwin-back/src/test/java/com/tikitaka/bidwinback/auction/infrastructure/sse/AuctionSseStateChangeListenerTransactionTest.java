@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
@@ -45,6 +46,8 @@ class AuctionSseStateChangeListenerTransactionTest {
     @Autowired
     private AuctionLiveStateCache stateCache;
     @Autowired
+    private AuctionBidHistoryCache bidHistoryCache;
+    @Autowired
     private SseHub sseHub;
 
     private final AuctionLiveState state = new AuctionLiveState(
@@ -58,7 +61,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
     @BeforeEach
     void setUp() {
-        reset(stateService, stateCache, sseHub);
+        reset(stateService, stateCache, bidHistoryCache, sseHub);
     }
 
     @Test
@@ -76,6 +79,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
         // then
         verify(stateCache).invalidate(1L);
+        verify(bidHistoryCache).invalidate(1L);
         verify(sseHub).publish(AuctionSseMessages.state(state));
     }
 
@@ -93,6 +97,7 @@ class AuctionSseStateChangeListenerTransactionTest {
         // then
         verifyNoInteractions(stateService, sseHub);
         verifyNoInteractions(stateCache);
+        verifyNoInteractions(bidHistoryCache);
     }
 
     @Test
@@ -121,6 +126,7 @@ class AuctionSseStateChangeListenerTransactionTest {
 
         // then
         verify(stateCache).invalidate(1L);
+        verify(bidHistoryCache).invalidate(1L);
         verifyNoInteractions(stateService);
         verify(sseHub, never()).publish(any());
     }
@@ -145,6 +151,11 @@ class AuctionSseStateChangeListenerTransactionTest {
         }
 
         @Bean
+        AuctionBidHistoryCache bidHistoryCache() {
+            return mock(AuctionBidHistoryCache.class);
+        }
+
+        @Bean
         SseHub sseHub() {
             return mock(SseHub.class);
         }
@@ -153,11 +164,13 @@ class AuctionSseStateChangeListenerTransactionTest {
         AuctionSseStateChangeListener auctionSseStateChangeListener(
                 AuctionLiveStateService stateService,
                 AuctionLiveStateCache stateCache,
+                AuctionBidHistoryCache bidHistoryCache,
                 SseHub sseHub
         ) {
             return new AuctionSseStateChangeListener(
                     stateService,
                     stateCache,
+                    bidHistoryCache,
                     sseHub
             );
         }

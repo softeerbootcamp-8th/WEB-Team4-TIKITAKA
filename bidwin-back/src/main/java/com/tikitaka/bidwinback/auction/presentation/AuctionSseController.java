@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -37,7 +37,7 @@ import java.util.List;
 public class AuctionSseController {
 
     private final AuctionLiveStateCache stateCache;
-    private final BidHistoryService bidHistoryService;
+    private final AuctionBidHistoryCache bidHistoryCache;
     private final SseHub sseHub;
 
     @GetMapping(
@@ -117,11 +117,7 @@ public class AuctionSseController {
             messages.add(AuctionSseMessages.bidHistorySnapshot(
                     auctionId,
                     state.revision(),
-                    bidHistoryService.getBidHistory(
-                            auctionId,
-                            state.status(),
-                            state.bidCount()
-                    )
+                    bidHistoryCache.getHistory(state)
             ));
         }
         return messages;

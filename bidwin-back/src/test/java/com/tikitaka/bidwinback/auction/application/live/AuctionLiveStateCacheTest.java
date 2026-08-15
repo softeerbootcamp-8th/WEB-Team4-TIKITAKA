@@ -165,17 +165,23 @@ class AuctionLiveStateCacheTest {
     @Test
     void snapshot은_500밀리초가_지나면_DB에서_다시_읽는다() {
         // given
+        AuctionLiveStateCache expiringCache = new AuctionLiveStateCache(
+                stateService,
+                new SimpleMeterRegistry(),
+                Runnable::run,
+                ticker
+        );
         AuctionLiveState oldState = state(1L, 1L);
         AuctionLiveState newState = state(1L, 2L);
         AtomicInteger loadCount = new AtomicInteger();
         when(stateService.getStates(anyCollection())).thenAnswer(ignored ->
                 loadCount.getAndIncrement() == 0 ? List.of(oldState) : List.of(newState)
         );
-        stateCache.getState(1L);
+        expiringCache.getState(1L);
 
         // when
         ticker.advance(Duration.ofMillis(501));
-        AuctionLiveState refreshed = stateCache.getState(1L);
+        AuctionLiveState refreshed = expiringCache.getState(1L);
 
         // then
         assertThat(refreshed).isEqualTo(newState);

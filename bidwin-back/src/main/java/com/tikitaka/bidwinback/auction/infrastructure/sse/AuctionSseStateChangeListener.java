@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
@@ -16,15 +17,18 @@ public class AuctionSseStateChangeListener {
 
     private final AuctionLiveStateService stateService;
     private final AuctionLiveStateCache stateCache;
+    private final AuctionBidHistoryCache bidHistoryCache;
     private final SseHub sseHub;
 
     public AuctionSseStateChangeListener(
             AuctionLiveStateService stateService,
             AuctionLiveStateCache stateCache,
+            AuctionBidHistoryCache bidHistoryCache,
             SseHub sseHub
     ) {
         this.stateService = stateService;
         this.stateCache = stateCache;
+        this.bidHistoryCache = bidHistoryCache;
         this.sseHub = sseHub;
     }
 
@@ -36,6 +40,7 @@ public class AuctionSseStateChangeListener {
         long auctionId = event.auctionId();
         // 구독자가 없더라도 다음 연결이 커밋 전 snapshot을 받지 않게 먼저 무효화한다.
         stateCache.invalidate(auctionId);
+        bidHistoryCache.invalidate(auctionId);
         if (!sseHub.hasSubscribers(AuctionSseMessages.channel(auctionId))) {
             return;
         }

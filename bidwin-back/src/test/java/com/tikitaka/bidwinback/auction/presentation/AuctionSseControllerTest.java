@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +36,7 @@ class AuctionSseControllerTest {
     @Mock
     private AuctionLiveStateCache stateCache;
     @Mock
-    private BidHistoryService bidHistoryService;
+    private AuctionBidHistoryCache bidHistoryCache;
     @Mock
     private SseHub sseHub;
     @Mock
@@ -45,7 +46,7 @@ class AuctionSseControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AuctionSseController(stateCache, bidHistoryService, sseHub);
+        controller = new AuctionSseController(stateCache, bidHistoryCache, sseHub);
     }
 
     @Test
@@ -74,8 +75,7 @@ class AuctionSseControllerTest {
         AuctionLiveState state = state(1L);
         BidHistoryResponse history = new BidHistoryResponse(3L, List.of());
         when(stateCache.getState(1L)).thenReturn(state);
-        when(bidHistoryService.getBidHistory(1L, state.status(), state.bidCount()))
-                .thenReturn(history);
+        when(bidHistoryCache.getHistory(state)).thenReturn(history);
         when(sseHub.subscribe(
                 eq(List.of(AuctionSseMessages.channel(1L))),
                 any()
@@ -96,7 +96,37 @@ class AuctionSseControllerTest {
         // then
         assertThat(response.getBody()).isSameAs(emitter);
         verify(stateCache).getState(1L);
-        verify(bidHistoryService).getBidHistory(1L, state.status(), state.bidCount());
+        verify(bidHistoryCache).getHistory(state);
+    }
+
+    @Test
+    void 하향경매_상세_SSE는_입찰내역_cache를_조회하지_않는다() {
+        // given
+        AuctionLiveState state = new AuctionLiveState(
+                1L,
+                1L,
+                AuctionType.DOWN,
+                AuctionStatus.OPEN,
+                120_000L,
+                0L
+        );
+        when(stateCache.getState(1L)).thenReturn(state);
+        when(sseHub.subscribe(
+                eq(List.of(AuctionSseMessages.channel(1L))),
+                any()
+        )).thenAnswer(invocation -> {
+            Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
+                    invocation.getArgument(1);
+            assertThat(initialMessages.get())
+                    .isEqualTo(List.of(AuctionSseMessages.state(state)));
+            return emitter;
+        });
+
+        // when
+        controller.subscribeAuction(1L);
+
+        // then
+        verify(bidHistoryCache, never()).getHistory(any());
     }
 
     @Test
