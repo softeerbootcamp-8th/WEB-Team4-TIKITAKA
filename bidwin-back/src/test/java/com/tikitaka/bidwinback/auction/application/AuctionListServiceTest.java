@@ -6,8 +6,10 @@ import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.DownPriceSnapshotQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
@@ -17,9 +19,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,6 +39,8 @@ class AuctionListServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime AS_OF = LocalDateTime.of(2026, 8, 1, 12, 0);
+    private static final LocalDateTime SNAPSHOT_AT =
+            LocalDateTime.of(2026, 8, 1, 11, 59, 30, 123_000_000);
     private static final LocalDateTime SERVER_TIME = AS_OF.plusMinutes(1);
 
     @Mock
@@ -42,6 +48,12 @@ class AuctionListServiceTest {
 
     @Mock
     private AuctionListQueryRepository auctionListQueryRepository;
+
+    @Mock
+    private DownPriceSnapshotQueryRepository downPriceSnapshotQueryRepository;
+
+    @Mock
+    private DownPriceSnapshotCountCache downPriceSnapshotCountCache;
 
     @Mock
     private AuctionPricePageQuery auctionPricePageQuery;
@@ -56,6 +68,8 @@ class AuctionListServiceTest {
         auctionListService = new AuctionListService(
                 auctionRepository,
                 auctionListQueryRepository,
+                downPriceSnapshotQueryRepository,
+                downPriceSnapshotCountCache,
                 auctionPricePageQuery,
                 imageUrlResolver
         );
@@ -182,6 +196,136 @@ class AuctionListServiceTest {
         // then
         verify(auctionPricePageQuery).findPage(condition, 1, 16, 2L);
         verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
+    }
+
+    @Test
+    void 하향_가격순은_스냅샷_경로를_사용하고_응답_asOf에_세대시각을_담는다() {
+        AuctionPriceSnapshot snapshot = new AuctionPriceSnapshot(2L, 150_000L);
+        when(downPriceSnapshotQueryRepository.findLatestSnapshotAtNotAfter(AS_OF))
+                .thenReturn(Optional.of(SNAPSHOT_AT));
+        when(downPriceSnapshotCountCache.getOrLoad(eq(SNAPSHOT_AT), any())).thenReturn(1L);
+        when(downPriceSnapshotQueryRepository.findPage(
+                SNAPSHOT_AT,
+                AuctionSort.PRICE_LOW,
+                null,
+                0L,
+                16
+        )).thenReturn(List.of(snapshot));
+        when(auctionListQueryRepository.findRowsByPriceSnapshots(
+                List.of(snapshot),
+                SNAPSHOT_AT
+        )).thenReturn(List.of(downRow(2L, null, 150_000L)));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16)
+        );
+
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(SNAPSHOT_AT));
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().currentPrice()).isEqualTo(150_000L);
+        verify(downPriceSnapshotCountCache).getOrLoad(eq(SNAPSHOT_AT), any());
+        verify(downPriceSnapshotQueryRepository, never()).count(SNAPSHOT_AT, null);
+        verify(auctionListQueryRepository, never()).count(any());
+        verify(auctionPricePageQuery, never()).findPage(any(), anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    void 응답_asOf를_다시_요청해도_동일한_스냅샷_세대를_해결한다() {
+        AuctionPriceSnapshot snapshot = new AuctionPriceSnapshot(2L, 150_000L);
+        LocalDateTime roundTripAsOf = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(toEpochMilli(SNAPSHOT_AT)),
+                SEOUL
+        );
+        when(downPriceSnapshotQueryRepository.findLatestSnapshotAtNotAfter(AS_OF))
+                .thenReturn(Optional.of(SNAPSHOT_AT));
+        when(downPriceSnapshotQueryRepository.findLatestSnapshotAtNotAfter(roundTripAsOf))
+                .thenReturn(Optional.of(SNAPSHOT_AT));
+        when(downPriceSnapshotCountCache.getOrLoad(eq(SNAPSHOT_AT), any())).thenReturn(1L);
+        when(downPriceSnapshotQueryRepository.findPage(
+                SNAPSHOT_AT,
+                AuctionSort.PRICE_LOW,
+                null,
+                0L,
+                16
+        )).thenReturn(List.of(snapshot));
+        when(auctionListQueryRepository.findRowsByPriceSnapshots(
+                List.of(snapshot),
+                SNAPSHOT_AT
+        )).thenReturn(List.of(downRow(2L, null, 150_000L)));
+
+        AuctionListResponse firstResponse = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16, AS_OF)
+        );
+        AuctionListResponse secondResponse = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16, roundTripAsOf)
+        );
+
+        assertThat(roundTripAsOf).isEqualTo(SNAPSHOT_AT);
+        assertThat(secondResponse.asOf()).isEqualTo(firstResponse.asOf());
+        verify(downPriceSnapshotQueryRepository)
+                .findLatestSnapshotAtNotAfter(AS_OF);
+        verify(downPriceSnapshotQueryRepository)
+                .findLatestSnapshotAtNotAfter(roundTripAsOf);
+    }
+
+    @Test
+    void 하향_가격순_키워드_검색은_정확한_DB_count를_사용한다() {
+        when(downPriceSnapshotQueryRepository.findLatestSnapshotAtNotAfter(AS_OF))
+                .thenReturn(Optional.of(SNAPSHOT_AT));
+        when(downPriceSnapshotQueryRepository.count(SNAPSHOT_AT, "사과")).thenReturn(0L);
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, "사과", 1, 16)
+        );
+
+        assertThat(response.totalCount()).isZero();
+        verify(downPriceSnapshotQueryRepository).count(SNAPSHOT_AT, "사과");
+        verify(downPriceSnapshotCountCache, never()).getOrLoad(any(), any());
+    }
+
+    @Test
+    void 하향_가격순은_스냅샷이_없으면_기존_페이지_쿼리로_폴백한다() {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        when(downPriceSnapshotQueryRepository.findLatestSnapshotAtNotAfter(AS_OF))
+                .thenReturn(Optional.empty());
+        when(auctionListQueryRepository.count(condition)).thenReturn(1L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 1L))
+                .thenReturn(List.of(downRow(2L, null, 150_000L)));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16)
+        );
+
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(AS_OF));
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
+        verify(downPriceSnapshotQueryRepository).findLatestSnapshotAtNotAfter(AS_OF);
+        verify(downPriceSnapshotQueryRepository, never()).count(any(), any());
+    }
+
+    @Test
+    void 상향_가격순은_스냅샷_경로를_사용하지_않고_기존_top_k_쿼리를_사용한다() {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.UP,
+                AuctionSort.PRICE_HIGH,
+                null,
+                AS_OF
+        );
+        when(auctionListQueryRepository.count(condition)).thenReturn(1L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 1L))
+                .thenReturn(List.of(upRow(1L, null, 100_000L, 0L)));
+
+        auctionListService.getList(
+                query(AuctionType.UP, AuctionSort.PRICE_HIGH, null, 1, 16)
+        );
+
+        verify(downPriceSnapshotQueryRepository, never())
+                .findLatestSnapshotAtNotAfter(any());
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
     }
 
     @Test

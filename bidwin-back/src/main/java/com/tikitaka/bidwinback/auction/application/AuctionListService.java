@@ -4,8 +4,10 @@ import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
+import com.tikitaka.bidwinback.auction.domain.repository.DownPriceSnapshotQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDownPricingResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
@@ -30,16 +32,27 @@ public class AuctionListService {
 
     private final AuctionRepository auctionRepository;
     private final AuctionListQueryRepository auctionListQueryRepository;
+    private final DownPriceSnapshotQueryRepository downPriceSnapshotQueryRepository;
+    private final DownPriceSnapshotCountCache downPriceSnapshotCountCache;
     private final AuctionPricePageQuery auctionPricePageQuery;
     private final ImageUrlResolver imageUrlResolver;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuctionListResponse getList(AuctionListQuery query) {
         LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
         LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
                 ? serverTime
                 : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
+
+        if (isDownPriceSort(query)) {
+            LocalDateTime snapshotAt = downPriceSnapshotQueryRepository
+                    .findLatestSnapshotAtNotAfter(asOf)
+                    .orElse(null);
+            if (snapshotAt != null) {
+                return getDownPriceSnapshotList(query, serverTime, snapshotAt, size);
+            }
+        }
 
         // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
@@ -68,6 +81,56 @@ public class AuctionListService {
                 totalPages,
                 totalCount
         );
+    }
+
+    private AuctionListResponse getDownPriceSnapshotList(
+            AuctionListQuery query,
+            LocalDateTime serverTime,
+            LocalDateTime snapshotAt,
+            int size
+    ) {
+        long totalCount = query.keyword() == null
+                ? downPriceSnapshotCountCache.getOrLoad(
+                        snapshotAt,
+                        () -> downPriceSnapshotQueryRepository.count(snapshotAt, null)
+                )
+                : downPriceSnapshotQueryRepository.count(snapshotAt, query.keyword());
+        int totalPages = totalPages(totalCount, size);
+        int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
+        long offset = (long) (currentPage - FIRST_PAGE) * size;
+
+        List<AuctionSummaryResponse> pageItems;
+        if (totalCount == 0) {
+            pageItems = List.of();
+        } else {
+            List<AuctionPriceSnapshot> snapshots = downPriceSnapshotQueryRepository.findPage(
+                    snapshotAt,
+                    query.sort(),
+                    query.keyword(),
+                    offset,
+                    size
+            );
+            pageItems = auctionListQueryRepository
+                    .findRowsByPriceSnapshots(snapshots, snapshotAt)
+                    .stream()
+                    .map(this::toSummary)
+                    .toList();
+        }
+
+        return new AuctionListResponse(
+                pageItems,
+                toEpochMilli(serverTime),
+                toEpochMilli(snapshotAt),
+                currentPage,
+                totalPages,
+                totalCount
+        );
+    }
+
+    private boolean isDownPriceSort(AuctionListQuery query) {
+        return (query.sort() == AuctionSort.PRICE_LOW
+                || query.sort() == AuctionSort.PRICE_HIGH)
+                && query.auctionType() == AuctionType.DOWN;
     }
 
     private List<AuctionListRow> findPage(
