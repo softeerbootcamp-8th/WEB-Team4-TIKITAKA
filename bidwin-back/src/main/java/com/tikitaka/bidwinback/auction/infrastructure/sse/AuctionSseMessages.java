@@ -6,12 +6,20 @@ import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryRespo
 import com.tikitaka.bidwinback.global.sse.SseChannel;
 import com.tikitaka.bidwinback.global.sse.SseMessage;
 
+import java.util.List;
+
 public final class AuctionSseMessages {
 
     private static final String NAMESPACE = "auction";
     private static final String STATE_EVENT = "auction-state";
+    private static final String STATE_SNAPSHOT_EVENT = "auction-state-snapshot";
     private static final String BID_CREATED_EVENT = "bid-created";
     private static final String BID_HISTORY_SNAPSHOT_EVENT = "bid-history-snapshot";
+
+    //경매를 한번에 내려주기위한 임시 채널
+    private static final SseChannel AUCTION_LIST =
+            new SseChannel(NAMESPACE, "list-snapshot");
+
 
     private AuctionSseMessages() {
     }
@@ -26,6 +34,17 @@ public final class AuctionSseMessages {
                 STATE_EVENT,
                 state.revision(),
                 state
+        );
+    }
+
+    public static SseMessage<List<AuctionLiveState>> auctionList(
+            List<AuctionLiveState> states
+    ) {
+        return new SseMessage<>(
+                AUCTION_LIST,
+                STATE_SNAPSHOT_EVENT,
+                0L,
+                List.copyOf(states)
         );
     }
 

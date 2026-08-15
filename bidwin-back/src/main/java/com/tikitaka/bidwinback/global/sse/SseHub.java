@@ -112,12 +112,7 @@ public class SseHub {
                 );
             }
             connection.activate();
-            initialMessages.get().forEach(message -> {
-                if (!subscriptions.contains(message.channel())) {
-                    throw new IllegalArgumentException("구독하지 않은 채널의 초기 메시지입니다.");
-                }
-                connection.send(message);
-            });
+            initialMessages.get().forEach(connection::send);
             return emitter;
         } catch (RuntimeException | Error exception) {
             connection.close();

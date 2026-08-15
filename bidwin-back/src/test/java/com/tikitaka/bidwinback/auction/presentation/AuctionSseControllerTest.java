@@ -100,7 +100,7 @@ class AuctionSseControllerTest {
     }
 
     @Test
-    void 목록_SSE는_화면이_요청한_ID들의_최신_snapshot_공급자를_등록한다() {
+    void 목록_SSE는_요청한_ID들의_최신_snapshot을_하나의_초기_이벤트로_등록한다() {
         // given
         List<Long> auctionIds = List.of(1L, 2L);
         List<AuctionLiveState> states = List.of(state(1L), state(2L));
@@ -113,8 +113,7 @@ class AuctionSseControllerTest {
                     Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
                             invocation.getArgument(1);
                     assertThat(initialMessages.get()).isEqualTo(List.of(
-                            AuctionSseMessages.state(states.get(0)),
-                            AuctionSseMessages.state(states.get(1))
+                            AuctionSseMessages.auctionList(states)
                     ));
                     return emitter;
                 });
@@ -142,8 +141,7 @@ class AuctionSseControllerTest {
                     Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
                             invocation.getArgument(1);
                     assertThat(initialMessages.get()).isEqualTo(List.of(
-                            AuctionSseMessages.state(states.get(0)),
-                            AuctionSseMessages.state(states.get(1))
+                            AuctionSseMessages.auctionList(states)
                     ));
                     return emitter;
                 });

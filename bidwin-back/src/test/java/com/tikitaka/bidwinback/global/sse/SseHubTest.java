@@ -133,20 +133,27 @@ class SseHubTest {
     }
 
     @Test
-    void 초기_snapshot이_구독하지_않은_채널이면_연결을_정리하고_거부한다() {
+    void 구독시_초기_데이터는_메시지_채널과_관계없이_해당_연결에만_전송한다()
+            throws Exception {
         // given
         SseHub hub = hub(3);
         SseChannel subscribed = channel("auction", "1");
-        SseEmitter emitter = mock(SseEmitter.class);
+        SseChannel connectionLocal = channel("auction", "list-snapshot");
+        SseEmitter target = mock(SseEmitter.class);
+        SseEmitter other = mock(SseEmitter.class);
+        hub.subscribe(List.of(subscribed), other, List::of);
 
-        // when & then
-        assertThatThrownBy(() -> hub.subscribe(
+        // when
+        hub.subscribe(
                 List.of(subscribed),
-                emitter,
-                () -> List.of(message(channel("auction", "2"), "auction-state", 1L))
-        )).isInstanceOf(IllegalArgumentException.class);
-        assertThat(hub.connectionCount()).isZero();
-        assertThat(hub.hasSubscribers(subscribed)).isFalse();
+                target,
+                () -> List.of(message(connectionLocal, "auction-state-snapshot", 0L))
+        );
+
+        // then
+        verify(target, timeout(1_000)).send(any(SseEmitter.SseEventBuilder.class));
+        verify(other, after(100).never()).send(any(SseEmitter.SseEventBuilder.class));
+        assertThat(hub.hasSubscribers(connectionLocal)).isFalse();
     }
 
     @Test

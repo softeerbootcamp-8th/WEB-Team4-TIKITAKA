@@ -22,6 +22,7 @@ interface BidCreatedEvent extends BidHistoryItem {
   auctionId: number
 }
 
+const AUCTION_STATE_SNAPSHOT_EVENT = 'auction-state-snapshot'
 type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'disconnected'
 
 const DETAIL_STALE_AFTER_MS = 45_000
@@ -68,23 +69,36 @@ export function useAuctionEvents(
       : `/api/v1/auctions/events?${ids.map((id) => `auctionIds=${id}`).join('&')}`
     const source = new EventSource(apiUrl(path))
     let lastActivityAt = Date.now()
+    const latestRevisionByAuctionId = new Map<number, number>()
     setStatus('connecting')
 
     const markActivity = () => {
       lastActivityAt = Date.now()
     }
 
+    const applyState = (state: AuctionLiveState) => {
+      if (!ids.includes(state.auctionId) || !Number.isSafeInteger(state.revision)) return
+      const latestRevision = latestRevisionByAuctionId.get(state.auctionId)
+      if (latestRevision !== undefined && state.revision <= latestRevision) return
+      latestRevisionByAuctionId.set(state.auctionId, state.revision)
+      handlersRef.current.onState?.(state)
+    }
     const handleState = (event: Event) => {
       markActivity()
       const state = parseEvent<AuctionLiveState>(event)
-      if (state && ids.includes(state.auctionId)) handlersRef.current.onState?.(state)
+      if (state) applyState(state)
+    }
+    const handleStateSnapshot = (event: Event) => {
+      markActivity()
+      const states = parseEvent<AuctionLiveState[]>(event)
+      if (Array.isArray(states)) states.forEach(applyState)
     }
     const handleBid = (event: Event) => {
       markActivity()
-      const bid = parseEvent<BidHistoryItem>(event)
-      if (bid?.entryId && ids.includes(bid.auctionId)) {
-        handlersRef.current.onBidCreated?.(bid)
-      }
+      const bid = parseEvent<BidCreatedEvent>(event)
+        if (bid?.entryId && ids.includes(bid.auctionId)) {
+            handlersRef.current.onBidCreated?.(bid)
+        }
     }
     const handleHistory = (event: Event) => {
       markActivity()
@@ -111,6 +125,7 @@ export function useAuctionEvents(
         : 'reconnecting',
     )
     source.addEventListener('auction-state', handleState)
+    source.addEventListener(AUCTION_STATE_SNAPSHOT_EVENT, handleStateSnapshot)
     source.addEventListener('bid-created', handleBid)
     source.addEventListener('bid-history-snapshot', handleHistory)
     source.addEventListener('heartbeat', handleHeartbeat)

@@ -49,7 +49,7 @@ public class AuctionSseController {
     ) {
         SseEmitter emitter = sseHub.subscribe(
                 List.of(AuctionSseMessages.channel(auctionId)),
-                () -> initialAuctionMessages(auctionId)
+                () -> initialSingleAuctionState(auctionId)
         );
         return streamResponse(emitter);
     }
@@ -66,9 +66,7 @@ public class AuctionSseController {
         List<Long> distinctIds = auctionIds.stream().distinct().toList();
         SseEmitter emitter = sseHub.subscribe(
                 distinctIds.stream().map(AuctionSseMessages::channel).toList(),
-                () -> stateCache.getStates(distinctIds).stream()
-                        .map(AuctionSseMessages::state)
-                        .toList()
+                () -> initialMultiAuctionState(distinctIds)
         );
         return streamResponse(emitter);
     }
@@ -105,7 +103,13 @@ public class AuctionSseController {
                 .body(emitter);
     }
 
-    private List<SseMessage<?>> initialAuctionMessages(long auctionId) {
+    private List<SseMessage<?>> initialMultiAuctionState(List<Long> distinctIds){
+        return List.of(AuctionSseMessages.auctionList(
+                stateCache.getStates(distinctIds)
+        ));
+    }
+
+    private List<SseMessage<?>> initialSingleAuctionState(long auctionId) {
         AuctionLiveState state = stateCache.getState(auctionId);
         List<SseMessage<?>> messages = new ArrayList<>();
         messages.add(AuctionSseMessages.state(state));
