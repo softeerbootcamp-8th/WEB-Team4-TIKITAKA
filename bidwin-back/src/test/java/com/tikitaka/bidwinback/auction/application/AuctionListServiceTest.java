@@ -14,12 +14,15 @@ import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.OptionalLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,14 +53,21 @@ class AuctionListServiceTest {
     @Mock
     private ImageUrlResolver imageUrlResolver;
 
+    @Mock
+    private AuctionListCountCache countCache;
+
     private AuctionListService auctionListService;
 
     @BeforeEach
     void setUp() {
-        auctionListService = new AuctionListService(
+        AuctionListDbQuery auctionListDbQuery = new AuctionListDbQuery(
                 auctionRepository,
                 auctionListQueryRepository,
-                auctionPricePageQuery,
+                auctionPricePageQuery
+        );
+        auctionListService = new AuctionListService(
+                countCache,
+                auctionListDbQuery,
                 imageUrlResolver
         );
         when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
@@ -256,6 +267,203 @@ class AuctionListServiceTest {
         verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
     }
 
+    @ParameterizedTest
+    @EnumSource(value = AuctionSort.class, names = {"RECOMMENDED", "DEADLINE", "LATEST"})
+    void 필터_없는_ALL_일반정렬은_ALL_count_캐시를_조회한다(AuctionSort sort) {
+        when(countCache.find(AuctionListCountScope.ALL)).thenReturn(OptionalLong.of(0L));
+
+        auctionListService.getList(query(null, sort, null, 1, 16));
+
+        verify(countCache).find(AuctionListCountScope.ALL);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(AuctionSort.class)
+    void 필터_없는_UP_모든_정렬은_UP_count_캐시를_조회한다(AuctionSort sort) {
+        when(countCache.find(AuctionListCountScope.UP)).thenReturn(OptionalLong.of(0L));
+
+        auctionListService.getList(query(AuctionType.UP, sort, null, 1, 16));
+
+        verify(countCache).find(AuctionListCountScope.UP);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(AuctionSort.class)
+    void 필터_없는_DOWN_모든_정렬은_DOWN_count_캐시를_조회한다(AuctionSort sort) {
+        when(countCache.find(AuctionListCountScope.DOWN)).thenReturn(OptionalLong.of(0L));
+
+        auctionListService.getList(query(AuctionType.DOWN, sort, null, 1, 16));
+
+        verify(countCache).find(AuctionListCountScope.DOWN);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @Test
+    void 같은_경매유형은_정렬과_무관하게_같은_count_캐시를_사용한다() {
+        when(countCache.find(AuctionListCountScope.UP)).thenReturn(OptionalLong.of(0L));
+
+        auctionListService.getList(query(AuctionType.UP, AuctionSort.RECOMMENDED, null, 1, 16));
+        auctionListService.getList(query(AuctionType.UP, AuctionSort.PRICE_HIGH, null, 1, 16));
+
+        verify(countCache, times(2)).find(AuctionListCountScope.UP);
+    }
+
+    @Test
+    void keyword가_있으면_count_캐시를_조회하지_않는다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(query(null, AuctionSort.LATEST, "상품", 1, 16));
+
+        verify(countCache, never()).find(any());
+        verify(auctionListQueryRepository).count(any());
+    }
+
+    @Test
+    void status가_있으면_count_캐시를_조회하지_않고_기존_DB_count를_사용한다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(query(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListQuery.StatusFilter.ACTIVE,
+                List.of(),
+                1,
+                16,
+                AS_OF
+        ));
+
+        verify(countCache, never()).find(any());
+        verify(auctionListQueryRepository).count(any());
+    }
+
+    @Test
+    void categories가_있으면_count_캐시를_조회하지_않고_기존_DB_count를_사용한다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(query(
+                null,
+                AuctionSort.LATEST,
+                null,
+                null,
+                List.of(AuctionCategory.FOOD),
+                1,
+                16,
+                AS_OF
+        ));
+
+        verify(countCache, never()).find(any());
+        verify(auctionListQueryRepository).count(any());
+    }
+
+    @Test
+    void 빈_keyword와_null_categories는_count_캐시_적격이다() {
+        when(countCache.find(AuctionListCountScope.ALL)).thenReturn(OptionalLong.of(0L));
+
+        auctionListService.getList(query(
+                null,
+                AuctionSort.LATEST,
+                "   ",
+                null,
+                null,
+                1,
+                16,
+                AS_OF
+        ));
+
+        verify(countCache).find(AuctionListCountScope.ALL);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @Test
+    void Redis_miss면_기존_DB_count를_사용한다() {
+        when(countCache.find(AuctionListCountScope.ALL)).thenReturn(OptionalLong.empty());
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(query(null, AuctionSort.LATEST, null, 1, 16));
+
+        verify(auctionListQueryRepository).count(any());
+    }
+
+    @Test
+    void Redis_조회가_예외여도_기존_DB_count를_사용한다() {
+        when(countCache.find(AuctionListCountScope.ALL))
+                .thenThrow(new IllegalStateException("redis unavailable"));
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(query(null, AuctionSort.LATEST, null, 1, 16));
+
+        verify(auctionListQueryRepository).count(any());
+    }
+
+    @Test
+    void cached_count로_totalCount와_totalPages를_계산하고_DB_count를_생략한다() {
+        when(countCache.find(AuctionListCountScope.ALL)).thenReturn(OptionalLong.of(5L));
+        when(auctionListQueryRepository.findPage(any(), eq(4L), eq(2)))
+                .thenReturn(List.of(upRow(5L, null, 100_000L, 0L)));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 99, 2)
+        );
+
+        assertThat(response.totalCount()).isEqualTo(5L);
+        assertThat(response.totalPages()).isEqualTo(3);
+        assertThat(response.page()).isEqualTo(3);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @Test
+    void cached_count가_0이면_DB_count와_목록_행_조회를_생략한다() {
+        when(countCache.find(AuctionListCountScope.DOWN)).thenReturn(OptionalLong.of(0L));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.LATEST, null, 1, 16)
+        );
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.totalCount()).isZero();
+        verify(auctionListQueryRepository, never()).count(any());
+        verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
+    }
+
+    @Test
+    void 가격순_cached_count를_기존_Top_K_조회에_전달한다() {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.UP,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        when(countCache.find(AuctionListCountScope.UP)).thenReturn(OptionalLong.of(3L));
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 3L)).thenReturn(List.of());
+
+        auctionListService.getList(query(AuctionType.UP, AuctionSort.PRICE_LOW, null, 1, 16));
+
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 3L);
+        verify(auctionListQueryRepository, never()).count(any());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = AuctionSort.class, names = {"PRICE_LOW", "PRICE_HIGH"})
+    void ALL_가격순은_count_캐시를_사용하지_않고_기존_DB_경로를_유지한다(AuctionSort sort) {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                null,
+                sort,
+                null,
+                AS_OF
+        );
+        when(auctionListQueryRepository.count(condition)).thenReturn(1L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 1L)).thenReturn(List.of());
+
+        auctionListService.getList(query(null, sort, null, 1, 16));
+
+        verify(countCache, never()).find(any());
+        verify(auctionListQueryRepository).count(condition);
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
+    }
+
     private AuctionListQuery query(AuctionType type, AuctionSort sort, String keyword, int page, int size) {
         return query(type, sort, keyword, page, size, AS_OF);
     }
@@ -268,7 +476,20 @@ class AuctionListServiceTest {
             int size,
             LocalDateTime asOf
     ) {
-        return new AuctionListQuery(type, sort, keyword, null, List.of(), page, size, asOf);
+        return query(type, sort, keyword, null, List.of(), page, size, asOf);
+    }
+
+    private AuctionListQuery query(
+            AuctionType type,
+            AuctionSort sort,
+            String keyword,
+            AuctionListQuery.StatusFilter status,
+            List<AuctionCategory> categories,
+            int page,
+            int size,
+            LocalDateTime asOf
+    ) {
+        return new AuctionListQuery(type, sort, keyword, status, categories, page, size, asOf);
     }
 
     private AuctionListRow upRow(long id, String thumbnailObjectKey, long currentPrice, long bidCount) {

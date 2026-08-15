@@ -1,91 +1,81 @@
 package com.tikitaka.bidwinback.auction.application;
 
-import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
-import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
-import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDownPricingResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.OptionalLong;
 
 @Service
 @RequiredArgsConstructor
 public class AuctionListService {
 
-    private static final int FIRST_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 16;
     private static final int MAX_PAGE_SIZE = 100;
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
 
-    private final AuctionRepository auctionRepository;
-    private final AuctionListQueryRepository auctionListQueryRepository;
-    private final AuctionPricePageQuery auctionPricePageQuery;
+    private final AuctionListCountCache countCache;
+    private final AuctionListDbQuery auctionListDbQuery;
     private final ImageUrlResolver imageUrlResolver;
 
-    @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
-        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
-                ? serverTime
-                : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
-
-        // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
-        AuctionListSearchCondition condition = new AuctionListSearchCondition(
-                query.auctionType(),
-                query.sort(),
-                query.keyword(),
-                asOf
+        OptionalLong cachedTotalCount = findCachedTotalCount(query);
+        AuctionListDbQuery.DbPage dbPage = auctionListDbQuery.findPage(
+                query,
+                size,
+                cachedTotalCount
         );
-        long totalCount = auctionListQueryRepository.count(condition);
-        int totalPages = totalPages(totalCount, size);
-        int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
-        long offset = (long) (currentPage - FIRST_PAGE) * size;
-
-        List<AuctionSummaryResponse> pageItems = totalCount == 0
-                ? List.of()
-                : findPage(condition, currentPage, size, totalCount, offset)
-                        .stream()
-                        .map(this::toSummary)
-                        .toList();
+        List<AuctionSummaryResponse> pageItems = dbPage.items().stream()
+                .map(this::toSummary)
+                .toList();
 
         return new AuctionListResponse(
                 pageItems,
-                toEpochMilli(serverTime),
-                toEpochMilli(asOf),
-                currentPage,
-                totalPages,
-                totalCount
+                toEpochMilli(dbPage.serverTime()),
+                toEpochMilli(dbPage.asOf()),
+                dbPage.currentPage(),
+                dbPage.totalPages(),
+                dbPage.totalCount()
         );
     }
 
-    private List<AuctionListRow> findPage(
-            AuctionListSearchCondition condition,
-            int currentPage,
-            int size,
-            long totalCount,
-            long offset
-    ) {
-        return switch (condition.sort()) {
-            case PRICE_LOW, PRICE_HIGH -> auctionPricePageQuery.findPage(
-                    condition,
-                    currentPage,
-                    size,
-                    totalCount
-            );
-            case RECOMMENDED, DEADLINE, LATEST ->
-                    auctionListQueryRepository.findPage(condition, offset, size);
+    private OptionalLong findCachedTotalCount(AuctionListQuery query) {
+        if (!isCountCacheEligible(query)) {
+            return OptionalLong.empty();
+        }
+        try {
+            return countCache.find(AuctionListCountScope.from(query.auctionType()));
+        } catch (RuntimeException exception) {
+            return OptionalLong.empty();
+        }
+    }
+
+    private boolean isCountCacheEligible(AuctionListQuery query) {
+        if (query.keyword() != null && !query.keyword().isBlank()) {
+            return false;
+        }
+        if (query.status() != null) {
+            return false;
+        }
+        if (query.categories() != null && !query.categories().isEmpty()) {
+            return false;
+        }
+        if (query.auctionType() != null) {
+            return true;
+        }
+        return switch (query.sort()) {
+            case RECOMMENDED, DEADLINE, LATEST -> true;
+            case PRICE_LOW, PRICE_HIGH -> false;
         };
     }
 
@@ -129,11 +119,6 @@ public class AuctionListService {
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(requestedSize, MAX_PAGE_SIZE);
-    }
-
-    private int totalPages(long totalCount, int size) {
-        long calculated = Math.max(FIRST_PAGE, Math.ceilDiv(totalCount, size));
-        return (int) Math.min(calculated, Integer.MAX_VALUE);
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {
