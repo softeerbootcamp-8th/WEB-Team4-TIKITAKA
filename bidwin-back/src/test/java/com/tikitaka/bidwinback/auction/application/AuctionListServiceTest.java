@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ListOperations;
@@ -38,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -226,7 +228,7 @@ class AuctionListServiceTest {
                 .thenReturn(Optional.of(metadata));
         when(downPriceSnapshotCache.findPage(metadata, AuctionSort.PRICE_LOW, 0L, 16))
                 .thenReturn(Optional.of(snapshots));
-        when(auctionListQueryRepository.findRowsByPriceSnapshots(snapshots, snapshotAt))
+        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(snapshots, snapshotAt))
                 .thenReturn(List.of(
                         downRow(2L, null, 170_000L),
                         downRow(1L, null, 180_000L)
@@ -244,6 +246,19 @@ class AuctionListServiceTest {
         assertThat(response.totalCount()).isEqualTo(2L);
         verify(auctionListQueryRepository, never()).count(any());
         verify(auctionPricePageQuery, never()).findPage(any(), anyInt(), anyInt(), anyLong());
+        InOrder order = inOrder(
+                downPriceSnapshotCache,
+                auctionRepository,
+                auctionListQueryRepository
+        );
+        order.verify(downPriceSnapshotCache).findLatestAtNotAfter(AS_OF);
+        order.verify(downPriceSnapshotCache)
+                .findPage(metadata, AuctionSort.PRICE_LOW, 0L, 16);
+        order.verify(auctionRepository).currentDatabaseTime();
+        order.verify(auctionListQueryRepository)
+                .findDownRowsByPriceSnapshots(snapshots, snapshotAt);
+        verify(auctionListQueryRepository, never())
+                .findRowsByPriceSnapshots(any(), any());
     }
 
     @Test
@@ -276,6 +291,30 @@ class AuctionListServiceTest {
     }
 
     @Test
+    void asOf가_없으면_상한_없는_최신_Redis_세대를_조회한다() {
+        LocalDateTime snapshotAt = AS_OF.minusSeconds(30);
+        DownPriceSnapshotCache.Metadata metadata =
+                new DownPriceSnapshotCache.Metadata(snapshotAt, 0L);
+        when(downPriceSnapshotCache.findLatest()).thenReturn(Optional.of(metadata));
+        when(downPriceSnapshotCache.findPage(
+                metadata,
+                AuctionSort.PRICE_LOW,
+                0L,
+                16
+        )).thenReturn(Optional.of(List.of()));
+        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(List.of(), snapshotAt))
+                .thenReturn(List.of());
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16, null)
+        );
+
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(snapshotAt));
+        verify(downPriceSnapshotCache).findLatest();
+        verify(downPriceSnapshotCache, never()).findLatestAtNotAfter(any());
+    }
+
+    @Test
     void Redis_스냅샷이_없으면_기존_Top_K_조회로_폴백한다() {
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
                 AuctionType.DOWN,
@@ -296,6 +335,18 @@ class AuctionListServiceTest {
         assertThat(response.asOf()).isEqualTo(toEpochMilli(AS_OF));
         verify(auctionListQueryRepository).count(condition);
         verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
+        InOrder order = inOrder(
+                downPriceSnapshotCache,
+                auctionRepository,
+                auctionListQueryRepository,
+                auctionPricePageQuery
+        );
+        order.verify(downPriceSnapshotCache).findLatestAtNotAfter(AS_OF);
+        order.verify(auctionRepository).currentDatabaseTime();
+        order.verify(auctionListQueryRepository).count(condition);
+        order.verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
+        verify(auctionListQueryRepository, never())
+                .findDownRowsByPriceSnapshots(any(), any());
     }
 
     @Test
@@ -313,6 +364,7 @@ class AuctionListServiceTest {
         );
 
         verify(downPriceSnapshotCache, never()).findLatestAtNotAfter(any());
+        verify(downPriceSnapshotCache, never()).findLatest();
         verify(auctionListQueryRepository).count(condition);
     }
 
@@ -345,7 +397,7 @@ class AuctionListServiceTest {
                 eq(0L),
                 eq(0L)
         )).thenReturn(List.of("1:170000"));
-        when(auctionListQueryRepository.findRowsByPriceSnapshots(snapshots, snapshotAt))
+        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(snapshots, snapshotAt))
                 .thenReturn(List.of(downRow(1L, null, 170_000L)));
 
         service.getList(query(AuctionType.DOWN, sort, null, 1, 16));
@@ -391,14 +443,21 @@ class AuctionListServiceTest {
         )).thenReturn(Set.of(generation));
         when(valueOperations.get(org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("0");
-        when(auctionListQueryRepository.findRowsByPriceSnapshots(List.of(), snapshotAt))
+        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(List.of(), snapshotAt))
                 .thenReturn(List.of());
 
-        service.getList(query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16));
+        service.getList(query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16, null));
 
         assertThat(lookupTotal(meterRegistry)).isEqualTo(1D);
         assertThat(lookupCount(meterRegistry, "hit", "none")).isEqualTo(1D);
         verify(redisTemplate, never()).opsForList();
+        verify(zSetOperations).reverseRangeByScore(
+                org.mockito.ArgumentMatchers.anyString(),
+                eq(0D),
+                eq(Double.POSITIVE_INFINITY),
+                eq(0L),
+                eq(1L)
+        );
     }
 
     @Test
@@ -406,6 +465,24 @@ class AuctionListServiceTest {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         AuctionListService service = meteredService(meterRegistry);
         when(auctionListQueryRepository.count(any())).thenReturn(0L);
+        AuctionListSearchCondition allCondition = new AuctionListSearchCondition(
+                null,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        AuctionListSearchCondition upCondition = new AuctionListSearchCondition(
+                AuctionType.UP,
+                AuctionSort.PRICE_HIGH,
+                null,
+                AS_OF
+        );
+        AuctionListSearchCondition keywordCondition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                "상품",
+                AS_OF
+        );
 
         service.getList(query(null, AuctionSort.PRICE_LOW, null, 1, 16));
         service.getList(query(AuctionType.UP, AuctionSort.PRICE_HIGH, null, 1, 16));
@@ -413,6 +490,13 @@ class AuctionListServiceTest {
 
         assertThat(lookupTotal(meterRegistry)).isZero();
         verify(redisTemplate, never()).opsForZSet();
+        InOrder order = inOrder(auctionRepository, auctionListQueryRepository);
+        order.verify(auctionRepository).currentDatabaseTime();
+        order.verify(auctionListQueryRepository).count(allCondition);
+        order.verify(auctionRepository).currentDatabaseTime();
+        order.verify(auctionListQueryRepository).count(upCondition);
+        order.verify(auctionRepository).currentDatabaseTime();
+        order.verify(auctionListQueryRepository).count(keywordCondition);
     }
 
     @Test

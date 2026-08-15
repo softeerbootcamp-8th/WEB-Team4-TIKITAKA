@@ -39,4 +39,9 @@ public interface AuctionListQueryRepository {
             List<AuctionPriceSnapshot> snapshots,
             LocalDateTime asOf
     );
+
+    List<AuctionListRow> findDownRowsByPriceSnapshots(
+            List<AuctionPriceSnapshot> snapshots,
+            LocalDateTime asOf
+    );
 }

@@ -210,11 +210,19 @@ public class DownPriceSnapshotCache {
     }
 
     public Optional<Metadata> findLatestAtNotAfter(LocalDateTime asOf) {
+        return findLatest(toEpochMilli(asOf));
+    }
+
+    public Optional<Metadata> findLatest() {
+        return findLatest(Double.POSITIVE_INFINITY);
+    }
+
+    private Optional<Metadata> findLatest(double maximumScore) {
         try {
             Set<String> generations = redisTemplate.opsForZSet().reverseRangeByScore(
                     GENERATION_INDEX_KEY,
                     0,
-                    toEpochMilli(asOf),
+                    maximumScore,
                     0,
                     1
             );

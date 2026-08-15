@@ -345,6 +345,25 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         return findRows(metrics);
     }
 
+    @Override
+    public List<AuctionListRow> findDownRowsByPriceSnapshots(
+            List<AuctionPriceSnapshot> snapshots,
+            LocalDateTime asOf
+    ) {
+        if (snapshots.isEmpty()) {
+            return List.of();
+        }
+        // BidService가 하향 경매 입찰을 거부하므로 bid 행이 존재할 수 없고 bidCount는 항상 0이다.
+        List<AuctionListMetrics> metrics = snapshots.stream()
+                .map(snapshot -> new AuctionListMetrics(
+                        snapshot.auctionId(),
+                        snapshot.currentPrice(),
+                        0L
+                ))
+                .toList();
+        return findRows(metrics);
+    }
+
     private List<AuctionListRow> findRows(List<AuctionListMetrics> metrics) {
         if (metrics.isEmpty()) {
             return List.of();

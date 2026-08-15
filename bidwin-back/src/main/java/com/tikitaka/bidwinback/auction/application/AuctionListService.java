@@ -38,21 +38,20 @@ public class AuctionListService {
 
     @Transactional(readOnly = true)
     public AuctionListResponse getList(AuctionListQuery query) {
-        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
-        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
-                ? serverTime
-                : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
 
         Optional<AuctionListResponse> snapshotResponse = findDownPriceSnapshotList(
                 query,
-                serverTime,
-                asOf,
                 size
         );
         if (snapshotResponse.isPresent()) {
             return snapshotResponse.get();
         }
+
+        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
+        LocalDateTime asOf = query.sort() == AuctionSort.RECOMMENDED
+                ? serverTime
+                : query.asOf() != null ? query.asOf() : serverTime;
 
         // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
@@ -85,8 +84,6 @@ public class AuctionListService {
 
     private Optional<AuctionListResponse> findDownPriceSnapshotList(
             AuctionListQuery query,
-            LocalDateTime serverTime,
-            LocalDateTime asOf,
             int size
     ) {
         if (query.auctionType() != AuctionType.DOWN
@@ -96,13 +93,14 @@ public class AuctionListService {
             return Optional.empty();
         }
 
-        return downPriceSnapshotCache.findLatestAtNotAfter(asOf)
-                .flatMap(metadata -> toSnapshotResponse(query, serverTime, size, metadata));
+        Optional<DownPriceSnapshotCache.Metadata> metadata = query.asOf() != null
+                ? downPriceSnapshotCache.findLatestAtNotAfter(query.asOf())
+                : downPriceSnapshotCache.findLatest();
+        return metadata.flatMap(value -> toSnapshotResponse(query, size, value));
     }
 
     private Optional<AuctionListResponse> toSnapshotResponse(
             AuctionListQuery query,
-            LocalDateTime serverTime,
             int size,
             DownPriceSnapshotCache.Metadata metadata
     ) {
@@ -121,8 +119,9 @@ public class AuctionListService {
             return Optional.empty();
         }
 
+        LocalDateTime serverTime = auctionRepository.currentDatabaseTime();
         List<AuctionSummaryResponse> pageItems = auctionListQueryRepository
-                .findRowsByPriceSnapshots(snapshots.get(), metadata.snapshotAt())
+                .findDownRowsByPriceSnapshots(snapshots.get(), metadata.snapshotAt())
                 .stream()
                 .map(this::toSummary)
                 .toList();

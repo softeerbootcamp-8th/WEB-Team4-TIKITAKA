@@ -85,9 +85,11 @@ class DownPriceSnapshotCacheIntegrationTest {
         DownPriceSnapshotCache.Metadata secondMetadata = cache
                 .findLatestAtNotAfter(SECOND_GENERATION)
                 .orElseThrow();
+        DownPriceSnapshotCache.Metadata latestMetadata = cache.findLatest().orElseThrow();
 
         assertThat(firstMetadata.snapshotAt()).isEqualTo(FIRST_GENERATION);
         assertThat(secondMetadata.snapshotAt()).isEqualTo(SECOND_GENERATION);
+        assertThat(latestMetadata.snapshotAt()).isEqualTo(SECOND_GENERATION);
         assertThat(cache.findPage(firstMetadata, AuctionSort.PRICE_LOW, 0, 2))
                 .contains(first.priceLow());
         assertThat(cache.findPage(secondMetadata, AuctionSort.PRICE_HIGH, 0, 2))

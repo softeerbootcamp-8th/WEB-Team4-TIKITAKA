@@ -17,6 +17,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryReposit
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
@@ -678,6 +679,46 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
             assertThat(row.priceDropInterval()).isEqualTo(5L);
             assertThat(row.startedAt()).isEqualTo(startedAt);
         });
+    }
+
+    @Test
+    void 하향_가격_스냅샷_전용_조립은_입찰_쿼리_없이_같은_결과를_반환한다() {
+        Member seller = persistMember("down-snapshot-row-seller");
+        DownAuction auction = persistDown(
+                seller,
+                "하향 가격 스냅샷 조립",
+                AuctionCategory.FOOD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(auction, AS_OF.minusHours(2), AS_OF.minusMinutes(10));
+        Image image = persistImage(auction, "images/down-snapshot-" + UUID.randomUUID());
+        entityManager.flush();
+        entityManager.clear();
+        List<AuctionPriceSnapshot> snapshots = List.of(
+                new AuctionPriceSnapshot(auction.getId(), 80_000L)
+        );
+
+        List<AuctionListRow> existingRows = auctionListQueryRepository
+                .findRowsByPriceSnapshots(snapshots, AS_OF);
+        Statistics statistics = entityManagerFactory
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.clear();
+
+        List<AuctionListRow> downRows = auctionListQueryRepository
+                .findDownRowsByPriceSnapshots(snapshots, AS_OF);
+
+        assertThat(downRows).containsExactlyElementsOf(existingRows);
+        assertThat(downRows).singleElement().satisfies(row -> {
+            assertThat(row.bidCount()).isZero();
+            assertThat(row.thumbnailObjectKey()).isEqualTo(image.getObjectKey());
+        });
+        assertThat(statistics.getQueryExecutionCount()).isEqualTo(2L);
+        assertThat(statistics.getQueries())
+                .noneMatch(query -> query.toLowerCase(java.util.Locale.ROOT)
+                        .contains(" from bid "));
     }
 
     @Test

@@ -107,6 +107,74 @@ class DownPriceSnapshotCacheTest {
     }
 
     @Test
+    void 최신_세대_조회는_상한_없이_가장_최근_세대를_읽는다() {
+        String generation = Long.toString(toEpochMilli(SNAPSHOT_AT));
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(zSetOperations.reverseRangeByScore(
+                anyString(),
+                eq(0D),
+                eq(Double.POSITIVE_INFINITY),
+                eq(0L),
+                eq(1L)
+        )).thenReturn(Set.of(generation));
+        when(valueOperations.get(anyString())).thenReturn("2000");
+
+        Optional<DownPriceSnapshotCache.Metadata> result = cache.findLatest();
+
+        assertThat(result).contains(new DownPriceSnapshotCache.Metadata(SNAPSHOT_AT, 2_000L));
+        assertThat(lookupTotal()).isZero();
+    }
+
+    @Test
+    void 최신_세대가_없으면_no_generation_miss를_한번_기록한다() {
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(zSetOperations.reverseRangeByScore(
+                anyString(),
+                anyDouble(),
+                eq(Double.POSITIVE_INFINITY),
+                anyLong(),
+                anyLong()
+        )).thenReturn(Set.of());
+
+        Optional<DownPriceSnapshotCache.Metadata> result = cache.findLatest();
+
+        assertThat(result).isEmpty();
+        assertSingleLookup("miss", "no_generation");
+    }
+
+    @Test
+    void 최신_세대의_count가_없으면_no_count_miss를_한번_기록한다() {
+        String generation = Long.toString(toEpochMilli(SNAPSHOT_AT));
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(zSetOperations.reverseRangeByScore(
+                anyString(),
+                anyDouble(),
+                eq(Double.POSITIVE_INFINITY),
+                anyLong(),
+                anyLong()
+        )).thenReturn(Set.of(generation));
+
+        Optional<DownPriceSnapshotCache.Metadata> result = cache.findLatest();
+
+        assertThat(result).isEmpty();
+        assertSingleLookup("miss", "no_count");
+    }
+
+    @Test
+    void 최신_세대_조회_장애는_redis_error_miss를_한번_기록한다() {
+        when(redisTemplate.opsForZSet()).thenThrow(
+                new RedisConnectionFailureException("Redis 장애")
+        );
+
+        Optional<DownPriceSnapshotCache.Metadata> result = cache.findLatest();
+
+        assertThat(result).isEmpty();
+        assertSingleLookup("miss", "redis_error");
+    }
+
+    @Test
     void 요청_asOf_이하의_가장_최신_세대와_같은_세대의_count를_읽는다() {
         LocalDateTime asOf = SNAPSHOT_AT.plusSeconds(30);
         String generation = Long.toString(toEpochMilli(SNAPSHOT_AT));
@@ -349,12 +417,15 @@ class DownPriceSnapshotCacheTest {
                 .tags("result", result, "reason", reason)
                 .counter()
                 .count()).isEqualTo(1D);
-        double total = meterRegistry.find(LOOKUP_METRIC)
+        assertThat(lookupTotal()).isEqualTo(1D);
+    }
+
+    private double lookupTotal() {
+        return meterRegistry.find(LOOKUP_METRIC)
                 .counters()
                 .stream()
                 .mapToDouble(Counter::count)
                 .sum();
-        assertThat(total).isEqualTo(1D);
     }
 
     private double publishCount(String result) {
