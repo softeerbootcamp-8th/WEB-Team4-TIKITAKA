@@ -62,10 +62,16 @@ public class UpAuctionSettlementService {
                 BidStatus.UP
         );
         Optional<SealedBid> sealedWinner = sealedBidRepository.findWinnerByAuctionId(auctionId);
+        long sealedBidCount = sealedBidRepository.countByAuctionId(auctionId);
 
         UpAuctionSettlementResult result = chooseWinner(openWinner, sealedWinner)
-                .map(candidate -> complete(auction, candidate, databaseTime))
-                .orElseGet(() -> markUnsold(auction, databaseTime));
+                .map(candidate -> complete(
+                        auction,
+                        candidate,
+                        databaseTime,
+                        sealedBidCount
+                ))
+                .orElseGet(() -> markUnsold(auction, databaseTime, sealedBidCount));
 
         return result;
     }
@@ -118,9 +124,10 @@ public class UpAuctionSettlementService {
     private UpAuctionSettlementResult complete(
             Auction auction,
             WinnerCandidate winner,
-            LocalDateTime settledAt
+            LocalDateTime settledAt,
+            long sealedBidCount
     ) {
-        auction.complete(winner.price(), settledAt);
+        auction.complete(winner.price(), settledAt, sealedBidCount);
         AuctionTrade trade = auctionTradeRepository.save(
                 AuctionTrade.builder()
                         .auction(auction)
@@ -135,9 +142,10 @@ public class UpAuctionSettlementService {
 
     private UpAuctionSettlementResult markUnsold(
             Auction auction,
-            LocalDateTime settledAt
+            LocalDateTime settledAt,
+            long sealedBidCount
     ) {
-        auction.markUnsold(settledAt);
+        auction.markUnsold(settledAt, sealedBidCount);
         eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
         return UpAuctionSettlementResult.unsold(auction.getId(), settledAt);
     }
