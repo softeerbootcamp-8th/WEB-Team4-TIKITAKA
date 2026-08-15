@@ -7,7 +7,7 @@ import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
-import com.tikitaka.bidwinback.global.sse.SseHub;
+import com.tikitaka.bidwinback.global.sse.RedisSseEventBus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,9 +25,8 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -48,7 +47,7 @@ class AuctionSseStateChangeListenerTransactionTest {
     @Autowired
     private AuctionBidHistoryCache bidHistoryCache;
     @Autowired
-    private SseHub sseHub;
+    private RedisSseEventBus eventBus;
 
     private final AuctionLiveState state = new AuctionLiveState(
             1L,
@@ -61,30 +60,29 @@ class AuctionSseStateChangeListenerTransactionTest {
 
     @BeforeEach
     void setUp() {
-        reset(stateService, stateCache, bidHistoryCache, sseHub);
+        reset(stateService, stateCache, bidHistoryCache, eventBus);
     }
 
     @Test
-    void 트랜잭션이_커밋된_뒤에만_경매_SSE_채널로_전송한다() {
+    void 트랜잭션이_커밋된_뒤에만_경매_상태를_Redis로_전송한다() {
         // given
-        when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(true);
         when(stateService.getState(1L)).thenReturn(state);
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
         // when
         transaction.executeWithoutResult(ignored -> {
             eventPublisher.publishEvent(new AuctionStateChanged(1L));
-            verifyNoInteractions(stateService, sseHub);
+            verifyNoInteractions(stateService, eventBus);
         });
 
         // then
         verify(stateCache).invalidate(1L);
         verify(bidHistoryCache).invalidate(1L);
-        verify(sseHub).publish(AuctionSseMessages.state(state));
+        verify(eventBus).publish(AuctionSseMessages.state(state));
     }
 
     @Test
-    void 트랜잭션이_롤백되면_SSE_상태를_조회하거나_전송하지_않는다() {
+    void 트랜잭션이_롤백되면_경매_상태를_조회하거나_Redis로_전송하지_않는다() {
         // given
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
@@ -95,15 +93,14 @@ class AuctionSseStateChangeListenerTransactionTest {
         });
 
         // then
-        verifyNoInteractions(stateService, sseHub);
+        verifyNoInteractions(stateService, eventBus);
         verifyNoInteractions(stateCache);
         verifyNoInteractions(bidHistoryCache);
     }
 
     @Test
-    void 커밋후_SSE_조회가_실패해도_이미_완료된_비즈니스_결과는_실패하지_않는다() {
+    void 커밋후_snapshot_조회가_실패해도_이미_완료된_비즈니스_결과는_실패하지_않는다() {
         // given
-        when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(true);
         when(stateService.getState(1L)).thenThrow(new IllegalStateException("snapshot failed"));
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
@@ -114,21 +111,17 @@ class AuctionSseStateChangeListenerTransactionTest {
     }
 
     @Test
-    void 보고_있는_연결이_없으면_상태를_다시_조회하지_않는다() {
+    void 커밋후_Redis_발행이_실패해도_이미_완료된_비즈니스_결과는_실패하지_않는다() {
         // given
-        when(sseHub.hasSubscribers(AuctionSseMessages.channel(1L))).thenReturn(false);
+        when(stateService.getState(1L)).thenReturn(state);
+        doThrow(new IllegalStateException("redis down"))
+                .when(eventBus).publish(AuctionSseMessages.state(state));
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
-        // when
-        transaction.executeWithoutResult(ignored ->
+        // when & then
+        assertThatCode(() -> transaction.executeWithoutResult(ignored ->
                 eventPublisher.publishEvent(new AuctionStateChanged(1L))
-        );
-
-        // then
-        verify(stateCache).invalidate(1L);
-        verify(bidHistoryCache).invalidate(1L);
-        verifyNoInteractions(stateService);
-        verify(sseHub, never()).publish(any());
+        )).doesNotThrowAnyException();
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -156,8 +149,8 @@ class AuctionSseStateChangeListenerTransactionTest {
         }
 
         @Bean
-        SseHub sseHub() {
-            return mock(SseHub.class);
+        RedisSseEventBus eventBus() {
+            return mock(RedisSseEventBus.class);
         }
 
         @Bean
@@ -165,13 +158,13 @@ class AuctionSseStateChangeListenerTransactionTest {
                 AuctionLiveStateService stateService,
                 AuctionLiveStateCache stateCache,
                 AuctionBidHistoryCache bidHistoryCache,
-                SseHub sseHub
+                RedisSseEventBus eventBus
         ) {
             return new AuctionSseStateChangeListener(
                     stateService,
                     stateCache,
                     bidHistoryCache,
-                    sseHub
+                    eventBus
             );
         }
     }
