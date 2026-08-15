@@ -79,6 +79,8 @@ management:
 app:
   auction:
     closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
+    down-price-snapshot-interval: ${AUCTION_DOWN_PRICE_SNAPSHOT_INTERVAL:1m}
+    down-price-snapshot-ttl: ${AUCTION_DOWN_PRICE_SNAPSHOT_TTL:10m}
   mail:
     rate-limit:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}

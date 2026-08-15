@@ -8,6 +8,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryReposit
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +49,9 @@ class AuctionListServiceTest {
     private AuctionPricePageQuery auctionPricePageQuery;
 
     @Mock
+    private DownPriceSnapshotCache downPriceSnapshotCache;
+
+    @Mock
     private ImageUrlResolver imageUrlResolver;
 
     private AuctionListService auctionListService;
@@ -57,6 +62,7 @@ class AuctionListServiceTest {
                 auctionRepository,
                 auctionListQueryRepository,
                 auctionPricePageQuery,
+                downPriceSnapshotCache,
                 imageUrlResolver
         );
         when(auctionRepository.currentDatabaseTime()).thenReturn(SERVER_TIME);
@@ -182,6 +188,103 @@ class AuctionListServiceTest {
         // then
         verify(auctionPricePageQuery).findPage(condition, 1, 16, 2L);
         verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
+    }
+
+    @Test
+    void 하향_가격순은_Redis_스냅샷_세대의_개수와_순서를_사용한다() {
+        LocalDateTime snapshotAt = AS_OF.minusSeconds(30);
+        DownPriceSnapshotCache.Metadata metadata =
+                new DownPriceSnapshotCache.Metadata(snapshotAt, 2L);
+        List<AuctionPriceSnapshot> snapshots = List.of(
+                new AuctionPriceSnapshot(2L, 170_000L),
+                new AuctionPriceSnapshot(1L, 180_000L)
+        );
+        when(downPriceSnapshotCache.findLatestAtNotAfter(AS_OF))
+                .thenReturn(Optional.of(metadata));
+        when(downPriceSnapshotCache.findPage(metadata, AuctionSort.PRICE_LOW, 0L, 16))
+                .thenReturn(Optional.of(snapshots));
+        when(auctionListQueryRepository.findRowsByPriceSnapshots(snapshots, snapshotAt))
+                .thenReturn(List.of(
+                        downRow(2L, null, 170_000L),
+                        downRow(1L, null, 180_000L)
+                ));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16)
+        );
+
+        assertThat(response.items())
+                .extracting(AuctionSummaryResponse::auctionId)
+                .containsExactly(2L, 1L);
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(snapshotAt));
+        assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
+        assertThat(response.totalCount()).isEqualTo(2L);
+        verify(auctionListQueryRepository, never()).count(any());
+        verify(auctionPricePageQuery, never()).findPage(any(), anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    void 응답_asOf를_다시_요청하면_같은_Redis_세대를_해결한다() {
+        LocalDateTime snapshotAt = AS_OF.minusSeconds(30);
+        DownPriceSnapshotCache.Metadata metadata =
+                new DownPriceSnapshotCache.Metadata(snapshotAt, 0L);
+        when(downPriceSnapshotCache.findLatestAtNotAfter(AS_OF))
+                .thenReturn(Optional.of(metadata));
+        when(downPriceSnapshotCache.findLatestAtNotAfter(snapshotAt))
+                .thenReturn(Optional.of(metadata));
+
+        AuctionListResponse first = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_HIGH, null, 1, 16, AS_OF)
+        );
+        AuctionListResponse second = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_HIGH, null, 1, 16, snapshotAt)
+        );
+
+        assertThat(first.asOf()).isEqualTo(toEpochMilli(snapshotAt));
+        assertThat(second.asOf()).isEqualTo(first.asOf());
+        verify(downPriceSnapshotCache).findLatestAtNotAfter(AS_OF);
+        verify(downPriceSnapshotCache).findLatestAtNotAfter(snapshotAt);
+    }
+
+    @Test
+    void Redis_스냅샷이_없으면_기존_Top_K_조회로_폴백한다() {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                null,
+                AS_OF
+        );
+        when(downPriceSnapshotCache.findLatestAtNotAfter(AS_OF))
+                .thenReturn(Optional.empty());
+        when(auctionListQueryRepository.count(condition)).thenReturn(1L);
+        when(auctionPricePageQuery.findPage(condition, 1, 16, 1L))
+                .thenReturn(List.of(downRow(1L, null, 170_000L)));
+
+        AuctionListResponse response = auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_LOW, null, 1, 16)
+        );
+
+        assertThat(response.asOf()).isEqualTo(toEpochMilli(AS_OF));
+        verify(auctionListQueryRepository).count(condition);
+        verify(auctionPricePageQuery).findPage(condition, 1, 16, 1L);
+    }
+
+    @Test
+    void 키워드가_있는_하향_가격순은_Redis를_사용하지_않는다() {
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_HIGH,
+                "상품",
+                AS_OF
+        );
+        when(auctionListQueryRepository.count(condition)).thenReturn(0L);
+
+        auctionListService.getList(
+                query(AuctionType.DOWN, AuctionSort.PRICE_HIGH, "상품", 1, 16)
+        );
+
+        verify(downPriceSnapshotCache, never()).findLatestAtNotAfter(any());
+        verify(auctionListQueryRepository).count(condition);
     }
 
     @Test
@@ -318,4 +421,5 @@ class AuctionListServiceTest {
     private long toEpochMilli(LocalDateTime dateTime) {
         return dateTime.atZone(SEOUL).toInstant().toEpochMilli();
     }
+
 }

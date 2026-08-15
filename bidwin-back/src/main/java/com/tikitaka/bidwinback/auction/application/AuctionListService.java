@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryReposit
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionDownPricingResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionSummaryResponse;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +33,7 @@ public class AuctionListService {
     private final AuctionRepository auctionRepository;
     private final AuctionListQueryRepository auctionListQueryRepository;
     private final AuctionPricePageQuery auctionPricePageQuery;
+    private final DownPriceSnapshotCache downPriceSnapshotCache;
     private final ImageUrlResolver imageUrlResolver;
 
     @Transactional(readOnly = true)
@@ -40,6 +43,16 @@ public class AuctionListService {
                 ? serverTime
                 : query.asOf() != null ? query.asOf() : serverTime;
         int size = normalizedSize(query.size());
+
+        Optional<AuctionListResponse> snapshotResponse = findDownPriceSnapshotList(
+                query,
+                serverTime,
+                asOf,
+                size
+        );
+        if (snapshotResponse.isPresent()) {
+            return snapshotResponse.get();
+        }
 
         // 상태·카테고리는 API 계약만 먼저 열고, 실제 조회 반영은 별도 작업에서 다룬다.
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
@@ -68,6 +81,55 @@ public class AuctionListService {
                 totalPages,
                 totalCount
         );
+    }
+
+    private Optional<AuctionListResponse> findDownPriceSnapshotList(
+            AuctionListQuery query,
+            LocalDateTime serverTime,
+            LocalDateTime asOf,
+            int size
+    ) {
+        if (query.auctionType() != AuctionType.DOWN
+                || (query.sort() != AuctionSort.PRICE_LOW
+                && query.sort() != AuctionSort.PRICE_HIGH)
+                || query.keyword() != null) {
+            return Optional.empty();
+        }
+
+        return downPriceSnapshotCache.findLatestAtNotAfter(asOf)
+                .flatMap(metadata -> toSnapshotResponse(query, serverTime, size, metadata));
+    }
+
+    private Optional<AuctionListResponse> toSnapshotResponse(
+            AuctionListQuery query,
+            LocalDateTime serverTime,
+            int size,
+            DownPriceSnapshotCache.Metadata metadata
+    ) {
+        int totalPages = totalPages(metadata.totalCount(), size);
+        int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
+        long offset = (long) (currentPage - FIRST_PAGE) * size;
+
+        Optional<List<AuctionPriceSnapshot>> snapshots = metadata.totalCount() == 0
+                ? Optional.of(List.of())
+                : downPriceSnapshotCache.findPage(metadata, query.sort(), offset, size);
+        if (snapshots.isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<AuctionSummaryResponse> pageItems = auctionListQueryRepository
+                .findRowsByPriceSnapshots(snapshots.get(), metadata.snapshotAt())
+                .stream()
+                .map(this::toSummary)
+                .toList();
+        return Optional.of(new AuctionListResponse(
+                pageItems,
+                toEpochMilli(serverTime),
+                toEpochMilli(metadata.snapshotAt()),
+                currentPage,
+                totalPages,
+                metadata.totalCount()
+        ));
     }
 
     private List<AuctionListRow> findPage(
