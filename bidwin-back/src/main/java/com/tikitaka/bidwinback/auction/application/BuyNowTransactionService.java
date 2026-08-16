@@ -159,6 +159,7 @@ public class BuyNowTransactionService {
             return auctionRepository.completeForBuyNow(
                     command.auctionId(),
                     command.memberId(),
+                    command.finalPrice(),
                     command.purchasedAt()
             );
         } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {

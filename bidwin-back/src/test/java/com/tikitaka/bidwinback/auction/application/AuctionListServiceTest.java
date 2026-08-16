@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -148,6 +149,31 @@ class AuctionListServiceTest {
     }
 
     @Test
+    void 상태와_카테고리를_저장소_조회조건에_전달한다() {
+        when(auctionListQueryRepository.count(any())).thenReturn(0L);
+
+        auctionListService.getList(new AuctionListQuery(
+                AuctionType.DOWN,
+                AuctionSort.LATEST,
+                "의자",
+                AuctionListStatusFilter.ENDED,
+                AuctionCategory.FURNITURE,
+                1,
+                16,
+                AS_OF
+        ));
+
+        verify(auctionListQueryRepository).count(new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.LATEST,
+                "의자",
+                AuctionListStatusFilter.ENDED,
+                AuctionCategory.FURNITURE,
+                AS_OF
+        ));
+    }
+
+    @Test
     void 전체_개수로_totalPages를_계산하고_페이지_크기만큼_조회한다() {
         when(auctionListQueryRepository.count(any())).thenReturn(3L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(2)))
@@ -268,7 +294,7 @@ class AuctionListServiceTest {
             int size,
             LocalDateTime asOf
     ) {
-        return new AuctionListQuery(type, sort, keyword, null, List.of(), page, size, asOf);
+        return new AuctionListQuery(type, sort, keyword, null, null, page, size, asOf);
     }
 
     private AuctionListRow upRow(long id, String thumbnailObjectKey, long currentPrice, long bidCount) {

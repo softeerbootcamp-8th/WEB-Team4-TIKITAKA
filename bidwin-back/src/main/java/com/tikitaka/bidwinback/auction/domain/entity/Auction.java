@@ -77,7 +77,7 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "current_price")
     private Long currentPrice;
 
-    // 추천순 조회가 전체 입찰을 매번 집계하지 않도록 Bid 행 수를 누적한다.
+    // 진행 중에는 공개 입찰 수를, 밀봉입찰 공개 후에는 공개·밀봉 총입찰 수를 누적한다.
     @Column(name = "bid_count", nullable = false)
     private long bidCount;
 
@@ -148,6 +148,14 @@ public abstract class Auction extends BaseTimeEntity {
     }
 
     public void complete(long finalPrice, LocalDateTime completedAt) {
+        complete(finalPrice, completedAt, 0L);
+    }
+
+    public void complete(
+            long finalPrice,
+            LocalDateTime completedAt,
+            long additionalBidCount
+    ) {
         if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
             throw new IllegalStateException("진행 중인 경매만 낙찰 처리할 수 있습니다.");
         }
@@ -155,6 +163,7 @@ public abstract class Auction extends BaseTimeEntity {
             throw new IllegalArgumentException("낙찰가는 0보다 커야 합니다.");
         }
 
+        addBidCount(additionalBidCount);
         this.currentPrice = finalPrice;
         this.status = AuctionStatus.COMPLETED;
         this.completedAt = completedAt;
@@ -162,12 +171,24 @@ public abstract class Auction extends BaseTimeEntity {
     }
 
     public void markUnsold(LocalDateTime completedAt) {
+        markUnsold(completedAt, 0L);
+    }
+
+    public void markUnsold(LocalDateTime completedAt, long additionalBidCount) {
         if (status != AuctionStatus.OPEN && status != AuctionStatus.BID_ONGOING) {
             throw new IllegalStateException("진행 중인 경매만 유찰 처리할 수 있습니다.");
         }
 
+        addBidCount(additionalBidCount);
         this.status = AuctionStatus.UNSOLD;
         this.completedAt = completedAt;
         this.revision++;
+    }
+
+    private void addBidCount(long additionalBidCount) {
+        if (additionalBidCount < 0) {
+            throw new IllegalArgumentException("추가 입찰 수는 음수일 수 없습니다.");
+        }
+        this.bidCount = Math.addExact(this.bidCount, additionalBidCount);
     }
 }

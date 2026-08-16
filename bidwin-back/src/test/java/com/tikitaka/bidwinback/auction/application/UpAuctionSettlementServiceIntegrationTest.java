@@ -94,11 +94,17 @@ class UpAuctionSettlementServiceIntegrationTest {
         assertThat(findAuctionSnapshot(fixture.auctionId()))
                 .isEqualTo(new AuctionSnapshot(AuctionStatus.COMPLETED, 105_000L));
         assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L);
+        assertThat(findBidCount(fixture.auctionId())).isEqualTo(2L);
         assertThat(findDepositCount(fixture.auctionId())).isEqualTo(2L);
         assertThat(findPoints(openBidderId))
                 .isEqualTo(new Points(2_000_000L - DEPOSIT_AMOUNT, DEPOSIT_AMOUNT));
         assertThat(findPoints(sealedBidderId))
                 .isEqualTo(new Points(2_000_000L - DEPOSIT_AMOUNT, DEPOSIT_AMOUNT));
+
+        UpAuctionSettlementResult second = settlementService.settle(fixture.auctionId());
+
+        assertThat(second).isEqualTo(result);
+        assertThat(findBidCount(fixture.auctionId())).isEqualTo(2L);
     }
 
     @Test
@@ -112,6 +118,7 @@ class UpAuctionSettlementServiceIntegrationTest {
         assertThat(first.status()).isEqualTo(AuctionStatus.UNSOLD);
         assertThat(second).isEqualTo(first);
         assertThat(findTradeCount(fixture.auctionId())).isZero();
+        assertThat(findBidCount(fixture.auctionId())).isZero();
         assertThat(findAuctionSnapshot(fixture.auctionId()).status())
                 .isEqualTo(AuctionStatus.UNSOLD);
     }
@@ -229,6 +236,19 @@ class UpAuctionSettlementServiceIntegrationTest {
 
     private long findTradeCount(Long auctionId) {
         return count("auction_trade", auctionId);
+    }
+
+    private long findBidCount(Long auctionId) {
+        return executeInTransaction(entityManager -> {
+            Number bidCount = (Number) entityManager.createNativeQuery("""
+                            SELECT bid_count
+                            FROM auction
+                            WHERE id = :auctionId
+                            """)
+                    .setParameter("auctionId", auctionId)
+                    .getSingleResult();
+            return bidCount.longValue();
+        });
     }
 
     private long findDepositCount(Long auctionId) {

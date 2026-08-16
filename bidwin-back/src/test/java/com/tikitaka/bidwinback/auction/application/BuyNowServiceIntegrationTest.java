@@ -222,6 +222,7 @@ class BuyNowServiceIntegrationTest {
             assertThat(trade.getPurchasedAt()).isEqualTo(auction.getCompletedAt());
             assertThat(result.purchasedAt()).isEqualTo(auction.getCompletedAt());
             assertThat(trade.getFinalPrice()).isEqualTo(90_000L);
+            assertThat(auction.getCurrentPrice()).isEqualTo(90_000L);
             String bidStatus = (String) entityManager.createNativeQuery("""
                             SELECT status
                             FROM bid
@@ -298,7 +299,12 @@ class BuyNowServiceIntegrationTest {
         LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
 
         // when
-        int completed = completeForBuyNow(fixture.auctionId(), buyerId, purchasedAt);
+        int completed = completeForBuyNow(
+                fixture.auctionId(),
+                buyerId,
+                BUY_NOW_PRICE,
+                purchasedAt
+        );
 
         // then
         assertThat(completed).isZero();
@@ -315,7 +321,12 @@ class BuyNowServiceIntegrationTest {
         LocalDateTime purchasedAt = auctionRepository.currentDatabaseTime();
 
         // when
-        int completed = completeForBuyNow(fixture.auctionId(), buyerId, purchasedAt);
+        int completed = completeForBuyNow(
+                fixture.auctionId(),
+                buyerId,
+                100_000L,
+                purchasedAt
+        );
 
         // then
         assertThat(completed).isOne();
@@ -448,6 +459,8 @@ class BuyNowServiceIntegrationTest {
             assertThat(findAuctionStatus(entityManager, auctionId))
                     .isEqualTo(AuctionStatus.COMPLETED.name());
             assertThat(findAuctionRevision(entityManager, auctionId)).isEqualTo(1L);
+            assertThat(findAuctionCurrentPrice(entityManager, auctionId))
+                    .isEqualTo(BUY_NOW_PRICE);
             assertThat(countRows(entityManager,
                     "SELECT COUNT(*) FROM auction_trade WHERE auction_id = :id", auctionId))
                     .isEqualTo(1L);
@@ -702,12 +715,14 @@ class BuyNowServiceIntegrationTest {
     private int completeForBuyNow(
             Long auctionId,
             Long buyerId,
+            long finalPrice,
             LocalDateTime purchasedAt
     ) {
         Integer completed = new TransactionTemplate(transactionManager).execute(
                 status -> auctionRepository.completeForBuyNow(
                         auctionId,
                         buyerId,
+                        finalPrice,
                         purchasedAt
                 )
         );
@@ -744,6 +759,17 @@ class BuyNowServiceIntegrationTest {
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
         return bidCount.longValue();
+    }
+
+    private long findAuctionCurrentPrice(EntityManager entityManager, Long auctionId) {
+        Number currentPrice = (Number) entityManager.createNativeQuery("""
+                        SELECT current_price
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return currentPrice.longValue();
     }
                                                                    
     private String findAuctionStatus(Long auctionId) {
