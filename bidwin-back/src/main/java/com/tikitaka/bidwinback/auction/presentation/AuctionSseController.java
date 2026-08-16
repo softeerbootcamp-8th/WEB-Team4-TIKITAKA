@@ -8,6 +8,14 @@ import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
 import com.tikitaka.bidwinback.global.sse.SseHub;
 import com.tikitaka.bidwinback.global.sse.SseMessage;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -34,17 +42,29 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auctions")
+@Tag(name = "경매 실시간", description = "경매 상태와 입찰 내역 SSE 구독")
 public class AuctionSseController {
 
     private final AuctionLiveStateCache stateCache;
     private final AuctionBidHistoryCache bidHistoryCache;
     private final SseHub sseHub;
 
+    @Operation(
+            summary = "경매 상세 실시간 구독",
+            description = "연결 직후 `auction-state`를 보내며, 상향 경매는 `bid-history-snapshot`도 보냅니다. 이후 상태 변경과 공개 입찰을 `auction-state`, `bid-created` 이벤트로 전달합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "SSE 연결 성공", content = @Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE)),
+            @ApiResponse(responseCode = "400", description = "잘못된 경매 ID", content = @Content),
+            @ApiResponse(responseCode = "404", description = "경매를 찾을 수 없음", content = @Content),
+            @ApiResponse(responseCode = "503", description = "SSE 연결 한도 초과", content = @Content)
+    })
     @GetMapping(
             value = "/{auctionId}/events",
             produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
     public ResponseEntity<SseEmitter> subscribeAuction(
+            @Parameter(description = "경매 ID", example = "1")
             @PathVariable @Positive long auctionId
     ) {
         SseEmitter emitter = sseHub.subscribe(
@@ -54,11 +74,25 @@ public class AuctionSseController {
         return streamResponse(emitter);
     }
 
+    @Operation(
+            summary = "경매 목록 실시간 구독",
+            description = "요청한 경매들의 현재 상태를 `auction-state` 이벤트로 먼저 보내고, 이후 변경 상태를 같은 이벤트로 전달합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "SSE 연결 성공", content = @Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE)),
+            @ApiResponse(responseCode = "400", description = "경매 ID 누락 또는 잘못된 값", content = @Content),
+            @ApiResponse(responseCode = "404", description = "경매를 찾을 수 없음", content = @Content),
+            @ApiResponse(responseCode = "503", description = "SSE 연결 한도 초과", content = @Content)
+    })
     @GetMapping(
             value = "/events",
             produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
     public ResponseEntity<SseEmitter> subscribeAuctionList(
+            @Parameter(
+                    description = "구독할 경매 ID 목록. `auctionIds=1&auctionIds=2` 형식으로 전달",
+                    array = @ArraySchema(schema = @Schema(type = "integer", format = "int64", example = "1"))
+            )
             @RequestParam List<@NotNull @Positive Long> auctionIds
     ) {
         // 채널은 Set으로 정규화되지만 snapshot 공급자는 원본을 그대로 조회하므로,

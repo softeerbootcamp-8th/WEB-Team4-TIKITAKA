@@ -146,6 +146,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     @Query(value = """
             UPDATE auction
             SET status = 'COMPLETED',
+                current_price = :finalPrice,
                 completed_at = :completedAt,
                 bid_count = bid_count + 1,
                 revision = revision + 1,
@@ -163,6 +164,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     int completeForBuyNow(
             @Param("auctionId") Long auctionId,
             @Param("buyerId") Long buyerId,
+            @Param("finalPrice") long finalPrice,
             @Param("completedAt") LocalDateTime completedAt
     );
 

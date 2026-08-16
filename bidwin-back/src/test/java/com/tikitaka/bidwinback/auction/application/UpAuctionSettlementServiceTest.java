@@ -80,6 +80,7 @@ class UpAuctionSettlementServiceTest {
                 .thenReturn(Optional.of(openBid));
         when(sealedBidRepository.findWinnerByAuctionId(AUCTION_ID))
                 .thenReturn(Optional.of(sealedBid));
+        when(sealedBidRepository.countByAuctionId(AUCTION_ID)).thenReturn(1L);
         when(openBid.getBidder()).thenReturn(openBidder);
         when(openBid.getPrice()).thenReturn(200_000L);
         when(sealedBid.getBidder()).thenReturn(sealedBidder);
@@ -100,7 +101,8 @@ class UpAuctionSettlementServiceTest {
                 () -> assertThat(result.winnerId()).isEqualTo(7L),
                 () -> assertThat(result.finalPrice()).isEqualTo(230_000L)
         );
-        verify(auction).complete(230_000L, ENDED_AT);
+        verify(auction).complete(230_000L, ENDED_AT, 1L);
+        verify(sealedBidRepository).countByAuctionId(AUCTION_ID);
     }
 
     @Test
@@ -110,11 +112,13 @@ class UpAuctionSettlementServiceTest {
                 .thenReturn(Optional.empty());
         when(sealedBidRepository.findWinnerByAuctionId(AUCTION_ID))
                 .thenReturn(Optional.empty());
+        when(sealedBidRepository.countByAuctionId(AUCTION_ID)).thenReturn(0L);
 
         UpAuctionSettlementResult result = settlementService.settle(AUCTION_ID);
 
         assertThat(result.status()).isEqualTo(AuctionStatus.UNSOLD);
-        verify(auction).markUnsold(ENDED_AT);
+        verify(auction).markUnsold(ENDED_AT, 0L);
+        verify(sealedBidRepository).countByAuctionId(AUCTION_ID);
         verifyNoInteractions(auctionTradeRepository);
     }
 

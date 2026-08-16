@@ -1,11 +1,11 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 컨트롤러가 쿼리 파라미터를 다듬어 넘기는 내부 전달용 객체.
@@ -16,14 +16,10 @@ public record AuctionListQuery(
         AuctionType auctionType,
         AuctionSort sort,
         String keyword,
-        StatusFilter status,
-        List<AuctionCategory> categories,
+        AuctionListStatusFilter status,
+        AuctionCategory category,
         int page,
         int size,
         LocalDateTime asOf
 ) {
-    public enum StatusFilter {
-        ACTIVE,
-        ENDED
-    }
 }
