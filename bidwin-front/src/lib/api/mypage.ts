@@ -1,4 +1,4 @@
-import { deleteJson, getJson, patchJson } from './client'
+import { deleteJson, getJson, patchJson, postJson } from './client'
 import type { ApiResult } from './client'
 import type { AuctionStatus, AuctionType } from './auctions'
 
@@ -208,4 +208,11 @@ export function requestProfileImageUpdate(
 
 export function requestProfileImageReset(): Promise<ApiResult<ProfileImageUpdateResponse>> {
   return deleteJson<ProfileImageUpdateResponse>(`${MYPAGE_API_PATH}/profile-image`)
+}
+
+export function requestDepositCharge(amount: number): Promise<ApiResult<DepositAccount>> {
+  return postJson<DepositAccount, { amount: number }>(
+    `${MYPAGE_API_PATH}/points/charge`,
+    { amount },
+  )
 }

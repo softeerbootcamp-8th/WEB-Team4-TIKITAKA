@@ -92,6 +92,16 @@ public enum ErrorCode {
             "MEMBER_410_2",
             "이메일 인증 토큰이 만료되었습니다."
     ),
+    INVALID_POINT_CHARGE_AMOUNT(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_8",
+            "충전 금액은 1,000원 이상 1,000원 단위로 입력해야 합니다."
+    ),
+    POINT_CHARGE_AMOUNT_EXCEEDED(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_9",
+            "충전 금액은 1회 최대 1억 원까지 가능합니다."
+    ),
     DUPLICATE_EMAIL(
             HttpStatus.CONFLICT,
             "MEMBER_409_1",

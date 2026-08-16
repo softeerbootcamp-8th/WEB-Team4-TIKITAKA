@@ -8,8 +8,11 @@ import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.presentation.dto.request.NicknameUpdateRequest;
 import com.tikitaka.bidwinback.member.presentation.dto.request.PasswordUpdateRequest;
+import com.tikitaka.bidwinback.member.presentation.dto.request.PointChargeRequest;
+import com.tikitaka.bidwinback.member.presentation.dto.response.DepositResponse;
 import com.tikitaka.bidwinback.member.presentation.dto.response.NicknameUpdateResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -18,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -81,5 +85,16 @@ public class MyPageAccountUpdateController {
         }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @PostMapping("/points/charge")
+    public ResponseEntity<ApiResponse<DepositResponse>> chargePoint(
+            @Login AuthMember authMember,
+            @Valid @RequestBody PointChargeRequest request
+    ) {
+        Member member = memberService.chargePoint(authMember.memberId(), request.amount());
+        return ResponseEntity.ok(ApiResponse.success(
+                new DepositResponse(member.getTotalPoint(), member.getLockedPoint())
+        ));
     }
 }

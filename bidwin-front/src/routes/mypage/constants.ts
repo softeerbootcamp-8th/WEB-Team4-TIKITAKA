@@ -88,11 +88,30 @@ export const PROFILE_TEXT = {
 export const DEPOSIT_TEXT = {
   title: '보증금',
   balanceLabel: '잔액',
-  inUseLabel: '사용 중',
+  inUseLabel: '보증금으로 사용 중',
   availableLabel: '사용 가능',
-  /* 입출금 버튼을 두지 않으므로, 금액이 어떻게 오가는지는 문구로 설명한다. */
   notice: '입찰할 때 보증금이 자동으로 잡히고, 거래가 끝나면 사용 가능 금액으로 돌아와요.',
   history: '보증금 내역',
+} as const
+
+/* 실제 결제 연동 전, 테스트를 위해 잔액을 바로 채워주는 충전 기능. */
+export const DEPOSIT_CHARGE_TEXT = {
+  action: '충전하기',
+  modalTitle: '보증금 충전',
+  modalDescription: '실제 결제 없이 테스트용으로 잔액을 채워요.',
+  presetLabel: '자주 찾는 금액',
+  presets: [
+    { value: '1000000', label: '100만원' },
+    { value: '5000000', label: '500만원' },
+    { value: '10000000', label: '1,000만원' },
+  ] as const,
+  amountLabel: '충전 금액',
+  submit: '충전하기',
+  submitting: '충전 중…',
+  done: '포인트를 충전했어요.',
+  amountRequired: '충전할 금액을 입력해주세요.',
+  amountUnitInvalid: '1,000원 단위로 입력해주세요.',
+  amountTooLarge: '한 번에 최대 1억 원까지 충전할 수 있어요.',
 } as const
 
 export const SELLING_SECTION_TEXT = {
