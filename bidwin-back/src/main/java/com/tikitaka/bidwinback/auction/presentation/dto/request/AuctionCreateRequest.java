@@ -45,7 +45,7 @@ public record AuctionCreateRequest(
         @NotNull(message = "거래 방식은 필수입니다.")
         TradeType tradeType,
 
-        // 30/60/180/360(분)만 허용되며, 실제 검증은 서비스에서 수행한다.
+        // 6/30/60/180/360(분)만 허용되며, 실제 검증은 서비스에서 수행한다.
         @NotNull(message = "경매 진행 시간은 필수입니다.")
         Integer durationMinutes,
 

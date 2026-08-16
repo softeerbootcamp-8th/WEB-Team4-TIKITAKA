@@ -48,6 +48,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_U
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_DROP_INTERVAL_EXCEEDS_DURATION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -275,6 +276,22 @@ class AuctionCreateServiceTest {
     }
 
     @Test
+    void 인하_주기가_경매_진행_시간보다_길면_등록할_수_없다() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(
+                        MEMBER_ID,
+                        withDuration(downRequest(150_000L, 10_000L, 10L), 6)
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_DROP_INTERVAL_EXCEEDS_DURATION);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
     void 존재하지_않는_회원은_경매를_등록할_수_없다() {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.empty());
 
@@ -332,6 +349,25 @@ class AuctionCreateServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_DURATION);
         verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 진행_시간이_6분이면_밀봉입찰_데모용_경매로_등록할_수_있다() {
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        List<PendingAuctionImage> pendingImages = ownedPendingImages();
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndUploadIdInForUpdate(
+                MEMBER_ID, DRAFT_ID, UPLOAD_IDS
+        )).thenReturn(pendingImages);
+        stubMatchingMetadata(pendingImages);
+        when(imageObjectKeyGenerator.generatePermanent(anyLong(), any(UUID.class), any()))
+                .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
+
+        auctionCreateService.create(MEMBER_ID, withDuration(upRequest(null), 6));
+
+        ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
+        verify(auctionRepository).save(auctionCaptor.capture());
+        assertThat(auctionCaptor.getValue().getEndedAt()).isEqualTo(DB_NOW.plusMinutes(6));
     }
 
     @Test
