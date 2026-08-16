@@ -54,6 +54,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     @Query(value = """
             UPDATE auction
             SET current_price = :price,
+                current_bidder_id = :bidderId,
                 bid_count = bid_count + 1,
                 status = 'BID_ONGOING',
                 revision = revision + 1,
@@ -90,6 +91,16 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             SET sealed_bid_count = sealed_bid_count + 1,
                 revision = revision + :revisionIncrement,
                 status = 'BID_ONGOING',
+                sealed_top_bidder_id = CASE
+                        WHEN sealed_top_price IS NULL OR :price > sealed_top_price
+                        THEN :bidderId
+                        ELSE sealed_top_bidder_id
+                    END,
+                sealed_top_price = CASE
+                        WHEN sealed_top_price IS NULL OR :price > sealed_top_price
+                        THEN :price
+                        ELSE sealed_top_price
+                    END,
                 last_modified_at = SYSDATE(6)
             WHERE id = :auctionId
               AND auction_type = 'UP'
