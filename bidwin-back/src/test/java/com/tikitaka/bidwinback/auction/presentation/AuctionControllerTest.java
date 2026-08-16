@@ -3,9 +3,9 @@ package com.tikitaka.bidwinback.auction.presentation;
 import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
-import com.tikitaka.bidwinback.auction.application.AuctionListQuery.StatusFilter;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -149,7 +149,7 @@ class AuctionControllerTest {
         // when
         ResultActions result = mockMvc.perform(get("/api/v1/auctions")
                 .param("status", "ACTIVE")
-                .param("category", "HOUSEHOLD", "FOOD"));
+                .param("category", "HOUSEHOLD"));
 
         // then
         result.andExpect(status().isOk());
@@ -157,8 +157,8 @@ class AuctionControllerTest {
                 null,
                 AuctionSort.RECOMMENDED,
                 null,
-                StatusFilter.ACTIVE,
-                List.of(AuctionCategory.HOUSEHOLD, AuctionCategory.FOOD),
+                AuctionListStatusFilter.ACTIVE,
+                AuctionCategory.HOUSEHOLD,
                 1,
                 16,
                 null

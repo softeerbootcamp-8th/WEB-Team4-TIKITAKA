@@ -133,7 +133,7 @@ export interface AuctionListQuery {
   keyword: string
   auctionType: AuctionType | 'ALL'
   status?: AuctionListStatusFilter
-  categories?: AuctionCategory[]
+  category?: AuctionCategory
   sort: AuctionSort
   page: number
   size: number
@@ -188,7 +188,7 @@ export function requestAuctionList(
   if (keyword) params.set('keyword', keyword)
   if (query.auctionType !== 'ALL') params.set('auctionType', query.auctionType)
   if (query.status) params.set('status', query.status)
-  query.categories?.forEach((category) => params.append('category', category))
+  if (query.category) params.set('category', query.category)
   if (query.asOf !== undefined) params.set('asOf', String(query.asOf))
   return getJson<AuctionListResponse>(`${API_PATH}?${params.toString()}`, signal)
 }

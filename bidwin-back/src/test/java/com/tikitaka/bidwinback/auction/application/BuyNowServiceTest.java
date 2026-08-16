@@ -148,6 +148,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         )).thenReturn(1);
         stubPersistedTrade();
@@ -207,6 +208,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         ))
                 .thenReturn(1);
@@ -245,6 +247,7 @@ class BuyNowServiceTest {
         verify(auctionRepository).completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         );
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
@@ -328,7 +331,8 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INSUFFICIENT_DEPOSIT);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
@@ -349,7 +353,8 @@ class BuyNowServiceTest {
         );
 
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
@@ -366,6 +371,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         ))
                 .thenReturn(0);
@@ -416,6 +422,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         )).thenReturn(0);
         when(auctionRepository.currentDatabaseTime()).thenReturn(cutoffReachedAt);
@@ -453,7 +460,8 @@ class BuyNowServiceTest {
                 () -> assertThat(result.purchasedAt()).isEqualTo(PURCHASED_AT)
         );
         verifyNoInteractions(memberRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(
                 auctionDepositRepository,
@@ -481,7 +489,8 @@ class BuyNowServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(IDEMPOTENCY_KEY_REUSED);
         verifyNoInteractions(memberRepository, auctionRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(
                 auctionDepositRepository,
@@ -646,7 +655,7 @@ class BuyNowServiceTest {
 
     private void verifyNoPurchaseMutation() {
         verify(auctionRepository, never())
-                .completeForBuyNow(anyLong(), anyLong(), any());
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());

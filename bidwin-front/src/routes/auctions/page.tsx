@@ -57,8 +57,7 @@ function AuctionListPage() {
     () => toAuctionListFilters(selection, isFilterEnabled),
     [isFilterEnabled, selection],
   )
-  const categoryKey = appliedFilters.categories.join(',')
-  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${categoryKey}\u0000${sort}`
+  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${sort}`
   const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
   const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
@@ -103,7 +102,7 @@ function AuctionListPage() {
       keyword,
       auctionType,
       status: appliedFilters.status,
-      categories: appliedFilters.categories,
+      category: appliedFilters.category,
       sort,
       page,
       size: PAGE_SIZE,
@@ -123,7 +122,7 @@ function AuctionListPage() {
       active = false
       controller.abort()
     }
-  }, [appliedFilters.categories, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
+  }, [appliedFilters.category, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {

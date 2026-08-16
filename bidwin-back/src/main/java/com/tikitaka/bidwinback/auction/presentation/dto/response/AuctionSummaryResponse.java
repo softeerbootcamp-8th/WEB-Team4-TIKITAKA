@@ -14,7 +14,7 @@ public record AuctionSummaryResponse(
         // 업로드된 이미지가 없으면 null. 프론트가 자리표시자를 그린다.
         @Schema(description = "대표 이미지 URL. 이미지가 없으면 null")
         String thumbnailUrl,
-        // 상향: 최고 입찰가(없으면 시작가). 하향: asOf 시점까지 내려간 가격.
+        // 상향: 최고 입찰가(없으면 시작가). 하향: 안내려준다.
         @Schema(description = "목록 기준 시각의 현재가", example = "25000")
         long currentPrice,
         long startPrice,
