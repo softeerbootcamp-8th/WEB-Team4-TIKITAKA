@@ -6,6 +6,7 @@ import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.Login;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.config.OpenApiConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -14,6 +15,9 @@ import com.tikitaka.bidwinback.member.presentation.dto.request.PasswordUpdateReq
 import com.tikitaka.bidwinback.member.presentation.dto.request.PointChargeRequest;
 import com.tikitaka.bidwinback.member.presentation.dto.response.DepositResponse;
 import com.tikitaka.bidwinback.member.presentation.dto.response.NicknameUpdateResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
@@ -29,11 +33,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/mypage")
+@SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
+@Tag(name = "마이페이지", description = "내 정보와 활동 내역 관리")
 public class MyPageAccountUpdateController {
 
     private final MemberService memberService;
     private final AuthenticatedPasswordChangeService passwordChangeService;
 
+    @Operation(summary = "닉네임 변경", description = "중복 여부를 확인한 뒤 로그인 회원의 닉네임을 변경합니다.")
     @PatchMapping("/nickname")
     public ResponseEntity<ApiResponse<NicknameUpdateResponse>> changeNickname(
             @Login AuthMember authMember,
@@ -48,6 +55,7 @@ public class MyPageAccountUpdateController {
         ));
     }
 
+    @Operation(summary = "비밀번호 변경", description = "현재 비밀번호를 확인하고 새 비밀번호로 변경한 뒤 세션의 인증 정보를 갱신합니다.")
     @PatchMapping("/password")
     public ResponseEntity<ApiResponse<Void>> changePassword(
             @Login AuthMember authMember,
@@ -87,6 +95,7 @@ public class MyPageAccountUpdateController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
+    @Operation(summary = "포인트 충전(테스트용)", description = "실제 결제 없이 로그인 회원의 보증금 잔액을 바로 충전합니다.")
     @PostMapping("/points/charge")
     public ResponseEntity<ApiResponse<DepositResponse>> chargePoint(
             @Login AuthMember authMember,
