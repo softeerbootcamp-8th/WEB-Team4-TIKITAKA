@@ -32,7 +32,11 @@ public class ProfileImageUploadController {
             summary = "프로필 이미지 업로드 URL 발급",
             description = "이미지 형식과 5MB 크기 제한을 검증하고 S3 PUT용 Presigned URL을 발급합니다. 업로드 뒤 objectKey로 프로필 이미지를 변경합니다."
     )
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Presigned URL 발급 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "Presigned URL 발급 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/presign")
     public ResponseEntity<ApiResponse<ProfileImagePresignResponse>> presign(
             @Login AuthMember authMember,

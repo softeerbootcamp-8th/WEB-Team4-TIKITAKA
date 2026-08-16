@@ -63,7 +63,11 @@ public class AuthController {
     }
 
     @Operation(summary = "회원가입", description = "이메일 인증이 완료된 사용자 정보를 등록합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "회원가입 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "회원가입 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/signups")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
             @Valid @RequestBody SignUpRequest request
@@ -166,7 +170,11 @@ public class AuthController {
     }
 
     @Operation(summary = "비밀번호 재설정 메일 요청", description = "가입된 이메일이면 비밀번호 재설정 링크 발송을 접수합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "재설정 메일 발송 접수")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "202",
+            description = "재설정 메일 발송 접수",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/password-resets")
     public ResponseEntity<ApiResponse<Void>> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequest request
@@ -187,7 +195,7 @@ public class AuthController {
 
     @Operation(
             summary = "로그아웃",
-            description = "현재 세션을 폐기합니다. 이미 세션이 없어도 성공으로 처리합니다.",
+            description = "현재 인증된 세션을 폐기합니다.",
             security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
     )
     @PostMapping("/logout")

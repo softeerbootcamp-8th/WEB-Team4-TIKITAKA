@@ -34,7 +34,11 @@ public class AuctionImageUploadController {
     private final AuctionImageDraftService draftService;
 
     @Operation(summary = "경매 이미지 draft 발급", description = "경매 등록 전 이미지 업로드 묶음을 식별할 임시 draft ID를 발급합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "draft 발급 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "draft 발급 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/drafts")
     public ResponseEntity<ApiResponse<AuctionImageDraftResponse>> issueDraft() {
         AuctionImageDraftResponse response = new AuctionImageDraftResponse(draftService.issue());
@@ -47,7 +51,11 @@ public class AuctionImageUploadController {
             summary = "경매 이미지 업로드 URL 발급",
             description = "최대 10개 이미지의 형식·크기·SHA-256 체크섬을 검증하고 S3 PUT용 Presigned URL을 발급합니다. 반환된 uploadId를 경매 등록 요청에 사용합니다."
     )
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Presigned URL 발급 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "Presigned URL 발급 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/presign")
     public ResponseEntity<ApiResponse<List<AuctionImagePresignResponse>>> presign(
             @Login AuthMember authMember,

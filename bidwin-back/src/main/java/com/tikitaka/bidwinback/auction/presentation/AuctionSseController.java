@@ -81,6 +81,7 @@ public class AuctionSseController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "SSE 연결 성공", content = @Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE)),
             @ApiResponse(responseCode = "400", description = "경매 ID 누락 또는 잘못된 값", content = @Content),
+            @ApiResponse(responseCode = "404", description = "경매를 찾을 수 없음", content = @Content),
             @ApiResponse(responseCode = "503", description = "SSE 연결 한도 초과", content = @Content)
     })
     @GetMapping(

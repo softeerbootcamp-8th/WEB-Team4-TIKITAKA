@@ -39,7 +39,11 @@ public class AuctionBidController {
             description = "현재가·호가 단위·보증금과 경매 상태를 검증한 뒤 입찰을 등록합니다.",
             security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
     )
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "입찰 등록 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "입찰 등록 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/up/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidResponse>> bid(
             @Login AuthMember authMember,
@@ -57,7 +61,10 @@ public class AuctionBidController {
                 .body(ApiResponse.success(BidResponse.from(result)));
     }
 
-    @Operation(summary = "입찰 내역 조회", description = "경매의 공개 입찰 내역을 최신순으로 조회합니다. 비공개 입찰가는 노출하지 않습니다.")
+    @Operation(
+            summary = "입찰 내역 조회",
+            description = "경매의 입찰 내역을 최신순으로 조회합니다. 비공개 입찰은 진행 중 숨겨지고 경매 종료 후 공개됩니다."
+    )
     @GetMapping("/{auctionId}/bids")
     public ResponseEntity<ApiResponse<BidHistoryResponse>> getBidHistory(
             @Parameter(description = "경매 ID", example = "1")

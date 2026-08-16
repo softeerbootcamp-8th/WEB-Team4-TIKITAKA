@@ -27,7 +27,10 @@ public class TradeConfirmationController {
 
     private final TradeConfirmationService tradeConfirmationService;
 
-    @Operation(summary = "구매자 거래 확인", description = "거래 참여자인 구매자가 수령을 확인합니다. 양측 확인이 끝나면 거래가 완료됩니다.")
+    @Operation(
+            summary = "구매자 거래 확인",
+            description = "구매자가 구매와 결제를 확정하면 판매자 연락처가 공개됩니다. 이후 판매자가 전달을 확인하면 거래가 완료됩니다."
+    )
     @PostMapping("/{tradeId}/buyer-confirmation")
     public ResponseEntity<ApiResponse<TradeConfirmationResponse>> confirmBuyer(
             @Login AuthMember authMember,

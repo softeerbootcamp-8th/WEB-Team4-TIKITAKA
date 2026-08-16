@@ -20,7 +20,6 @@ import com.tikitaka.bidwinback.global.config.OpenApiConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -70,7 +69,11 @@ public class AuctionController {
             description = "임시 업로드 이미지와 경매 조건을 검증한 뒤 경매를 등록합니다.",
             security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
     )
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "경매 등록 완료")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "경매 등록 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping
     public ResponseEntity<ApiResponse<AuctionCreateResponse>> create(
             @Login AuthMember authMember,
@@ -83,7 +86,7 @@ public class AuctionController {
 
     @Operation(
             summary = "경매 목록 조회",
-            description = "경매 방식·상태·카테고리·검색어로 필터링한 목록을 조회합니다. 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
+            description = "경매 방식·검색어로 필터링한 목록을 조회합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
     )
     @GetMapping
     public ResponseEntity<ApiResponse<AuctionListResponse>> getList(
@@ -97,18 +100,15 @@ public class AuctionController {
             @RequestParam(required = false) String sort,
             @Parameter(description = "제목 검색어", example = "의자")
             @RequestParam(required = false) String keyword,
-            @Parameter(description = "진행 상태", example = "ACTIVE", schema = @Schema(allowableValues = {"ACTIVE", "ENDED"}))
+            @Parameter(hidden = true)
             @RequestParam(required = false) String status,
-            @Parameter(
-                    description = "카테고리. 여러 값을 반복해서 전달할 수 있습니다.",
-                    array = @ArraySchema(schema = @Schema(allowableValues = {"HOUSEHOLD", "FOOD", "FURNITURE"}))
-            )
+            @Parameter(hidden = true)
             @RequestParam(required = false) List<String> category,
             @Parameter(description = "페이지 번호. 1부터 시작", example = "1")
             @RequestParam(required = false, defaultValue = "" + FIRST_PAGE) int page,
             @Parameter(description = "페이지 크기. 최대 100", example = "16")
             @RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
-            @Parameter(description = "목록 계산 기준 시각(epoch milliseconds). 첫 응답의 asOf를 재사용", example = "1786860000000")
+            @Parameter(description = "목록 계산 기준 시각(epoch milliseconds). `recommended` 외 정렬에서 첫 응답의 asOf를 재사용", example = "1786860000000")
             @RequestParam(required = false) Long asOf
     ) {
         AuctionListQuery query = new AuctionListQuery(
