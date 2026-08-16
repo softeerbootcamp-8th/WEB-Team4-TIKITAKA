@@ -43,6 +43,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_DURATIO
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_REFERENCE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_DROP_INTERVAL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
@@ -259,7 +260,7 @@ class AuctionCreateServiceTest {
                 .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
 
         var response = auctionCreateService.create(
-                MEMBER_ID, downRequest(150_000L, 10_000L, 30L)
+                MEMBER_ID, downRequest(150_000L, 10_000L, 10L)
         );
 
         ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
@@ -268,7 +269,7 @@ class AuctionCreateServiceTest {
         assertAll(
                 () -> assertThat(downAuction.getMinimumPrice()).isEqualTo(150_000L),
                 () -> assertThat(downAuction.getDropPrice()).isEqualTo(10_000L),
-                () -> assertThat(downAuction.getPriceDropInterval()).isEqualTo(30L),
+                () -> assertThat(downAuction.getPriceDropInterval()).isEqualTo(10L),
                 () -> assertThat(response.auctionId()).isEqualTo(AUCTION_ID)
         );
     }
@@ -378,7 +379,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(200_000L, 10_000L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(200_000L, 10_000L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_MINIMUM_PRICE);
@@ -390,7 +391,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_500L, 10_000L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_500L, 10_000L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
@@ -402,7 +403,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_500L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_500L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
@@ -414,10 +415,23 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, null, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, null, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_INPUT_VALUE);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 허용되지_않은_인하_주기는_등록할_수_없다() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_000L, 30L))
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_DROP_INTERVAL);
         verify(auctionRepository, never()).save(any());
     }
 

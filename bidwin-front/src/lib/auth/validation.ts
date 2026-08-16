@@ -44,6 +44,7 @@ export const AUTH_ERROR_MESSAGE = {
   nameTooLong: `이름은 ${NAME_MAX_LENGTH}자 이하로 입력해주세요.`,
   invalidPhoneNumber: '전화번호 형식이 올바르지 않습니다. 휴대폰 번호를 확인해주세요.',
   invalidBirthDate: `생년월일은 ${BIRTH_DATE_LENGTH}자리(YYYYMMDD)로 정확히 입력해주세요.`,
+  invalidBirthYear: `생년월일이 올바르지 않습니다. ${MIN_BIRTH_YEAR}년부터 오늘까지의 날짜를 입력해주세요.`,
 }
 
 /* 입력값에서 하이픈·공백을 걷어내고 숫자만 남긴다(백엔드는 숫자만 받는다). */
@@ -110,8 +111,11 @@ export function validateBirthDate(birthDate: string) {
     parsed.getMonth() === month - MONTH_INDEX_OFFSET &&
     parsed.getDate() === day
 
-  if (!isRealDate || year < MIN_BIRTH_YEAR || parsed.getTime() > Date.now()) {
-    return AUTH_ERROR_MESSAGE.invalidBirthDate
+  if (!isRealDate) return AUTH_ERROR_MESSAGE.invalidBirthDate
+  /* 형식(8자리 YYYYMMDD)은 맞지만 연도 자체가 비현실적인 경우(1900년 이전·미래)는
+   * 형식 오류와 다른 메시지로 안내해 사용자가 원인을 알 수 있게 한다. */
+  if (year < MIN_BIRTH_YEAR || parsed.getTime() > Date.now()) {
+    return AUTH_ERROR_MESSAGE.invalidBirthYear
   }
   return null
 }
