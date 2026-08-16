@@ -9,14 +9,50 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long> {
+
+    @Modifying
+    @Query("""
+            insert into AuctionTrade
+                (auction, buyer, status, finalPrice, purchasedAt, createdAt, lastModifiedAt)
+            select target,
+                   winner,
+                   :status,
+                   case when target.currentBidderId is not null
+                             and (target.sealedTopBidderId is null
+                                  or coalesce(target.currentPrice, target.startPrice)
+                                     >= target.sealedTopPrice)
+                        then coalesce(target.currentPrice, target.startPrice)
+                        else target.sealedTopPrice
+                   end,
+                   :settledAt,
+                   :settledAt,
+                   :settledAt
+            from Auction target
+            join Member winner
+              on winner.id = case when target.currentBidderId is not null
+                                       and (target.sealedTopBidderId is null
+                                            or coalesce(target.currentPrice, target.startPrice)
+                                               >= target.sealedTopPrice)
+                                  then target.currentBidderId
+                                  else target.sealedTopBidderId
+                             end
+            where target.id in :auctionIds
+            """)
+    int insertWinnerTradesAll(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("status") TradeStatus status,
+            @Param("settledAt") LocalDateTime settledAt
+    );
 
     // 마이페이지 낙찰/구매 내역용. 두 탭이 같은 AuctionTrade를 상태 필터만 다르게 조회한다.
     @EntityGraph(attributePaths = "auction")

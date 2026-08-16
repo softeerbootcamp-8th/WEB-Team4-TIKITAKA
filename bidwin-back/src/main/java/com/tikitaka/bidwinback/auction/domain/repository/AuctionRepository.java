@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionClosingCandidate;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +32,53 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             """, nativeQuery = true)
     Optional<Long> findOneClosingCandidateIdForUpdateSkipLocked(
             @Param("status") String status
+    );
+
+    @Query(value = """
+            SELECT auction.id AS auctionId,
+                   auction.revision AS revision
+            FROM auction FORCE INDEX (idx_auction_status_ended_at)
+            WHERE auction.status = :status
+              AND auction.ended_at <= NOW(6)
+            ORDER BY auction.ended_at, auction.id
+            LIMIT :batchSize
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<AuctionClosingCandidate> findClosingCandidatesForUpdateSkipLocked(
+            @Param("status") String status,
+            @Param("batchSize") int batchSize
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            UPDATE auction FORCE INDEX (PRIMARY)
+            JOIN auction_trade ON auction_trade.auction_id = auction.id
+            SET auction.status = 'COMPLETED',
+                auction.current_price = auction_trade.final_price,
+                auction.completed_at = :settledAt,
+                auction.revision = auction.revision + 1,
+                auction.last_modified_at = :settledAt
+            WHERE auction.id IN (:auctionIds)
+              AND auction.status IN ('OPEN', 'BID_ONGOING')
+            """, nativeQuery = true)
+    int completeAll(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("settledAt") LocalDateTime settledAt
+    );
+
+    @Modifying
+    @Query(value = """
+            UPDATE auction FORCE INDEX (PRIMARY)
+            SET status = 'UNSOLD',
+                completed_at = :settledAt,
+                revision = revision + 1,
+                last_modified_at = :settledAt
+            WHERE id IN (:auctionIds)
+              AND status IN ('OPEN', 'BID_ONGOING')
+            """, nativeQuery = true)
+    int markUnsoldAll(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("settledAt") LocalDateTime settledAt
     );
 
     // 입찰가 캐시(Redis)가 실패한 선점을 되돌릴 때, 커밋된 DB 현재가로 재동기화하기 위해 쓴다.
