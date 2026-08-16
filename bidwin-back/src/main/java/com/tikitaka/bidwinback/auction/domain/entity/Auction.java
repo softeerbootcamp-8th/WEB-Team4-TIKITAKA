@@ -77,6 +77,15 @@ public abstract class Auction extends BaseTimeEntity {
     @Column(name = "current_price")
     private Long currentPrice;
 
+    @Column(name = "current_bidder_id")
+    private Long currentBidderId;
+
+    @Column(name = "sealed_top_price")
+    private Long sealedTopPrice;
+
+    @Column(name = "sealed_top_bidder_id")
+    private Long sealedTopBidderId;
+
     // 진행 중에는 공개 입찰 수를, 밀봉입찰 공개 후에는 공개·밀봉 총입찰 수를 누적한다.
     @Column(name = "bid_count", nullable = false)
     private long bidCount;
