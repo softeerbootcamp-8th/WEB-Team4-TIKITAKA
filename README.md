@@ -9,10 +9,12 @@
 
 <p align="center">
   <a href="#1-프로젝트-소개">프로젝트 소개</a> •
-  <a href="#2-기획">기획</a> •
-  <a href="#3-문서화">문서화</a> •
-  <a href="#4-그라운드-룰">그라운드 룰</a> •
-  <a href="#5-팀원-소개">팀원 소개</a>
+  <a href="#2-시스템-구성도">시스템 구성도</a> •
+  <a href="#3-기술-스택">기술 스택</a> •
+  <a href="#4-서비스-상세-설명">서비스 상세 설명</a> •
+  <a href="#5-문서화">문서화</a> •
+  <a href="#6-그라운드-룰">그라운드 룰</a> •
+  <a href="#7-팀-구성">팀 구성</a>
 </p>
 
 <hr>
@@ -40,8 +42,37 @@
 - 입찰 경쟁을 통해 상품의 가격이 자연스럽게 형성되며, 구매자는 원하는 상품을 확보하는 재미를, 판매자는 더 높은 가격에 판매할 기회를 얻습니다.
 ---
 
-## 2. 기획
-### 2.1 기획 배경
+## 2. 시스템 구성도
+
+### 2.1 시스템 아키텍처
+
+*(추가 예정)*
+
+### 2.2 ERD
+
+![BidWin ERD](docs/images/erd.png)
+
+---
+
+## 3. 기술 스택
+
+| 구분 | 스택 |
+| :---: | --- |
+| **프론트엔드** | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) ![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black) |
+| **백엔드** | ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-6DB33F?style=flat&logo=springboot&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat&logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white) ![Flyway](https://img.shields.io/badge/Flyway-CC0200?style=flat&logo=flyway&logoColor=white) |
+| **인프라** | ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?style=flat&logo=amazons3&logoColor=white) ![Amazon EC2](https://img.shields.io/badge/Amazon%20EC2-FF9900?style=flat&logo=amazonec2&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white) |
+| **협업** | ![Notion](https://img.shields.io/badge/Notion-000000?style=flat&logo=notion&logoColor=white) ![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat&logo=figma&logoColor=white) ![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat&logo=slack&logoColor=white) |
+
+---
+
+## 4. 서비스 상세 설명
+
+<details>
+<summary><b>📖 기획 배경 및 문제 정의 (클릭하여 펼치기)</b></summary>
+
+<br>
+
+### 4.1 기획 배경
 
 > 이사 당일, 아직 사용할 수 있는 매트리스를 결국 버려야 했다.  
 > 조금 더 빠르게 가격을 조정할 수 있었다면 판매할 수 있지 않았을까?
@@ -52,7 +83,7 @@
 
 **BidWin**은 이러한 문제를 해결하기 위해 시간의 흐름과 구매자 간 경쟁을 활용하여 거래 가격을 탐색하는 경매 방식을 도입했습니다.
 
-### 2.2 사용자 페인포인트
+### 4.2 사용자 페인포인트
 
 #### 판매자
 
@@ -69,7 +100,7 @@
 - 가격이 내려가기를 기다리다가 다른 구매자에게 상품을 놓칠 수 있습니다.
 - 구매 의사가 있어도 판매자와 희망 가격이 달라 거래가 지연될 수 있습니다.
 
-### 2.3 문제 정의
+### 4.3 문제 정의
 
 핵심 문제는 판매자가 **가격을 낮출 의향이 있어도**, 구매자가 **거래를 결정할 가격을 빠르게 찾기 어렵다는 점**입니다.
 
@@ -83,7 +114,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 - 판매자의 반복적인 가격 수정과 구매자의 **협상 부담을 줄입니다.**
 - 판매 가능한 중고 물품이 거래되지 못하고 **폐기되는 상황을 줄입니다.**
 
-### 2.4 해결 방법
+### 4.4 해결 방법
 
 | 사용자 문제 | 해결 방법 |
 | --- | --- |
@@ -91,9 +122,12 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 | 상품의 적정 가격을 판단하기 어려움 | **상향 경매**를 통해 구매자 간 경쟁으로 가격을 형성 |
 | 기다리지 않고 거래를 확정하고 싶음 | **즉시 구매**를 통해 판매자가 설정한 가격으로 바로 거래 |
 | 판매 시점을 예측하기 어려움 | 경매 종료 시간을 설정해 거래 기한을 명확하게 제공 |
+
+</details>
+
 ---
 
-## 3. 문서화
+## 5. 문서화
 
 | 문서명 | 상세 설명 | 링크 |
 | :--- | :--- | :---: |
@@ -104,7 +138,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ---
 
-## 4. 그라운드 룰
+## 6. 그라운드 룰
 
 <details>
 <summary><b>🤝 [팀 Ground Rules] 우리 팀의 협업 & 소통 규칙 (클릭하여 펼치기)</b></summary>
@@ -166,7 +200,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ---
 
-## 5. 팀원 소개
+## 7. 팀 구성
 
 <table align="center" width="100%">
   <thead>
