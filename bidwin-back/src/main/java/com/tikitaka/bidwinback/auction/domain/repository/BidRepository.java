@@ -1,7 +1,6 @@
 package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
-import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.BidHistoryRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.MyBidAggregate;
@@ -15,19 +14,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface BidRepository extends JpaRepository<Bid, Long> {
-
-    @Query("""
-            select bid
-            from Bid bid
-            where bid.auction.id = :auctionId
-              and bid.status = :status
-            order by bid.price desc, bid.createdAt asc, bid.id asc
-            limit 1
-            """)
-    Optional<Bid> findWinnerByAuctionIdAndStatus(
-            @Param("auctionId") long auctionId,
-            @Param("status") BidStatus status
-    );
 
     @Query("""
             select max(bid.price)
