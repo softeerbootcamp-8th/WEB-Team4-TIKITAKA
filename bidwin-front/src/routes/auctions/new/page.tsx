@@ -68,9 +68,8 @@ function AuctionRegisterPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
   const [contact, setContact] = useState('')
-  const [durationMinutes, setDurationMinutes] = useState<AuctionDurationMinutes>(
-    AUCTION_DURATION_OPTIONS[0].value,
-  )
+  /* 배열 순서(6분이 데모용으로 맨 앞에 옴)와 무관하게 기본값은 30분으로 고정한다. */
+  const [durationMinutes, setDurationMinutes] = useState<AuctionDurationMinutes>('30')
   const [auctionType, setAuctionType] = useState<AuctionType>('DOWN')
   const [tradeType, setTradeType] = useState<TradeType>(TRADE_TYPE_OPTIONS[0].value)
   const [startPrice, setStartPrice] = useState('')
