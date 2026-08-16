@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,7 +68,6 @@ class AuctionListServiceTest {
     void projection을_UP_DOWN_경매_응답으로_매핑하고_썸네일_URL을_변환한다() {
         AuctionListRow up = upRow(1L, "up-thumbnail", 260_000L, 4L);
         AuctionListRow down = downRow(2L, "down-thumbnail", 170_000L);
-        when(auctionListQueryRepository.count(any())).thenReturn(2L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(16)))
                 .thenReturn(List.of(up, down));
         when(imageUrlResolver.resolve("up-thumbnail")).thenReturn("https://cdn/up.jpg");
@@ -100,58 +100,57 @@ class AuctionListServiceTest {
 
     @Test
     void DB_서버시각과_명시한_asOf를_응답과_조회조건에_사용한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(0L);
-
         AuctionListResponse response = auctionListService.getList(
                 query(null, AuctionSort.LATEST, null, 1, 16, AS_OF)
         );
 
         assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
         assertThat(response.asOf()).isEqualTo(toEpochMilli(AS_OF));
-        verify(auctionListQueryRepository).count(
-                eq(new AuctionListSearchCondition(null, AuctionSort.LATEST, null, AS_OF))
+        verify(auctionListQueryRepository).findPage(
+                eq(new AuctionListSearchCondition(null, AuctionSort.LATEST, null, AS_OF)),
+                eq(0L),
+                eq(16)
         );
+        verify(auctionListQueryRepository, never()).count(any());
     }
 
     @Test
     void asOf가_없으면_DB_서버시각을_목록_스냅샷으로_사용한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(0L);
-
         AuctionListResponse response = auctionListService.getList(
                 query(null, AuctionSort.LATEST, null, 1, 16, null)
         );
 
         assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
         assertThat(response.asOf()).isEqualTo(toEpochMilli(SERVER_TIME));
-        verify(auctionListQueryRepository).count(
-                eq(new AuctionListSearchCondition(null, AuctionSort.LATEST, null, SERVER_TIME))
+        verify(auctionListQueryRepository).findPage(
+                eq(new AuctionListSearchCondition(null, AuctionSort.LATEST, null, SERVER_TIME)),
+                eq(0L),
+                eq(16)
         );
     }
 
     @Test
     void 추천순은_요청_asOf를_무시하고_DB_현재시각을_사용한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(0L);
-
         AuctionListResponse response = auctionListService.getList(
                 query(null, AuctionSort.RECOMMENDED, null, 1, 16, AS_OF)
         );
 
         assertThat(response.serverTime()).isEqualTo(toEpochMilli(SERVER_TIME));
         assertThat(response.asOf()).isEqualTo(toEpochMilli(SERVER_TIME));
-        verify(auctionListQueryRepository).count(
+        verify(auctionListQueryRepository).findPage(
                 eq(new AuctionListSearchCondition(
                         null,
                         AuctionSort.RECOMMENDED,
                         null,
                         SERVER_TIME
-                ))
+                )),
+                eq(0L),
+                eq(16)
         );
     }
 
     @Test
     void 상태와_카테고리를_저장소_조회조건에_전달한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(0L);
-
         auctionListService.getList(new AuctionListQuery(
                 AuctionType.DOWN,
                 AuctionSort.LATEST,
@@ -163,34 +162,38 @@ class AuctionListServiceTest {
                 AS_OF
         ));
 
-        verify(auctionListQueryRepository).count(new AuctionListSearchCondition(
-                AuctionType.DOWN,
-                AuctionSort.LATEST,
-                "의자",
-                AuctionListStatusFilter.ENDED,
-                AuctionCategory.FURNITURE,
-                AS_OF
-        ));
+        verify(auctionListQueryRepository).findPage(
+                eq(new AuctionListSearchCondition(
+                        AuctionType.DOWN,
+                        AuctionSort.LATEST,
+                        "의자",
+                        AuctionListStatusFilter.ENDED,
+                        AuctionCategory.FURNITURE,
+                        AS_OF
+                )),
+                eq(0L),
+                eq(16)
+        );
     }
 
     @Test
-    void 전체_개수로_totalPages를_계산하고_페이지_크기만큼_조회한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(3L);
-        when(auctionListQueryRepository.findPage(any(), eq(0L), eq(2)))
+    void 목록_조회_상한은_100페이지와_페이지_크기의_곱으로_계산한다() {
+        when(auctionListQueryRepository.findPage(any(), eq(0L), eq(16)))
                 .thenReturn(List.of(upRow(1L, null, 100_000L, 0L), upRow(2L, null, 200_000L, 1L)));
 
         AuctionListResponse response = auctionListService.getList(
-                query(null, AuctionSort.LATEST, null, 1, 2)
+                query(null, AuctionSort.LATEST, null, 1, 16)
         );
 
         assertThat(response.items()).hasSize(2);
-        assertThat(response.totalCount()).isEqualTo(3L);
-        assertThat(response.totalPages()).isEqualTo(2);
+        assertThat(response.totalCount()).isEqualTo(1_600L);
+        assertThat(response.totalPages()).isEqualTo(100);
         assertThat(response.page()).isEqualTo(1);
+        verify(auctionListQueryRepository, never()).count(any());
     }
 
     @Test
-    void 가격순은_전체_집계_페이지_쿼리_대신_top_k_조회를_사용한다() {
+    void 가격순은_정규화한_최대_페이지_범위만_top_k_조회에_전달한다() {
         // given
         AuctionListSearchCondition condition = new AuctionListSearchCondition(
                 null,
@@ -198,21 +201,20 @@ class AuctionListServiceTest {
                 null,
                 AS_OF
         );
-        when(auctionListQueryRepository.count(condition)).thenReturn(2L);
-        when(auctionPricePageQuery.findPage(condition, 1, 16, 2L))
+        when(auctionPricePageQuery.findPage(condition, 100, 100, 10_000L))
                 .thenReturn(List.of(upRow(1L, null, 100_000L, 0L)));
 
         // when
-        auctionListService.getList(query(null, AuctionSort.PRICE_LOW, null, 1, 16));
+        auctionListService.getList(query(null, AuctionSort.PRICE_LOW, null, 101, 101));
 
         // then
-        verify(auctionPricePageQuery).findPage(condition, 1, 16, 2L);
+        verify(auctionPricePageQuery).findPage(condition, 100, 100, 10_000L);
         verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
+        verify(auctionListQueryRepository, never()).count(any());
     }
 
     @Test
     void page가_1보다_작으면_첫_페이지와_offset_0으로_보정한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(5L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(2)))
                 .thenReturn(List.of(upRow(1L, null, 100_000L, 0L), upRow(2L, null, 200_000L, 1L)));
 
@@ -225,23 +227,26 @@ class AuctionListServiceTest {
     }
 
     @Test
-    void page가_마지막_페이지를_초과하면_마지막_페이지와_해당_offset으로_보정한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(5L);
-        when(auctionListQueryRepository.findPage(any(), eq(4L), eq(2)))
-                .thenReturn(List.of(upRow(5L, null, 100_000L, 0L)));
-
-        AuctionListResponse response = auctionListService.getList(
-                query(null, AuctionSort.LATEST, null, 99, 2)
+    void page가_100과_초과_page면_100페이지와_최대_offset으로_보정한다() {
+        AuctionListResponse page100 = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 100, 100)
+        );
+        AuctionListResponse page101 = auctionListService.getList(
+                query(null, AuctionSort.LATEST, null, 101, 100)
         );
 
-        assertThat(response.page()).isEqualTo(3);
-        assertThat(response.totalPages()).isEqualTo(3);
-        verify(auctionListQueryRepository).findPage(any(), eq(4L), eq(2));
+        assertThat(page100.page()).isEqualTo(100);
+        assertThat(page101.page()).isEqualTo(100);
+        assertThat(page100.totalPages()).isEqualTo(100);
+        assertThat(page101.totalPages()).isEqualTo(100);
+        assertThat(page100.totalCount()).isEqualTo(10_000L);
+        assertThat(page101.totalCount()).isEqualTo(10_000L);
+        verify(auctionListQueryRepository, times(2))
+                .findPage(any(), eq(9_900L), eq(100));
     }
 
     @Test
     void size가_0이하면_기본_크기_16을_사용한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(17L);
         when(auctionListQueryRepository.findPage(any(), eq(0L), eq(16)))
                 .thenReturn(List.of(upRow(1L, null, 100_000L, 0L)));
 
@@ -249,37 +254,37 @@ class AuctionListServiceTest {
                 query(null, AuctionSort.LATEST, null, 1, 0)
         );
 
-        assertThat(response.totalPages()).isEqualTo(2);
+        assertThat(response.totalCount()).isEqualTo(1_600L);
+        assertThat(response.totalPages()).isEqualTo(100);
         verify(auctionListQueryRepository).findPage(any(), eq(0L), eq(16));
     }
 
     @Test
     void size가_100보다_크면_100으로_제한한다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(201L);
         when(auctionListQueryRepository.findPage(any(), eq(100L), eq(100)))
                 .thenReturn(List.of(upRow(101L, null, 100_000L, 0L)));
 
         AuctionListResponse response = auctionListService.getList(
-                query(null, AuctionSort.LATEST, null, 2, 200)
+                query(null, AuctionSort.LATEST, null, 2, 101)
         );
 
-        assertThat(response.totalPages()).isEqualTo(3);
+        assertThat(response.totalCount()).isEqualTo(10_000L);
+        assertThat(response.totalPages()).isEqualTo(100);
         assertThat(response.page()).isEqualTo(2);
         verify(auctionListQueryRepository).findPage(any(), eq(100L), eq(100));
     }
 
     @Test
-    void 결과가_없으면_페이지_조회는_호출하지_않는다() {
-        when(auctionListQueryRepository.count(any())).thenReturn(0L);
-
+    void 결과가_없어도_상한_페이지_목록을_조회한다() {
         AuctionListResponse response = auctionListService.getList(
                 query(null, AuctionSort.LATEST, null, 1, 16)
         );
 
         assertThat(response.items()).isEmpty();
-        assertThat(response.totalCount()).isZero();
-        assertThat(response.totalPages()).isEqualTo(1);
-        verify(auctionListQueryRepository, never()).findPage(any(), anyLong(), anyInt());
+        assertThat(response.totalCount()).isEqualTo(1_600L);
+        assertThat(response.totalPages()).isEqualTo(100);
+        verify(auctionListQueryRepository).findPage(any(), eq(0L), eq(16));
+        verify(auctionListQueryRepository, never()).count(any());
     }
 
     private AuctionListQuery query(AuctionType type, AuctionSort sort, String keyword, int page, int size) {
