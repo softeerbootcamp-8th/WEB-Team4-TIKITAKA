@@ -629,6 +629,53 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void ACTIVE_스냅샷은_asOf_이후_완료된_DOWN의_저장_낙찰가를_표시한다() {
+        Member seller = persistMember("active-snapshot-completed-down-seller");
+        DownAuction completedAfterAsOf = persistDown(
+                seller,
+                "스냅샷 이후 완료된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(
+                completedAfterAsOf,
+                AS_OF.minusMinutes(10),
+                AS_OF.minusMinutes(10)
+        );
+        setCompletedAt(completedAfterAsOf, AS_OF.plusMinutes(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 60_000L)
+                .setParameter("auctionId", completedAfterAsOf.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(AuctionSort.LATEST, AuctionSort.DEADLINE)) {
+            List<AuctionListRow> rows = findPage(
+                    condition(AuctionType.DOWN, sort),
+                    0,
+                    10
+            );
+
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .singleElement()
+                    .satisfies(row -> {
+                        assertThat(row.auctionId()).isEqualTo(completedAfterAsOf.getId());
+                        assertThat(row.status()).isEqualTo(AuctionStatus.COMPLETED);
+                        // asOf 기준 계산가는 80,000원이지만 완료 후 저장된 낙찰가를 표시한다.
+                        assertThat(row.currentPrice()).isEqualTo(60_000L);
+                    });
+        }
+    }
+
+    @Test
     void 추천순과_가격순은_입찰_집계와_경매_유형별_현재가로_정렬한다() {
         Member seller = persistMember("aggregate-sort-seller");
         Member bidder = persistMember("aggregate-sort-bidder");
