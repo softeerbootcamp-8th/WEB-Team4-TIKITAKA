@@ -16,7 +16,13 @@ import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResp
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.Login;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.config.OpenApiConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,6 +42,7 @@ import java.time.ZoneId;
 @RestController
 @RequestMapping("/api/v1/auctions")
 @RequiredArgsConstructor
+@Tag(name = "경매", description = "경매 등록과 목록·상세 조회")
 public class AuctionController {
 
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
@@ -46,14 +53,26 @@ public class AuctionController {
     private final AuctionCreateService auctionCreateService;
     private final AuctionListService auctionListService;
 
+    @Operation(summary = "경매 상세 조회", description = "경매 방식에 맞는 가격 정보와 판매자·이미지 정보를 조회합니다.")
     @GetMapping("/{auctionId}")
     public ResponseEntity<ApiResponse<AuctionDetailResponse>> getDetail(
+            @Parameter(description = "경매 ID", example = "1")
             @PathVariable long auctionId
     ) {
         AuctionDetailResponse response = auctionDetailService.getDetail(auctionId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @Operation(
+            summary = "경매 등록",
+            description = "임시 업로드 이미지와 경매 조건을 검증한 뒤 경매를 등록합니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "경매 등록 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping
     public ResponseEntity<ApiResponse<AuctionCreateResponse>> create(
             @Login AuthMember authMember,
@@ -64,15 +83,31 @@ public class AuctionController {
                 .body(ApiResponse.success(response));
     }
 
+    @Operation(
+            summary = "경매 목록 조회",
+            description = "경매 방식·검색어로 필터링한 목록을 조회합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<AuctionListResponse>> getList(
+            @Parameter(description = "경매 방식", example = "UP", schema = @Schema(allowableValues = {"UP", "DOWN"}))
             @RequestParam(required = false) String auctionType,
+            @Parameter(
+                    description = "정렬 기준. 기본값은 recommended",
+                    example = "recommended",
+                    schema = @Schema(allowableValues = {"recommended", "deadline", "latest", "priceLow", "priceHigh"})
+            )
             @RequestParam(required = false) String sort,
+            @Parameter(description = "제목 검색어", example = "의자")
             @RequestParam(required = false) String keyword,
+            @Parameter(hidden = true)
             @RequestParam(required = false) String status,
+            @Parameter(hidden = true)
             @RequestParam(required = false) String category,
+            @Parameter(description = "페이지 번호. 1부터 시작", example = "1")
             @RequestParam(required = false, defaultValue = "" + FIRST_PAGE) int page,
+            @Parameter(description = "페이지 크기. 최대 100", example = "16")
             @RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
+            @Parameter(description = "목록 계산 기준 시각(epoch milliseconds). `recommended` 외 정렬에서 첫 응답의 asOf를 재사용", example = "1786860000000")
             @RequestParam(required = false) Long asOf
     ) {
         AuctionListQuery query = new AuctionListQuery(
