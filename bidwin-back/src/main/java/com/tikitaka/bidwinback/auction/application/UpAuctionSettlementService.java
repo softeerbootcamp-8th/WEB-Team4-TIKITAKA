@@ -8,7 +8,6 @@ import com.tikitaka.bidwinback.auction.domain.entity.SealedBid;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
-import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
 import com.tikitaka.bidwinback.auction.domain.exception.SettlementException;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
@@ -23,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import static com.tikitaka.bidwinback.global.exception.ErrorCode.AUCTION_NOT_FOUND;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SETTLEMENT_NOT_AVAILABLE;
 
@@ -37,12 +35,10 @@ public class UpAuctionSettlementService {
     private final AuctionTradeRepository auctionTradeRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    // 종료 감지 스케줄러가 경매 ID 단위로 호출하는 낙찰 처리 진입점이다.
+    // 마감 배치가 이미 선점한 경매는 재조회로 중복 잠금하지 않는다.
     @Transactional
-    public UpAuctionSettlementResult settle(Long auctionId) {
-        // 마감 직전에 시작된 입찰의 커밋을 기다리고, 동일 경매의 중복 정산을 직렬화한다.
-        Auction auction = auctionRepository.findByIdForUpdate(auctionId)
-                .orElseThrow(() -> new AuctionException(AUCTION_NOT_FOUND));
+    public UpAuctionSettlementResult settle(Auction auction) {
+        Long auctionId = auction.getId();
         if (!(auction instanceof UpAuction)) {
             throw new SettlementException(NOT_UP_AUCTION);
         }

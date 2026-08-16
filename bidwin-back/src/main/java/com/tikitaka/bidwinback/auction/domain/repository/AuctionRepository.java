@@ -2,7 +2,6 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,7 +10,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -20,18 +18,20 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // ended_at 인덱스는 완료된 과거 경매까지 먼저 훑으므로 상태 인덱스로 대상 범위를 제한한다.
+    // 상태를 동등 조건으로 고정해 (status, ended_at) 인덱스 정렬을 그대로 사용한다.
     // 여러 서버가 같은 후보를 기다리지 않도록 잠긴 행을 건너뛰며 한 건만 선점한다.
     @Query(value = """
             SELECT id
             FROM auction FORCE INDEX (idx_auction_status_ended_at)
-            WHERE status IN ('OPEN', 'BID_ONGOING')
+            WHERE status = :status
               AND ended_at <= NOW(6)
             ORDER BY ended_at, id
             LIMIT 1
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    Optional<Long> findOneClosingCandidateIdForUpdateSkipLocked();
+    Optional<Long> findOneClosingCandidateIdForUpdateSkipLocked(
+            @Param("status") String status
+    );
 
     // 입찰가 캐시(Redis)가 실패한 선점을 되돌릴 때, 커밋된 DB 현재가로 재동기화하기 위해 쓴다.
     // current_price가 없는 기존 경매는 조건부 UPDATE와 동일한 기준(Bid 최고가, 없으면 시작가)으로 보정한다.
@@ -108,16 +108,6 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("expectedStatus") String expectedStatus,
             @Param("revisionIncrement") int revisionIncrement
     );
-
-    // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
-    // 정산에서 사용하지 않는 판매자까지 잠그지 않도록 fetch join은 하지 않는다.
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select auction
-            from Auction auction
-            where auction.id = :auctionId
-            """)
-    Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);
 
     @Query("""
             select auction

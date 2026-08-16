@@ -55,7 +55,7 @@ class AuctionClosingServiceTest {
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
 
         // when
-        boolean closed = auctionClosingService.closeOneCandidate();
+        boolean closed = auctionClosingService.closeOneCandidate(AuctionStatus.OPEN);
 
         // then
         assertThat(closed).isTrue();
@@ -71,7 +71,7 @@ class AuctionClosingServiceTest {
         when(auctionRepository.currentDatabaseTime()).thenReturn(DATABASE_TIME);
 
         // when
-        auctionClosingService.closeOneCandidate();
+        auctionClosingService.closeOneCandidate(AuctionStatus.OPEN);
 
         // then
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
@@ -85,11 +85,11 @@ class AuctionClosingServiceTest {
         when(upAuction.getRevision()).thenReturn(8L);
 
         // when
-        boolean closed = auctionClosingService.closeOneCandidate();
+        boolean closed = auctionClosingService.closeOneCandidate(AuctionStatus.BID_ONGOING);
 
         // then
         assertThat(closed).isTrue();
-        verify(upAuctionSettlementService).settle(AUCTION_ID);
+        verify(upAuctionSettlementService).settle(upAuction);
         verify(upAuction, never()).markUnsold(any());
         verify(eventPublisher).publishEvent(new AuctionBidHistoryRevealed(AUCTION_ID, 8L));
     }
@@ -97,11 +97,13 @@ class AuctionClosingServiceTest {
     @Test
     void 다른_작업이_경매를_선점했다면_상태를_바꾸지_않는다() {
         // given
-        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked())
+        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked(
+                AuctionStatus.OPEN.name()
+        ))
                 .thenReturn(Optional.empty());
 
         // when
-        boolean closed = auctionClosingService.closeOneCandidate();
+        boolean closed = auctionClosingService.closeOneCandidate(AuctionStatus.OPEN);
 
         // then
         assertThat(closed).isFalse();
@@ -114,7 +116,9 @@ class AuctionClosingServiceTest {
     }
 
     private void stubLockedAuction(Auction lockedAuction, AuctionStatus status) {
-        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked())
+        when(auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked(
+                status.name()
+        ))
                 .thenReturn(Optional.of(AUCTION_ID));
         when(auctionRepository.findById(AUCTION_ID)).thenReturn(Optional.of(lockedAuction));
         when(lockedAuction.getStatus()).thenReturn(status);

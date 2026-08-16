@@ -75,6 +75,7 @@ class UpAuctionSettlementServiceTest {
 
     @Test
     void 일반입찰보다_높은_밀봉입찰자를_낙찰자로_확정한다() {
+        // given
         stubOngoingEndedAuction();
         when(bidRepository.findWinnerByAuctionIdAndStatus(AUCTION_ID, BidStatus.UP))
                 .thenReturn(Optional.of(openBid));
@@ -89,8 +90,10 @@ class UpAuctionSettlementServiceTest {
         when(auctionTradeRepository.save(any(AuctionTrade.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpAuctionSettlementResult result = settlementService.settle(AUCTION_ID);
+        // when
+        UpAuctionSettlementResult result = settlementService.settle(auction);
 
+        // then
         ArgumentCaptor<AuctionTrade> tradeCaptor = ArgumentCaptor.forClass(AuctionTrade.class);
         verify(auctionTradeRepository).save(tradeCaptor.capture());
         AuctionTrade trade = tradeCaptor.getValue();
@@ -107,6 +110,7 @@ class UpAuctionSettlementServiceTest {
 
     @Test
     void 입찰이_없으면_유찰_처리한다() {
+        // given
         stubOngoingEndedAuction();
         when(bidRepository.findWinnerByAuctionIdAndStatus(AUCTION_ID, BidStatus.UP))
                 .thenReturn(Optional.empty());
@@ -114,8 +118,10 @@ class UpAuctionSettlementServiceTest {
                 .thenReturn(Optional.empty());
         when(sealedBidRepository.countByAuctionId(AUCTION_ID)).thenReturn(0L);
 
-        UpAuctionSettlementResult result = settlementService.settle(AUCTION_ID);
+        // when
+        UpAuctionSettlementResult result = settlementService.settle(auction);
 
+        // then
         assertThat(result.status()).isEqualTo(AuctionStatus.UNSOLD);
         verify(auction).markUnsold(ENDED_AT, 0L);
         verify(sealedBidRepository).countByAuctionId(AUCTION_ID);
@@ -137,7 +143,7 @@ class UpAuctionSettlementServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
-        settlementService.settle(AUCTION_ID);
+        settlementService.settle(auction);
 
         // then
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
@@ -153,7 +159,7 @@ class UpAuctionSettlementServiceTest {
                 .thenReturn(Optional.empty());
 
         // when
-        settlementService.settle(AUCTION_ID);
+        settlementService.settle(auction);
 
         // then
         verify(eventPublisher).publishEvent(new AuctionStateChanged(AUCTION_ID));
@@ -169,8 +175,6 @@ class UpAuctionSettlementServiceTest {
                 .finalPrice(230_000L)
                 .purchasedAt(ENDED_AT)
                 .build();
-        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
-                .thenReturn(Optional.of(auction));
         when(auction.getStatus()).thenReturn(AuctionStatus.COMPLETED);
         when(auction.getId()).thenReturn(AUCTION_ID);
         when(winner.getId()).thenReturn(7L);
@@ -178,7 +182,7 @@ class UpAuctionSettlementServiceTest {
                 .thenReturn(Optional.of(trade));
 
         // when
-        UpAuctionSettlementResult result = settlementService.settle(AUCTION_ID);
+        UpAuctionSettlementResult result = settlementService.settle(auction);
 
         // then
         assertThat(result.winnerId()).isEqualTo(7L);
@@ -188,24 +192,23 @@ class UpAuctionSettlementServiceTest {
 
     @Test
     void 종료_전에는_정산할_수_없다() {
-        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
-                .thenReturn(Optional.of(auction));
+        // given
         when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
         when(auction.getEndedAt()).thenReturn(ENDED_AT.plusSeconds(1));
         when(auctionRepository.currentDatabaseTime()).thenReturn(ENDED_AT);
 
+        // when
         SettlementException exception = assertThrows(
                 SettlementException.class,
-                () -> settlementService.settle(AUCTION_ID)
+                () -> settlementService.settle(auction)
         );
 
+        // then
         assertThat(exception.getErrorCode()).isEqualTo(SETTLEMENT_NOT_AVAILABLE);
         verifyNoInteractions(bidRepository, sealedBidRepository, auctionTradeRepository);
     }
 
     private void stubOngoingEndedAuction() {
-        when(auctionRepository.findByIdForUpdate(AUCTION_ID))
-                .thenReturn(Optional.of(auction));
         when(auction.getId()).thenReturn(AUCTION_ID);
         when(auction.getStatus()).thenReturn(AuctionStatus.BID_ONGOING);
         when(auction.getEndedAt()).thenReturn(ENDED_AT);

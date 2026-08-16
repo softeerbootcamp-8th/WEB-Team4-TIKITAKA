@@ -21,9 +21,11 @@ public class AuctionClosingService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public boolean closeOneCandidate() {
+    public boolean closeOneCandidate(AuctionStatus candidateStatus) {
         Optional<Long> candidateId =
-                auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked();
+                auctionRepository.findOneClosingCandidateIdForUpdateSkipLocked(
+                        candidateStatus.name()
+                );
         if (candidateId.isEmpty()) {
             return false;
         }
@@ -41,7 +43,7 @@ public class AuctionClosingService {
             return true;
         }
         if (initialStatus == AuctionStatus.BID_ONGOING) {
-            upAuctionSettlementService.settle(auctionId);
+            upAuctionSettlementService.settle(auction);
             eventPublisher.publishEvent(new AuctionBidHistoryRevealed(
                     auction.getId(),
                     auction.getRevision()

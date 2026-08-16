@@ -39,7 +39,7 @@ class UpAuctionSettlementServiceIntegrationTest {
     private BidService bidService;
 
     @Autowired
-    private UpAuctionSettlementService settlementService;
+    private AuctionClosingService auctionClosingService;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -73,6 +73,7 @@ class UpAuctionSettlementServiceIntegrationTest {
 
     @Test
     void 일반입찰과_밀봉입찰을_비교해_낙찰하고_보증금은_유지한다() {
+        // given
         Fixture fixture = createFixture(2);
         Long openBidderId = fixture.bidderIds().get(0);
         Long sealedBidderId = fixture.bidderIds().get(1);
@@ -86,13 +87,14 @@ class UpAuctionSettlementServiceIntegrationTest {
         );
         moveEndedAt(fixture.auctionId(), "SYSDATE(6) - INTERVAL 1 SECOND");
 
-        UpAuctionSettlementResult result = settlementService.settle(fixture.auctionId());
+        // when
+        boolean closed = auctionClosingService.closeOneCandidate(AuctionStatus.BID_ONGOING);
 
-        assertThat(result.status()).isEqualTo(AuctionStatus.COMPLETED);
-        assertThat(result.winnerId()).isEqualTo(sealedBidderId);
-        assertThat(result.finalPrice()).isEqualTo(105_000L);
+        // then
+        assertThat(closed).isTrue();
         assertThat(findAuctionSnapshot(fixture.auctionId()))
                 .isEqualTo(new AuctionSnapshot(AuctionStatus.COMPLETED, 105_000L));
+        assertThat(findTradeBuyerId(fixture.auctionId())).isEqualTo(sealedBidderId);
         assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L);
         assertThat(findBidCount(fixture.auctionId())).isEqualTo(2L);
         assertThat(findDepositCount(fixture.auctionId())).isEqualTo(2L);
@@ -109,14 +111,17 @@ class UpAuctionSettlementServiceIntegrationTest {
 
     @Test
     void 입찰이_없으면_유찰되고_재실행해도_부작용이_없다() {
+        // given
         Fixture fixture = createFixture(1);
         moveEndedAt(fixture.auctionId(), "SYSDATE(6) - INTERVAL 1 SECOND");
 
-        UpAuctionSettlementResult first = settlementService.settle(fixture.auctionId());
-        UpAuctionSettlementResult second = settlementService.settle(fixture.auctionId());
+        // when
+        boolean first = auctionClosingService.closeOneCandidate(AuctionStatus.OPEN);
+        boolean second = auctionClosingService.closeOneCandidate(AuctionStatus.OPEN);
 
-        assertThat(first.status()).isEqualTo(AuctionStatus.UNSOLD);
-        assertThat(second).isEqualTo(first);
+        // then
+        assertThat(first).isTrue();
+        assertThat(second).isFalse();
         assertThat(findTradeCount(fixture.auctionId())).isZero();
         assertThat(findBidCount(fixture.auctionId())).isZero();
         assertThat(findAuctionSnapshot(fixture.auctionId()).status())
@@ -125,6 +130,7 @@ class UpAuctionSettlementServiceIntegrationTest {
 
     @Test
     void 동시에_정산해도_거래는_한_건만_생성된다() throws Exception {
+        // given
         Fixture fixture = createFixture(1);
         bidService.place(
                 fixture.bidderIds().getFirst(),
@@ -137,19 +143,21 @@ class UpAuctionSettlementServiceIntegrationTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
-            Future<UpAuctionSettlementResult> first = executor.submit(() -> {
+            // when
+            Future<Boolean> first = executor.submit(() -> {
                 barrier.await(5, TimeUnit.SECONDS);
-                return settlementService.settle(fixture.auctionId());
+                return auctionClosingService.closeOneCandidate(AuctionStatus.BID_ONGOING);
             });
-            Future<UpAuctionSettlementResult> second = executor.submit(() -> {
+            Future<Boolean> second = executor.submit(() -> {
                 barrier.await(5, TimeUnit.SECONDS);
-                return settlementService.settle(fixture.auctionId());
+                return auctionClosingService.closeOneCandidate(AuctionStatus.BID_ONGOING);
             });
 
-            assertThat(first.get(10, TimeUnit.SECONDS).winnerId())
-                    .isEqualTo(fixture.bidderIds().getFirst());
-            assertThat(second.get(10, TimeUnit.SECONDS).winnerId())
-                    .isEqualTo(fixture.bidderIds().getFirst());
+            // then
+            assertThat(List.of(
+                    first.get(10, TimeUnit.SECONDS),
+                    second.get(10, TimeUnit.SECONDS)
+            )).containsExactlyInAnyOrder(true, false);
             assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L);
         } finally {
             executor.shutdownNow();
@@ -249,6 +257,17 @@ class UpAuctionSettlementServiceIntegrationTest {
                     .getSingleResult();
             return bidCount.longValue();
         });
+    }
+
+    private Long findTradeBuyerId(Long auctionId) {
+        return executeInTransaction(entityManager -> ((Number) entityManager
+                .createNativeQuery("""
+                        SELECT buyer_id
+                        FROM auction_trade
+                        WHERE auction_id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult()).longValue());
     }
 
     private long findDepositCount(Long auctionId) {
