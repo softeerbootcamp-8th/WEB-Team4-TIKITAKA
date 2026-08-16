@@ -19,21 +19,6 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // 상태를 동등 조건으로 고정해 (status, ended_at) 인덱스 정렬을 그대로 사용한다.
-    // 여러 서버가 같은 후보를 기다리지 않도록 잠긴 행을 건너뛰며 한 건만 선점한다.
-    @Query(value = """
-            SELECT id
-            FROM auction FORCE INDEX (idx_auction_status_ended_at)
-            WHERE status = :status
-              AND ended_at <= NOW(6)
-            ORDER BY ended_at, id
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-            """, nativeQuery = true)
-    Optional<Long> findOneClosingCandidateIdForUpdateSkipLocked(
-            @Param("status") String status
-    );
-
     @Query(value = """
             SELECT auction.id AS auctionId,
                    auction.revision AS revision

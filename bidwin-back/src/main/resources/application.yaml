@@ -83,6 +83,7 @@ management:
 app:
   auction:
     closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
+    closing-batch-size: ${AUCTION_CLOSING_BATCH_SIZE:100}
   mail:
     rate-limit:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
