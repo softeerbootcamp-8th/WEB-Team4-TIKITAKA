@@ -11,6 +11,10 @@ import org.springframework.dao.QueryTimeoutException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_ALREADY_SETTLED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_AMOUNT_MISMATCH;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_CONCURRENT_CONFLICT;
@@ -81,6 +85,36 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
 
     @Override
     @Transactional
+    public void refundLosingDeposits(List<Long> auctionIds) {
+        if (auctionIds.isEmpty()) {
+            return;
+        }
+
+        List<AuctionDeposit> deposits = auctionDepositRepository
+                .findLosingDeposits(auctionIds, DepositStatus.HELD);
+        Map<Long, Long> refundAmountsByMember = new TreeMap<>();
+
+        for (AuctionDeposit deposit : deposits) {
+            long amount = deposit.getReservedAmount();
+            settle(deposit, amount, DepositStatus.REFUNDED);
+            refundAmountsByMember.merge(
+                    deposit.getMember().getId(),
+                    amount,
+                    (current, added) -> Math.addExact(current, added)
+            );
+        }
+
+        // 한 회원이 같은 마감 배치의 여러 경매에서 탈락해도 회원 행은 한 번만 갱신한다.
+        // 회원 ID 순서로 갱신해 다른 정산 트랜잭션과의 회원 행 잠금 순서를 통일한다.
+        for (Map.Entry<Long, Long> refund : refundAmountsByMember.entrySet()) {
+            if (memberRepository.refundLockedPoint(refund.getKey(), refund.getValue()) != 1) {
+                throw new IllegalStateException("보증금 반환 중 잠금 포인트를 되돌리지 못했습니다.");
+            }
+        }
+    }
+
+    @Override
+    @Transactional
     public void transferToSeller(Long auctionId, Long buyerId, Long sellerId, long expectedAmount) {
         settle(auctionId, buyerId, expectedAmount, DepositStatus.USED);
 
@@ -135,6 +169,10 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
                 .findByAuctionIdAndMemberId(auctionId, buyerId)
                 .orElseThrow(() -> new DepositException(DEPOSIT_NOT_FOUND));
 
+        settle(deposit, expectedAmount, status);
+    }
+
+    private void settle(AuctionDeposit deposit, long expectedAmount, DepositStatus status) {
         if (deposit.getStatus() != DepositStatus.HELD) {
             throw new DepositException(DEPOSIT_ALREADY_SETTLED);
         }

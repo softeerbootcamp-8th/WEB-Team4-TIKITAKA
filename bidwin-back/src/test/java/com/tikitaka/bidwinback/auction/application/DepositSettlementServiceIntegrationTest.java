@@ -1,10 +1,12 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
+import com.tikitaka.bidwinback.auction.domain.exception.DepositException;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.EntityManager;
@@ -26,6 +28,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.DEPOSIT_ALREADY_SETTLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -46,6 +49,7 @@ class DepositSettlementServiceIntegrationTest {
     private Long auctionId;
     private Long sellerId;
     private Long buyerId;
+    private Long winnerId;
     private String runId;
 
     @BeforeEach
@@ -58,6 +62,8 @@ class DepositSettlementServiceIntegrationTest {
     void tearDown() {
         executeInTransaction(entityManager -> {
             executeDelete(entityManager,
+                    "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
+            executeDelete(entityManager,
                     "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
             executeDelete(entityManager,
                     "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
@@ -67,6 +73,10 @@ class DepositSettlementServiceIntegrationTest {
                     "DELETE FROM member WHERE id = :id", buyerId);
             executeDelete(entityManager,
                     "DELETE FROM member WHERE id = :id", sellerId);
+            if (winnerId != null) {
+                executeDelete(entityManager,
+                        "DELETE FROM member WHERE id = :id", winnerId);
+            }
             return null;
         });
     }
@@ -105,6 +115,43 @@ class DepositSettlementServiceIntegrationTest {
                     TARGET_AMOUNT,
                     INITIAL_SELLER_POINT,
                     "HELD"
+            ));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void 비낙찰_보증금을_동시에_반환해도_포인트는_한_번만_복구된다() throws Exception {
+        // given
+        createWinningTrade();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            // when
+            Future<Throwable> first = executor.submit(() -> {
+                barrier.await();
+                return catchThrowable(() -> depositSettlementService
+                        .refundLosingDeposits(List.of(auctionId)));
+            });
+            Future<Throwable> second = executor.submit(() -> {
+                barrier.await();
+                return catchThrowable(() -> depositSettlementService
+                        .refundLosingDeposits(List.of(auctionId)));
+            });
+            Throwable firstFailure = first.get(15, TimeUnit.SECONDS);
+            Throwable secondFailure = second.get(15, TimeUnit.SECONDS);
+
+            // then
+            assertNoUnexpectedFailure(firstFailure);
+            assertNoUnexpectedFailure(secondFailure);
+            assertThat(findSnapshot()).isEqualTo(new DepositSnapshot(
+                    INITIAL_RESERVED_AMOUNT,
+                    INITIAL_TOTAL_POINT + INITIAL_RESERVED_AMOUNT,
+                    0L,
+                    INITIAL_SELLER_POINT,
+                    "REFUNDED"
             ));
         } finally {
             executor.shutdownNow();
@@ -185,6 +232,34 @@ class DepositSettlementServiceIntegrationTest {
             auctionId = auction.getId();
             return null;
         });
+    }
+
+    private void createWinningTrade() {
+        executeInTransaction(entityManager -> {
+            Member winner = persistMember(
+                    entityManager,
+                    "w",
+                    INITIAL_TOTAL_POINT,
+                    INITIAL_RESERVED_AMOUNT
+            );
+            winnerId = winner.getId();
+            entityManager.persist(AuctionTrade.builder()
+                    .auction(entityManager.getReference(UpAuction.class, auctionId))
+                    .buyer(winner)
+                    .finalPrice(TARGET_AMOUNT)
+                    .purchasedAt(LocalDateTime.now())
+                    .build());
+            return null;
+        });
+    }
+
+    private void assertNoUnexpectedFailure(Throwable failure) {
+        if (failure != null) {
+            assertThat(failure)
+                    .isInstanceOfSatisfying(DepositException.class, exception ->
+                            assertThat(exception.getErrorCode())
+                                    .isEqualTo(DEPOSIT_ALREADY_SETTLED));
+        }
     }
 
     private Member persistMember(

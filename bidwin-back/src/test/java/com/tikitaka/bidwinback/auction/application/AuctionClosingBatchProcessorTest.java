@@ -7,6 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.times;
@@ -91,16 +93,28 @@ class AuctionClosingBatchProcessorTest {
     }
 
     @Test
-    void 배치가_실패하면_그_상태는_접고_다른_상태를_계속_처리한다() {
+    void 배치가_실패하면_후보를_개별_처리하고_실패한_후보만_넘긴다() {
         // given
         when(auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE))
+                .thenReturn(BATCH_SIZE)
                 .thenThrow(new IllegalStateException("batch failed"));
+        when(auctionClosingService.findClosingCandidateIds(
+                AuctionStatus.OPEN,
+                BATCH_SIZE * 99
+        )).thenReturn(List.of(1L, 2L, 3L));
+        when(auctionClosingService.closeOne(AuctionStatus.OPEN, 1L)).thenReturn(1);
+        when(auctionClosingService.closeOne(AuctionStatus.OPEN, 2L))
+                .thenThrow(new IllegalStateException("auction failed"));
+        when(auctionClosingService.closeOne(AuctionStatus.OPEN, 3L)).thenReturn(1);
         when(auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE))
                 .thenReturn(0);
 
         // when & then
         assertThatCode(processor::closeEndedAuctions).doesNotThrowAnyException();
-        verify(auctionClosingService).closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
+        verify(auctionClosingService, times(2)).closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
+        verify(auctionClosingService).closeOne(AuctionStatus.OPEN, 1L);
+        verify(auctionClosingService).closeOne(AuctionStatus.OPEN, 2L);
+        verify(auctionClosingService).closeOne(AuctionStatus.OPEN, 3L);
         verify(auctionClosingService).closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
     }
 
@@ -119,6 +133,29 @@ class AuctionClosingBatchProcessorTest {
         verify(auctionClosingService, times(100)).closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
         verify(auctionClosingService, times(100))
                 .closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+    }
+
+    @Test
+    void 개별_재처리_후보_수_계산이_넘쳐도_다른_상태를_계속_처리한다() {
+        // given
+        int overflowBatchSize = Integer.MAX_VALUE;
+        processor = new AuctionClosingBatchProcessor(
+                auctionClosingService,
+                overflowBatchSize
+        );
+        when(auctionClosingService.closeBatch(AuctionStatus.OPEN, overflowBatchSize))
+                .thenThrow(new IllegalStateException("batch failed"));
+        when(auctionClosingService.closeBatch(
+                AuctionStatus.BID_ONGOING,
+                overflowBatchSize
+        )).thenReturn(0);
+
+        // when & then
+        assertThatCode(processor::closeEndedAuctions).doesNotThrowAnyException();
+        verify(auctionClosingService).closeBatch(
+                AuctionStatus.BID_ONGOING,
+                overflowBatchSize
+        );
     }
 
     @Test
