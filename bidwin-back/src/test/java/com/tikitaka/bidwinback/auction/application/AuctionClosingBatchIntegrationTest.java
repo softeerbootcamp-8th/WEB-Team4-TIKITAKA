@@ -1,8 +1,10 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -100,6 +102,43 @@ class AuctionClosingBatchIntegrationTest {
                         .isEqualTo(sealedBidder.getId()),
                 () -> assertThat(((Number) trades.get(0)[1]).longValue())
                         .isEqualTo(START_PRICE + (BID_UNIT * 9))
+        );
+    }
+
+    @Test
+    void 공개와_밀봉_입찰이_섞이면_낙찰자_보증금은_유지되고_비낙찰자_보증금은_반환된다() {
+        // given
+        Member seller = persistMember("batch-refund-seller");
+        Member publicLoser = persistMember("batch-refund-public-loser");
+        Member sealedWinner = persistMember("batch-refund-sealed-winner");
+        UpAuction auction = persistAuction(seller);
+        persistHeldDeposit(auction, publicLoser);
+        persistHeldDeposit(auction, sealedWinner);
+        updateMemberPoints(publicLoser.getId(), 1_900_000L, 100_000L);
+        updateMemberPoints(sealedWinner.getId(), 1_900_000L, 100_000L);
+        placePublicBid(auction.getId(), publicLoser.getId(), START_PRICE + BID_UNIT);
+        long sealedPrice = START_PRICE + (BID_UNIT * 9);
+        placeSealedBid(auction.getId(), sealedWinner.getId(), sealedPrice);
+        endNow(auction.getId());
+
+        // when
+        auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+
+        // then
+        List<Object[]> trades = tradesOf(auction.getId());
+        assertAll(
+                () -> assertThat(statusOf(auction.getId())).isEqualTo("COMPLETED"),
+                () -> assertThat(trades).hasSize(1),
+                () -> assertThat(((Number) trades.get(0)[0]).longValue())
+                        .isEqualTo(sealedWinner.getId()),
+                () -> assertThat(depositStatusOf(auction.getId(), sealedWinner.getId()))
+                        .isEqualTo(DepositStatus.HELD.name()),
+                () -> assertThat(depositStatusOf(auction.getId(), publicLoser.getId()))
+                        .isEqualTo(DepositStatus.REFUNDED.name()),
+                () -> assertThat(pointsOf(sealedWinner.getId()))
+                        .isEqualTo(new PointSnapshot(1_900_000L, 100_000L)),
+                () -> assertThat(pointsOf(publicLoser.getId()))
+                        .isEqualTo(new PointSnapshot(2_000_000L, 0L))
         );
     }
 
@@ -284,6 +323,30 @@ class AuctionClosingBatchIntegrationTest {
         assertThat(updated).isEqualTo(1);
     }
 
+    private void persistHeldDeposit(UpAuction auction, Member bidder) {
+        entityManager.persist(AuctionDeposit.builder()
+                .auction(auction)
+                .member(bidder)
+                .reservedAmount(100_000L)
+                .status(DepositStatus.HELD)
+                .build());
+        entityManager.flush();
+    }
+
+    private void updateMemberPoints(Long memberId, long totalPoint, long lockedPoint) {
+        entityManager.createNativeQuery("""
+                        UPDATE member
+                        SET total_point = :totalPoint,
+                            locked_point = :lockedPoint
+                        WHERE id = :memberId
+                        """)
+                .setParameter("totalPoint", totalPoint)
+                .setParameter("lockedPoint", lockedPoint)
+                .setParameter("memberId", memberId)
+                .executeUpdate();
+        entityManager.clear();
+    }
+
     private void insertTradeWithoutClosing(Long auctionId, Long buyerId, long finalPrice) {
         entityManager.createNativeQuery("""
                         INSERT INTO auction_trade
@@ -336,6 +399,34 @@ class AuctionClosingBatchIntegrationTest {
         }
     }
 
+    private String depositStatusOf(Long auctionId, Long memberId) {
+        entityManager.clear();
+        return (String) entityManager.createNativeQuery("""
+                        SELECT status
+                        FROM auction_deposit
+                        WHERE auction_id = :auctionId
+                          AND member_id = :memberId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .setParameter("memberId", memberId)
+                .getSingleResult();
+    }
+
+    private PointSnapshot pointsOf(Long memberId) {
+        entityManager.clear();
+        Object[] points = (Object[]) entityManager.createNativeQuery("""
+                        SELECT total_point, locked_point
+                        FROM member
+                        WHERE id = :memberId
+                        """)
+                .setParameter("memberId", memberId)
+                .getSingleResult();
+        return new PointSnapshot(
+                ((Number) points[0]).longValue(),
+                ((Number) points[1]).longValue()
+        );
+    }
+
     private long revisionOf(Long auctionId) {
         Long revision = columnOf(auctionId, "revision");
         return revision == null ? 0L : revision;
@@ -386,5 +477,8 @@ class AuctionClosingBatchIntegrationTest {
                 .build();
         entityManager.persist(member);
         return member;
+    }
+
+    private record PointSnapshot(long totalPoint, long lockedPoint) {
     }
 }

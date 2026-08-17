@@ -21,6 +21,7 @@ public class AuctionClosingService {
 
     private final AuctionRepository auctionRepository;
     private final AuctionTradeRepository auctionTradeRepository;
+    private final DepositSettlementService depositSettlementService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -46,6 +47,12 @@ public class AuctionClosingService {
         );
         int closed = auctionRepository.closeAll(claimedAuctionIds, settledAt);
         verifyAllClosed(closed, candidates.size());
+
+        // BID_ONGOING은 공개 또는 밀봉 입찰이 있어 낙찰 거래가 생긴 상향 경매다.
+        // 같은 트랜잭션에서 비낙찰자의 보증금을 반환해 마감과 포인트 복구를 원자적으로 처리한다.
+        if (candidateStatus == AuctionStatus.BID_ONGOING) {
+            depositSettlementService.refundLosingDeposits(claimedAuctionIds);
+        }
 
         publishClosedEvent(candidates, candidateStatus);
         return candidates.size();

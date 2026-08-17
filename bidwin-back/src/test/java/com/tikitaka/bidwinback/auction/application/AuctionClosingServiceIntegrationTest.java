@@ -1,8 +1,10 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.DepositStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -29,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
 @SpringBootTest(properties = "app.storage.s3.bucket=test-bucket")
@@ -36,6 +39,8 @@ class AuctionClosingServiceIntegrationTest {
 
     private static final long BID_UNIT = 1_000L;
     private static final long START_PRICE = 100_000L;
+    private static final long DEPOSIT_AMOUNT = 30_000L;
+    private static final long INITIAL_TOTAL_POINT = 1_970_000L;
     private static final int BATCH_SIZE = 200;
 
     @Autowired
@@ -58,6 +63,7 @@ class AuctionClosingServiceIntegrationTest {
         executeInTransaction(entityManager -> {
             for (Long auctionId : auctionIds) {
                 delete(entityManager, "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
+                delete(entityManager, "DELETE FROM auction_deposit WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM auction WHERE id = :id", auctionId);
             }
@@ -142,6 +148,69 @@ class AuctionClosingServiceIntegrationTest {
         }
     }
 
+    @Test
+    void 두_배치가_동시에_돌아도_비낙찰_보증금은_한_번만_반환된다() throws Exception {
+        // given
+        ClosingFixture fixture = createEndedAuctionWithWinnerAndLoser(DEPOSIT_AMOUNT);
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            // when
+            Future<Integer> first = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+            });
+            Future<Integer> second = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+            });
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+
+            // then
+            assertAll(
+                    () -> assertThat(findStatus(fixture.auctionId()))
+                            .isEqualTo(AuctionStatus.COMPLETED),
+                    () -> assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L),
+                    () -> assertThat(findDepositStatus(
+                            fixture.auctionId(), fixture.loserId()))
+                            .isEqualTo(DepositStatus.REFUNDED.name()),
+                    () -> assertThat(findMemberPoints(fixture.loserId()))
+                            .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT + DEPOSIT_AMOUNT, 0L))
+            );
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void 비낙찰_잠금포인트가_부족하면_경매마감과_보증금반환이_함께_롤백된다() {
+        // given
+        long insufficientLockedPoint = DEPOSIT_AMOUNT - 1;
+        ClosingFixture fixture = createEndedAuctionWithWinnerAndLoser(insufficientLockedPoint);
+
+        // when
+        Throwable exception = catchThrowable(() -> auctionClosingService.closeBatch(
+                AuctionStatus.BID_ONGOING,
+                BATCH_SIZE
+        ));
+
+        // then
+        assertAll(
+                () -> assertThat(exception)
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessage("보증금 반환 중 잠금 포인트를 되돌리지 못했습니다."),
+                () -> assertThat(findStatus(fixture.auctionId()))
+                        .isEqualTo(AuctionStatus.BID_ONGOING),
+                () -> assertThat(findTradeCount(fixture.auctionId())).isZero(),
+                () -> assertThat(findDepositStatus(fixture.auctionId(), fixture.loserId()))
+                        .isEqualTo(DepositStatus.HELD.name()),
+                () -> assertThat(findMemberPoints(fixture.loserId()))
+                        .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT, insufficientLockedPoint))
+        );
+    }
+
     private Long createEndedOpenAuction() {
         Long auctionId = executeInTransaction(entityManager -> {
             Member seller = persistMember(entityManager, "seller");
@@ -174,6 +243,54 @@ class AuctionClosingServiceIntegrationTest {
         );
         endNow(ids[0]);
         return ids[0];
+    }
+
+    private ClosingFixture createEndedAuctionWithWinnerAndLoser(long loserLockedPoint) {
+        long[] ids = executeInTransaction(entityManager -> {
+            Member seller = persistMember(entityManager, "seller");
+            Member winner = persistMember(
+                    entityManager,
+                    "winner",
+                    INITIAL_TOTAL_POINT,
+                    DEPOSIT_AMOUNT
+            );
+            Member loser = persistMember(
+                    entityManager,
+                    "loser",
+                    INITIAL_TOTAL_POINT,
+                    loserLockedPoint
+            );
+            Long persistedAuctionId = persistAuction(entityManager, seller);
+            UpAuction auction = entityManager.getReference(UpAuction.class, persistedAuctionId);
+            entityManager.persist(AuctionDeposit.builder()
+                    .member(winner)
+                    .auction(auction)
+                    .reservedAmount(DEPOSIT_AMOUNT)
+                    .status(DepositStatus.HELD)
+                    .build());
+            entityManager.persist(AuctionDeposit.builder()
+                    .member(loser)
+                    .auction(auction)
+                    .reservedAmount(DEPOSIT_AMOUNT)
+                    .status(DepositStatus.HELD)
+                    .build());
+            entityManager.flush();
+            memberIds.add(seller.getId());
+            memberIds.add(winner.getId());
+            memberIds.add(loser.getId());
+            return new long[]{persistedAuctionId, winner.getId(), loser.getId()};
+        });
+        auctionIds.add(ids[0]);
+        transactionTemplate.executeWithoutResult(status ->
+                auctionRepository.updateCurrentPriceForBid(
+                        ids[0],
+                        ids[1],
+                        START_PRICE + BID_UNIT,
+                        BID_UNIT
+                )
+        );
+        endNow(ids[0]);
+        return new ClosingFixture(ids[0], ids[1], ids[2]);
     }
 
     private Long persistAuction(EntityManager entityManager, Member seller) {
@@ -218,6 +335,29 @@ class AuctionClosingServiceIntegrationTest {
                 .phoneNumber("01012345678")
                 .nickname("n" + suffix)
                 .status(MemberStatus.ACTIVE)
+                .build();
+        entityManager.persist(member);
+        return member;
+    }
+
+    private Member persistMember(
+            EntityManager entityManager,
+            String role,
+            long totalPoint,
+            long lockedPoint
+    ) {
+        String suffix = UUID.randomUUID().toString()
+                .replace("-", "")
+                .substring(0, 8);
+        Member member = Member.builder()
+                .email(role + "-" + suffix + "@example.com")
+                .password("encoded-password")
+                .name("통합테스트")
+                .phoneNumber("01012345678")
+                .nickname("n" + suffix)
+                .status(MemberStatus.ACTIVE)
+                .totalPoint(totalPoint)
+                .lockedPoint(lockedPoint)
                 .build();
         entityManager.persist(member);
         return member;
@@ -271,6 +411,34 @@ class AuctionClosingServiceIntegrationTest {
         ).longValue());
     }
 
+    private String findDepositStatus(Long auctionId, Long memberId) {
+        return executeInTransaction(entityManager -> (String) entityManager.createNativeQuery("""
+                                SELECT status
+                                FROM auction_deposit
+                                WHERE auction_id = :auctionId
+                                  AND member_id = :memberId
+                                """)
+                        .setParameter("auctionId", auctionId)
+                        .setParameter("memberId", memberId)
+                        .getSingleResult());
+    }
+
+    private PointSnapshot findMemberPoints(Long memberId) {
+        return executeInTransaction(entityManager -> {
+            Object[] points = (Object[]) entityManager.createNativeQuery("""
+                            SELECT total_point, locked_point
+                            FROM member
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("memberId", memberId)
+                    .getSingleResult();
+            return new PointSnapshot(
+                    ((Number) points[0]).longValue(),
+                    ((Number) points[1]).longValue()
+            );
+        });
+    }
+
     private void delete(EntityManager entityManager, String sql, Long id) {
         entityManager.createNativeQuery(sql)
                 .setParameter("id", id)
@@ -293,5 +461,11 @@ class AuctionClosingServiceIntegrationTest {
         } finally {
             entityManager.close();
         }
+    }
+
+    private record ClosingFixture(Long auctionId, Long winnerId, Long loserId) {
+    }
+
+    private record PointSnapshot(long totalPoint, long lockedPoint) {
     }
 }
