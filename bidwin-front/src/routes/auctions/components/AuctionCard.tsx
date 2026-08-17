@@ -1,10 +1,13 @@
 import { Clock, Gavel, ImageIcon, TrendingDown, TrendingUp } from 'lucide-react'
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import RollingPrice from '../../../components/ui/RollingPrice'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
+import { useRecentChange } from '../../../hooks/useRecentChange'
 import { AUCTION_CATEGORY_LABELS } from '../../../lib/auctionCategory'
-import { formatClock, formatWon } from '../../../lib/format'
+import { formatClock } from '../../../lib/format'
+import { CLOSE_HIGHLIGHT_MS, closePopStyle, closeSweepStyle } from '../../../lib/motion'
 import { CARD_TEXT } from '../constants'
 import type { AuctionSummary } from '../types'
 
@@ -73,20 +76,24 @@ function AuctionCardView({
   serverOffsetMs,
   currentPrice,
 }: AuctionCardProps & { currentPrice: number }) {
-  const priceText = formatWon(currentPrice)
   const localDeadline = useMemo(
     () => auction.deadline - serverOffsetMs,
     [auction.deadline, serverOffsetMs],
   )
   const countdown = useCountdown(localDeadline)
   const ended = !isOngoing(auction) || countdown.isEnded
+  /* 목록에서도 어느 카드가 방금 마감됐는지 보이도록 카드 전체를 한 번 훑는다. */
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
   const isDown = auction.auctionType === 'DOWN'
   const dropRate = Math.max(0, Math.round(
     ((auction.startPrice - currentPrice) / auction.startPrice) * PERCENT_BASE,
   ))
 
   return (
-    <article className={`relative flex h-full gap-sm p-sm transition-shadow hover:shadow-card md:flex-col ${CARD_SURFACE_CLASS}`}>
+    <article
+      style={closeSweepStyle(justClosed)}
+      className={`relative flex h-full gap-sm p-sm transition-shadow hover:shadow-card md:flex-col ${CARD_SURFACE_CLASS}`}
+    >
       <Link
         to={`/auctions/${auction.auctionId}`}
         aria-label={auction.title}
@@ -119,9 +126,10 @@ function AuctionCardView({
         </h2>
 
         <div className="flex min-w-0 flex-col items-start gap-0.5">
-          <span className={`shrink-0 whitespace-nowrap text-base font-bold tracking-tight ${isDown ? 'text-down' : 'text-ink'}`}>
-            {priceText}
-          </span>
+          <RollingPrice
+            value={currentPrice}
+            className={`shrink-0 whitespace-nowrap text-base font-bold tracking-tight ${isDown ? 'text-down' : 'text-ink'}`}
+          />
           {isDown ? (
             <span className="flex min-w-0 items-center gap-0.5 whitespace-nowrap text-[11px] font-semibold text-down">
               <TrendingDown size={11} />
@@ -141,7 +149,10 @@ function AuctionCardView({
           <div className="md:hidden">
             <AuctionTypeBadge auctionType={auction.auctionType} />
           </div>
-          <span className={`inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-pill px-2 text-[11px] font-semibold ${ended ? 'bg-surface-strong text-muted' : countdown.isUrgent ? 'bg-down text-on-primary' : 'bg-surface-strong text-body'}`}>
+          <span
+            style={closePopStyle(justClosed)}
+            className={`inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-pill px-2 text-[11px] font-semibold ${ended ? 'bg-surface-strong text-muted' : countdown.isUrgent ? 'bg-down text-on-primary' : 'bg-surface-strong text-body'}`}
+          >
             <Clock size={11} />
             {ended ? CARD_TEXT.ended : formatClock(countdown.remaining)}
             {!ended && <span className="hidden md:inline">{CARD_TEXT.remainingSuffix}</span>}

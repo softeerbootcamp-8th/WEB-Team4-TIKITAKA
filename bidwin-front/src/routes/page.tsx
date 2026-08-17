@@ -4,9 +4,11 @@ import { Link } from 'react-router-dom'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import RollingPrice from '../components/ui/RollingPrice'
 import { useAuctionEvents } from '../hooks/useAuctionEvents'
 import { useCountdown } from '../hooks/useCountdown'
 import { useDownAuctionClock } from '../hooks/useDownAuctionClock'
+import { useRecentChange } from '../hooks/useRecentChange'
 import { useServerClock } from '../hooks/useServerClock'
 import { requestAuctionCategories, requestAuctionList } from '../lib/api/auctions'
 import type {
@@ -24,7 +26,8 @@ import {
   homeBannerTransitionDuration,
   nextHomeBannerIndex,
 } from '../lib/homeBanner'
-import { CATEGORY_QUERY_PARAM } from './auctions/constants'
+import { CLOSE_HIGHLIGHT_MS, closePopStyle, closeSweepStyle } from '../lib/motion'
+import { CARD_TEXT, CATEGORY_QUERY_PARAM } from './auctions/constants'
 
 const POPULAR_AUCTION_LIMIT = 5
 const SPLIT_LIST_LIMIT = 4
@@ -40,6 +43,15 @@ type DownAuctionSummary = AuctionSummary & {
 
 function hasDownPricing(auction: AuctionSummary): auction is DownAuctionSummary {
   return auction.auctionType === 'DOWN' && auction.downPricing !== null
+}
+
+/*
+ * 마감 여부는 SSE로 넘어온 상태와 서버 기준 시각 둘 다 본다. 상태가 아직 안 넘어왔어도
+ * 마감 시각이 지나면 마감으로 보여야 하고, 이 계산은 1초마다 도는 시계가 다시 렌더링한다.
+ */
+function isClosed(auction: AuctionSummary, serverOffsetMs: number) {
+  if (auction.status !== 'OPEN' && auction.status !== 'BID_ONGOING') return true
+  return Date.now() + serverOffsetMs >= auction.deadline
 }
 
 function toDownPricing(auction: DownAuctionSummary): DownPricing {
@@ -58,7 +70,7 @@ function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
+  const { serverOffsetMs } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -88,7 +100,6 @@ function HomePage() {
 
   const auctions = response?.items ?? []
   useAuctionEvents('list', auctions.map((auction) => auction.auctionId), {
-    onHeartbeat: synchronize,
     onState: (state) => {
       setResponse((current) => {
         if (!current) return current
@@ -303,10 +314,15 @@ function SpotlightBanner({
 }) {
   const pricing = useMemo(() => toDownPricing(auction), [auction])
   const { currentPrice, remaining, isUrgent } = useDownAuctionClock(pricing, serverOffsetMs)
+  const ended = isClosed(auction, serverOffsetMs)
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
 
   return (
     <Link to={`/auctions/${auction.auctionId}`} className="block">
-      <div className="flex flex-col gap-md rounded-xl border border-down-tint bg-down-tint px-xl py-lg sm:flex-row sm:items-center sm:justify-between">
+      <div
+        style={closeSweepStyle(justClosed)}
+        className="flex flex-col gap-md rounded-xl border border-down-tint bg-down-tint px-xl py-lg sm:flex-row sm:items-center sm:justify-between"
+      >
         <div className="flex items-center gap-sm">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-down text-on-primary">
             <Flame size={20} />
@@ -322,12 +338,16 @@ function SpotlightBanner({
 
         <div className="flex items-center gap-lg">
           <div className="text-right">
-            <div key={currentPrice} className="whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down">
-              {formatWon(currentPrice)}
-            </div>
-            <div className={`flex items-center justify-end gap-1 text-sm font-semibold ${isUrgent ? 'text-down' : 'text-body'}`}>
+            <RollingPrice
+              value={currentPrice}
+              className="block whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down"
+            />
+            <div
+              style={closePopStyle(justClosed)}
+              className={`flex items-center justify-end gap-1 text-sm font-semibold ${isUrgent && !ended ? 'text-down' : 'text-body'}`}
+            >
               <Clock size={14} />
-              {formatClock(remaining)} 후 추가 하락
+              {ended ? CARD_TEXT.ended : `${formatClock(remaining)} 후 추가 하락`}
             </div>
           </div>
           <span className="inline-flex h-11 shrink-0 items-center justify-center rounded-pill bg-primary px-lg text-base font-semibold text-on-primary">
@@ -371,6 +391,7 @@ function StaticSummaryCard({
       price={auction.currentPrice}
       remaining={remaining}
       isUrgent={isUrgent}
+      ended={isClosed(auction, serverOffsetMs)}
     />
   )
 }
@@ -390,6 +411,7 @@ function DownSummaryCard({
       price={currentPrice}
       remaining={remaining}
       isUrgent={isUrgent}
+      ended={isClosed(auction, serverOffsetMs)}
     />
   )
 }
@@ -399,17 +421,24 @@ function SummaryCardView({
   price,
   remaining,
   isUrgent,
+  ended,
 }: {
   auction: AuctionSummary
   price: number
   remaining: number
   isUrgent: boolean
+  ended: boolean
 }) {
   const isDown = auction.auctionType === 'DOWN'
+  /* 글자 크기는 굴러가는 중간값이 아니라 확정된 금액을 기준으로 정해, 굴러갈 때 크기가 흔들리지 않는다. */
   const priceText = formatWon(price)
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
   return (
     <Link to={`/auctions/${auction.auctionId}`} className="block">
-      <Card className="flex h-full flex-col gap-sm hover:shadow-soft">
+      <Card
+        style={closeSweepStyle(justClosed)}
+        className="flex h-full flex-col gap-sm hover:shadow-soft"
+      >
         <AuctionThumbnail url={auction.thumbnailUrl} />
         <Badge tone={isDown ? 'danger' : 'neutral'}>
           {isDown ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
@@ -419,12 +448,16 @@ function SummaryCardView({
           {auction.title}
         </h2>
         <div className="flex min-w-0 flex-col gap-1">
-          <span className={`whitespace-nowrap font-bold tracking-tight ${priceText.length > 14 ? 'text-xs' : 'text-sm'} ${isDown ? 'text-down' : 'text-ink'}`}>
-            {priceText}
-          </span>
-          <span className={`flex items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
+          <RollingPrice
+            value={price}
+            className={`whitespace-nowrap font-bold tracking-tight ${priceText.length > 14 ? 'text-xs' : 'text-sm'} ${isDown ? 'text-down' : 'text-ink'}`}
+          />
+          <span
+            style={closePopStyle(justClosed)}
+            className={`flex items-center gap-1 text-xs ${isUrgent && !ended ? 'text-down' : 'text-muted'}`}
+          >
             <Clock size={12} />
-            {formatClock(remaining)}
+            {ended ? CARD_TEXT.ended : formatClock(remaining)}
           </span>
         </div>
       </Card>
@@ -515,6 +548,7 @@ function StaticListRow({
       price={auction.currentPrice}
       remaining={remaining}
       isUrgent={isUrgent}
+      ended={isClosed(auction, serverOffsetMs)}
     />
   )
 }
@@ -537,6 +571,7 @@ function DownListRow({
       price={currentPrice}
       remaining={remaining}
       isUrgent={isUrgent}
+      ended={isClosed(auction, serverOffsetMs)}
     />
   )
 }
@@ -547,24 +582,36 @@ function ListRowView({
   price,
   remaining,
   isUrgent,
+  ended,
 }: {
   auction: AuctionSummary
   accent?: boolean
   price: number
   remaining: number
   isUrgent: boolean
+  ended: boolean
 }) {
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
+
   return (
     <li>
-      <Link to={`/auctions/${auction.auctionId}`} className="flex items-center gap-sm py-sm first:pt-0 last:pb-0">
+      <Link
+        to={`/auctions/${auction.auctionId}`}
+        style={closeSweepStyle(justClosed)}
+        className="flex items-center gap-sm py-sm first:pt-0 last:pb-0"
+      >
         <AuctionThumbnail url={auction.thumbnailUrl} compact />
         <span className="line-clamp-1 flex-1 text-sm font-medium text-ink">{auction.title}</span>
-        <span className={`shrink-0 whitespace-nowrap text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}>
-          {formatWon(price)}
-        </span>
-        <span className={`flex shrink-0 items-center gap-1 text-xs ${isUrgent ? 'text-down' : 'text-muted'}`}>
+        <RollingPrice
+          value={price}
+          className={`shrink-0 whitespace-nowrap text-sm font-bold ${accent ? 'text-down' : 'text-ink'}`}
+        />
+        <span
+          style={closePopStyle(justClosed)}
+          className={`flex shrink-0 items-center gap-1 text-xs ${isUrgent && !ended ? 'text-down' : 'text-muted'}`}
+        >
           <Clock size={11} />
-          {formatClock(remaining)}
+          {ended ? CARD_TEXT.ended : formatClock(remaining)}
         </span>
       </Link>
     </li>

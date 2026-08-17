@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import Pagination from '../../auctions/components/Pagination'
 import { useCountdown } from '../../../hooks/useCountdown'
+import { useServerClock } from '../../../hooks/useServerClock'
 import {
   requestMyBidRecords,
   requestMyDepositRecords,
@@ -448,7 +449,9 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function BiddingCard({ record }: { record: MyBidRecord }) {
-  const { remaining, isUrgent } = useCountdown(record.deadline)
+  /* 이 화면은 SSE를 열지 않지만, 다른 화면의 하트비트로 보정된 전역 시계를 함께 쓴다. */
+  const { serverOffsetMs } = useServerClock()
+  const { remaining, isUrgent } = useCountdown(record.deadline - serverOffsetMs)
   return (
     <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
       <p className="mt-1 text-sm text-muted">내 입찰가 {formatWon(record.myBidAmount)}</p>

@@ -26,6 +26,8 @@ import {
   validateNickname,
 } from '../../lib/auth/validation'
 import { formatPhoneNumber } from '../../lib/format'
+import AgreementConsent from './AgreementConsent'
+import { INITIAL_AGREEMENT_STATE, isEveryAgreementAccepted } from './agreements'
 import PassVerificationModal from './PassVerificationModal'
 import type { VerifiedIdentity } from './PassVerificationModal'
 
@@ -54,7 +56,6 @@ const TEXT = {
   submitting: '가입 처리 중…',
   loginPrompt: '이미 계정이 있으신가요?',
   login: '로그인',
-  imagePlaceholder: '이미지 영역 2',
   signUpSuccess: '회원가입이 완료됐어요. 이메일 인증을 진행해주세요.',
   passVerifiedToast: '본인인증이 완료됐어요.',
 }
@@ -64,11 +65,14 @@ const ROUTE = {
   emailVerification: '/email-verification',
 }
 
+const SHOWCASE_VARIANT = 'signup'
+
 const ERROR_MESSAGE = {
   emptyField: '이메일, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.',
   emailAvailabilityRequired: '이메일 중복 확인을 완료해주세요.',
   nicknameAvailabilityRequired: '닉네임 중복 확인을 완료해주세요.',
   identityRequired: 'PASS 본인인증을 완료해주세요.',
+  agreementRequired: '이용약관과 개인정보 처리방침에 모두 동의해주세요.',
 }
 
 const FORM_ERROR_ID = 'signup-form-error'
@@ -129,6 +133,7 @@ function SignupPage() {
   const nicknameAvailabilityRequestId = useRef(0)
   /* PASS 인증으로 받은 이름·전화번호. 성공 이후에는 다시 인증할 수 없다. */
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null)
+  const [agreements, setAgreements] = useState(INITIAL_AGREEMENT_STATE)
   const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -272,6 +277,10 @@ function SignupPage() {
       setError(ERROR_MESSAGE.identityRequired)
       return
     }
+    if (!isEveryAgreementAccepted(agreements)) {
+      setError(ERROR_MESSAGE.agreementRequired)
+      return
+    }
     setError(null)
 
     setIsSubmitting(true)
@@ -312,7 +321,7 @@ function SignupPage() {
   }
 
   return (
-    <AuthSplitLayout imagePlaceholder={TEXT.imagePlaceholder}>
+    <AuthSplitLayout variant={SHOWCASE_VARIANT}>
       <form
         noValidate
         onSubmit={handleSubmit}
@@ -465,6 +474,15 @@ function SignupPage() {
               </p>
             )}
           </div>
+
+          <AgreementConsent
+            value={agreements}
+            onChange={(next) => {
+              setAgreements(next)
+              setError(null)
+            }}
+            disabled={isSubmitting}
+          />
         </div>
 
         {/* 오류 메시지는 로그인 화면과 같은 형식으로 입력 필드와 가입 버튼 사이에 표시한다. */}

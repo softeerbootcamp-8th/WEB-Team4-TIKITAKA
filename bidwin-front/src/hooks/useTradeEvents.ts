@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TradeStatus } from '../lib/api/mypage'
 import { apiUrl } from '../lib/api/client'
+import { useServerClock } from './useServerClock'
 
 export interface TradeLiveState {
   tradeId: number
@@ -11,6 +12,7 @@ export interface TradeLiveState {
 type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting'
 
 const TRADE_STATE_EVENT = 'trade-state'
+const HEARTBEAT_EVENT = 'heartbeat'
 
 function parseEvent<T>(event: Event): T | null {
   if (!(event instanceof MessageEvent) || typeof event.data !== 'string') return null
@@ -33,6 +35,8 @@ export function useTradeEvents(
 ): ConnectionStatus {
   const handlerRef = useRef(onState)
   handlerRef.current = onState
+  /* 하트비트는 모든 SSE 연결에 함께 내려오므로, 거래 화면도 같은 방식으로 시계를 보정한다. */
+  const { synchronize } = useServerClock()
   const [status, setStatus] = useState<ConnectionStatus>('idle')
 
   useEffect(() => {
@@ -50,16 +54,23 @@ export function useTradeEvents(
       const state = parseEvent<TradeLiveState>(event)
       if (state && state.tradeId === tradeId) handlerRef.current(state)
     }
+    const handleHeartbeat = (event: Event) => {
+      const serverTime = parseEvent<number>(event)
+      if (typeof serverTime === 'number' && Number.isFinite(serverTime)) {
+        synchronize(serverTime)
+      }
+    }
 
     source.onopen = () => setStatus('open')
     source.onerror = () => setStatus('reconnecting')
     source.addEventListener(TRADE_STATE_EVENT, handleState)
+    source.addEventListener(HEARTBEAT_EVENT, handleHeartbeat)
 
     return () => {
       source.close()
       setStatus('idle')
     }
-  }, [tradeId])
+  }, [tradeId, synchronize])
 
   return status
 }

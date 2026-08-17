@@ -383,9 +383,15 @@ The display/body split is functional: CoinbaseDisplay carries hero headlines onl
 
 ### Note on Font Substitutes
 CoinbaseDisplay, CoinbaseSans, and CoinbaseMono are licensed Coinbase typefaces.
-- **CoinbaseDisplay → Inter** at weight 400, letter-spacing -1.5%.
-- **CoinbaseSans → Inter** at weight 400/600.
-- **CoinbaseMono → JetBrains Mono** or **Geist Mono** at weight 500.
+비드윈은 화면이 대부분 한글이라 라틴 전용인 Inter 대신 **Pretendard**를 실제 본문 서체로 쓴다.
+- **CoinbaseDisplay → Pretendard** at weight 600/700, letter-spacing -1.5%.
+- **CoinbaseSans → Pretendard** at weight 400/500/600/700.
+- **CoinbaseMono → JetBrains Mono** or **Geist Mono** at weight 500. (아직 미도입)
+
+구현: `index.html`에서 jsDelivr CDN으로 Pretendard Variable(v1.3.9) dynamic subset을 불러오고,
+`src/styles/theme.css`의 `--font-sans`가 `'Pretendard Variable', Pretendard, …` 순으로 건다.
+dynamic subset이라 화면에 나온 글자가 속한 조각만 내려받고, `font-display: swap`이 걸려 있어
+폰트가 늦게 와도 글자가 사라지지 않는다. 가변 폰트(weight 45~920)라 굵기별 파일이 따로 없다.
 
 ## Layout
 
@@ -563,7 +569,7 @@ Pill for interactive, card-radius (24px) for containers, full circle for icons. 
 
 ## Known Gaps
 
-- CoinbaseDisplay, CoinbaseSans, CoinbaseMono are licensed; Inter and JetBrains Mono are documented substitutes.
+- CoinbaseDisplay, CoinbaseSans, CoinbaseMono are licensed; Pretendard(본문·제목)와 JetBrains Mono(숫자, 미도입)가 대체 서체다.
 - In-product trading surfaces (order book, charts, order forms) are behind login walls — this document covers marketing only.
 - Animation timings out of scope.
 - Form validation states beyond focus not visible on captured surfaces.
