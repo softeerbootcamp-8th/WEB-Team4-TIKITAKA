@@ -1,6 +1,8 @@
 <p align="center">
   <h1 align="center">🏆 BidWin (비드윈)</h1>
   <p align="center">
+    <img alt="Frame 1" src="https://github.com/user-attachments/assets/59888442-7f60-472e-b539-0f4c9f1d9265" />
+    <br>
     <strong>급하게 처분해야 할 물건을 위한 하향경매 플랫폼</strong>
   </p>
 </p>
@@ -9,12 +11,14 @@
 
 <p align="center">
   <a href="#1-프로젝트-소개">프로젝트 소개</a> •
-  <a href="#2-시스템-구성도">시스템 구성도</a> •
-  <a href="#3-기술-스택">기술 스택</a> •
-  <a href="#4-서비스-상세-설명">서비스 상세 설명</a> •
-  <a href="#5-문서화">문서화</a> •
-  <a href="#6-그라운드-룰">그라운드 룰</a> •
-  <a href="#7-팀-구성">팀 구성</a>
+  <a href="#2-기획">기획</a> •
+  <a href="#3-기능-소개">기능 소개</a> •
+  <a href="#4-시스템-구성도">시스템 구성도</a> •
+  <a href="#5-기술적 성과">기술적 성과</a> •
+  <a href="#6-기술-스택">기술 스택</a> •
+  <a href="#7-산출물">산출물</a> •
+  <a href="#8-그라운드-룰">그라운드 룰</a> •
+  <a href="#9-팀-구성">팀 구성</a>
 </p>
 
 <hr>
@@ -24,55 +28,16 @@
 
 판매자는 상향 경매, 하향 경매, 즉시 구매 중 상황에 맞는 방식을 선택할 수 있습니다. Bidwin은 시간에 따른 가격 변화와 구매자 간 경쟁을 활용해 기존 중고 거래의 긴 판매 대기시간과 반복적인 가격 조정 문제를 해결합니다.
 
-### 핵심 기능
-
-#### 🌟 하향 경매
-
-- 판매자가 설정한 시작 가격에서 일정 시간이 지날 때마다 **가격이 단계적으로 내려가는** 경매 방식입니다.
-- 구매자는 원하는 가격이 될 때까지 기다릴 수 있지만, 다른 사용자가 먼저 구매할 가능성도 있어 **가격과 구매 기회 사이의 긴장감**을 경험하게 됩니다. 판매자는 가격 조정을 통해 상품의 판매 가능성을 높일 수 있습니다.
-
-#### 🌟 즉시 구매
-
-- 첫 입찰이 발생하기 전까지 판매자가 설정한 **즉시 구매 가격으로 상품을 바로 구매**할 수 있는 기능입니다.
-- 구매자는 입찰 경쟁과 대기 없이 상품을 확정적으로 구매할 수 있고, 판매자는 원하는 가격에 상품을 빠르게 판매할 기회를 얻습니다.
-
-#### 🌟 상향 경매
-
-- 사용자들이 현재 최고 입찰가보다 높은 금액을 제시하며 경쟁하는 **일반적인 입찰 방식의 경매**입니다.
-- 입찰 경쟁을 통해 상품의 가격이 자연스럽게 형성되며, 구매자는 원하는 상품을 확보하는 재미를, 판매자는 더 높은 가격에 판매할 기회를 얻습니다.
 ---
 
-## 2. 시스템 구성도
-
-### 2.1 시스템 아키텍처
-
-*(추가 예정)*
-
-### 2.2 ERD
-
-![BidWin ERD](docs/images/erd.png)
-
----
-
-## 3. 기술 스택
-
-| 구분 | 스택 |
-| :---: | --- |
-| **프론트엔드** | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) ![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black) |
-| **백엔드** | ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-6DB33F?style=flat&logo=springboot&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat&logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white) ![Flyway](https://img.shields.io/badge/Flyway-CC0200?style=flat&logo=flyway&logoColor=white) |
-| **인프라** | ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?style=flat&logo=amazons3&logoColor=white) ![Amazon EC2](https://img.shields.io/badge/Amazon%20EC2-FF9900?style=flat&logo=amazonec2&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white) |
-| **협업** | ![Notion](https://img.shields.io/badge/Notion-000000?style=flat&logo=notion&logoColor=white) ![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat&logo=figma&logoColor=white) ![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat&logo=slack&logoColor=white) |
-
----
-
-## 4. 서비스 상세 설명
+## 2. 기획
 
 <details>
 <summary><b>📖 기획 배경 및 문제 정의 (클릭하여 펼치기)</b></summary>
 
 <br>
 
-### 4.1 기획 배경
+### 2.1 기획 배경
 
 > 이사 당일, 아직 사용할 수 있는 매트리스를 결국 버려야 했다.  
 > 조금 더 빠르게 가격을 조정할 수 있었다면 판매할 수 있지 않았을까?
@@ -83,7 +48,7 @@
 
 **BidWin**은 이러한 문제를 해결하기 위해 시간의 흐름과 구매자 간 경쟁을 활용하여 거래 가격을 탐색하는 경매 방식을 도입했습니다.
 
-### 4.2 사용자 페인포인트
+### 2.2 사용자 페인포인트
 
 #### 판매자
 
@@ -100,7 +65,7 @@
 - 가격이 내려가기를 기다리다가 다른 구매자에게 상품을 놓칠 수 있습니다.
 - 구매 의사가 있어도 판매자와 희망 가격이 달라 거래가 지연될 수 있습니다.
 
-### 4.3 문제 정의
+### 2.3 문제 정의
 
 핵심 문제는 판매자가 **가격을 낮출 의향이 있어도**, 구매자가 **거래를 결정할 가격을 빠르게 찾기 어렵다는 점**입니다.
 
@@ -114,7 +79,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 - 판매자의 반복적인 가격 수정과 구매자의 **협상 부담을 줄입니다.**
 - 판매 가능한 중고 물품이 거래되지 못하고 **폐기되는 상황을 줄입니다.**
 
-### 4.4 해결 방법
+### 2.4 해결 방법
 
 | 사용자 문제 | 해결 방법 |
 | --- | --- |
@@ -127,18 +92,122 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ---
 
-## 5. 문서화
+## 3. 기능 소개
 
-| 문서명 | 상세 설명 | 링크 |
-| :--- | :--- | :---: |
-| **📋 기능 명세서** | 요구사항 명세서 및 이슈 정의 | [바로가기](https://docs.google.com/spreadsheets/d/1iq08mCo6T1AeusSlgDHwsqnZRK2bE6XQu9pcvFWykkY/edit?usp=sharing) |
-| **🗄️ Database ERD** | 데이터베이스 테이블 구조 및 연관관계 정의서 | [바로가기](https://softeer04.notion.site/ERD-3ab6b34e4aac80a7b018e6b145691d41) |
-| **📅 일정 관리 (GitHub Project)** | 스프린트 관리 및 Task 분배 | [바로가기](https://github.com/orgs/softeerbootcamp-8th/projects/8) |
-| **📝 전체 문서 관리 (Notion)** | 매일 스크럼, 아이디어 회의, 주간 회고록 | [바로가기](https://softeer04.notion.site/HMG-Softeer-4-TIKITAKA-39f6b34e4aac80bcb442fdccba74ab57?source=copy_link) |
+> [!NOTE]
+> 아래 시연 GIF는 용량이 큽니다. 화면이 바로 보이지 않으면 로딩이 끝날 때까지 잠시 기다려 주세요.
+
+### 🌟 하향 경매
+
+- 판매자가 설정한 시작 가격에서 일정 시간이 지날 때마다 **가격이 단계적으로 내려가는** 경매 방식입니다.
+- 구매자는 원하는 가격이 될 때까지 기다릴 수 있지만, 다른 사용자가 먼저 구매할 가능성도 있어 **가격과 구매 기회 사이의 긴장감**을 경험하게 됩니다. 판매자는 가격 조정을 통해 상품의 판매 가능성을 높일 수 있습니다.
+
+<table width="100%">
+  <tbody>
+    <tr>
+      <td align="center" height="420">
+        <img alt="하향-즉구" src="https://github.com/user-attachments/assets/f21822bf-493b-464b-b7c3-3b0ef790314d" />
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+### 🌟 상향 경매
+
+- 사용자들이 현재 최고 입찰가보다 높은 금액을 제시하며 경쟁하는 **일반적인 입찰 방식의 경매**입니다.
+- 입찰 경쟁을 통해 상품의 가격이 자연스럽게 형성되며, 구매자는 원하는 상품을 확보하는 재미를, 판매자는 더 높은 가격에 판매할 기회를 얻습니다.
+
+<table width="100%">
+  <tbody>
+    <tr>
+      <td align="center" height="420">
+        <img alt="상향-입찰" src="https://github.com/user-attachments/assets/d5db682b-c2de-45b1-b416-d3143e481a4e" />
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+### 🌟 밀봉 입찰
+
+- 상향 경매는 마감 5분전부터 밀봉 입찰 상태가 됩니다. 밀봉 입찰 상태가 되면 **모든 사용자는 단 1번 입찰을 할 수 있고, 그 입찰가는 공개되지 않습니다.**
+- 이후 경매가 종료되었을때 **가격이 높음 -> 먼저 입찰함 -> 가입 시기가 빠름** 순서대로 낙찰자를 판정합니다. 
+- 밀봉 입찰을 도입함으로서 구매자는 낙찰 직전 발생한 상회 입찰로 인한 불쾌함을 방지하고, 판매자는 정시에 경매가 끝나는 안정성을 얻을 수 있습니다.
+
+<table width="100%">
+  <tbody>
+    <tr>
+      <td align="center" height="420">
+        <img alt="상향-밀봉" src="https://github.com/user-attachments/assets/334142eb-4624-4491-aee3-2ef98138ff22" />
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+### 🌟 즉시 구매
+
+- 첫 입찰이 발생하기 전까지 판매자가 설정한 **즉시 구매 가격으로 상품을 바로 구매**할 수 있는 기능입니다.
+- 구매자는 입찰 경쟁과 대기 없이 상품을 확정적으로 구매할 수 있고, 판매자는 원하는 가격에 상품을 빠르게 판매할 기회를 얻습니다.
+
+<table width="100%">
+  <tbody>
+    <tr>
+      <td align="center" height="420">
+        <img alt="상향-즉구" src="https://github.com/user-attachments/assets/80c57f09-6fb3-4d58-8a3b-19b03ec0e796" />
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
-## 6. 그라운드 룰
+## 4. 시스템 구성도
+
+### 4.1 시스템 아키텍처
+
+![BidWin 시스템 아키텍처](docs/images/architecture.png)
+
+### 4.2 ERD
+
+![BidWin ERD](docs/images/erd.png)
+
+---
+## 5. 기술적 성과
+
+---
+
+## 6. 기술 스택
+
+| 구분 | 스택 |
+| :---: | --- |
+| **프론트엔드** | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) ![React](https://img.shields.io/badge/React%2019-61DAFB?style=flat&logo=react&logoColor=black) ![React Router](https://img.shields.io/badge/React%20Router-CA4245?style=flat&logo=reactrouter&logoColor=white) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS%20v4-06B6D4?style=flat&logo=tailwindcss&logoColor=white) ![React Compiler](https://img.shields.io/badge/React%20Compiler-58C4DC?style=flat&logo=babel&logoColor=white) ![oxlint](https://img.shields.io/badge/oxlint-CC0000?style=flat&logo=oxc&logoColor=white) ![Lucide](https://img.shields.io/badge/Lucide%20React-F56565?style=flat&logo=lucide&logoColor=white) |
+| **백엔드** | ![Java](https://img.shields.io/badge/Java%2021-437291?style=flat&logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot%204.1-6DB33F?style=flat&logo=springboot&logoColor=white) ![Spring MVC](https://img.shields.io/badge/Spring%20MVC-6DB33F?style=flat&logo=spring&logoColor=white) ![Spring Data JPA](https://img.shields.io/badge/Spring%20Data%20JPA-6DB33F?style=flat&logo=spring&logoColor=white) ![QueryDSL](https://img.shields.io/badge/QueryDSL-0769AD?style=flat&logo=databricks&logoColor=white) ![Spring Session](https://img.shields.io/badge/Spring%20Session-6DB33F?style=flat&logo=spring&logoColor=white) ![Spring Mail](https://img.shields.io/badge/Spring%20Mail-6DB33F?style=flat&logo=maildotru&logoColor=white) ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=flat&logo=gradle&logoColor=white) ![Lombok](https://img.shields.io/badge/Lombok-BC4521?style=flat&logo=lombok&logoColor=white) |
+| **데이터** | ![MySQL](https://img.shields.io/badge/MySQL%208.4-4479A1?style=flat&logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis%207.4-DC382D?style=flat&logo=redis&logoColor=white) ![Flyway](https://img.shields.io/badge/Flyway-CC0200?style=flat&logo=flyway&logoColor=white) ![Caffeine](https://img.shields.io/badge/Caffeine%20Cache-6F4E37?style=flat&logo=coffeescript&logoColor=white) |
+| **실시간 통신** | ![SSE](https://img.shields.io/badge/Server--Sent%20Events-FF6F00?style=flat&logo=serverfault&logoColor=white) ![Redis Pub/Sub](https://img.shields.io/badge/Redis%20Pub%2FSub-DC382D?style=flat&logo=redis&logoColor=white) |
+| **인프라** | ![Amazon EC2](https://img.shields.io/badge/Amazon%20EC2-FF9900?style=flat&logo=amazonec2&logoColor=white) ![Amazon S3](https://img.shields.io/badge/Amazon%20S3-569A31?style=flat&logo=amazons3&logoColor=white) ![CloudFront](https://img.shields.io/badge/CloudFront-8C4FFF?style=flat&logo=amazoncloudfront&logoColor=white) ![Amazon VPC](https://img.shields.io/badge/Amazon%20VPC-232F3E?style=flat&logo=amazonvpc&logoColor=white) ![AWS IAM](https://img.shields.io/badge/AWS%20IAM%20OIDC-DD344C?style=flat&logo=amazoniam&logoColor=white) ![Docker](https://img.shields.io/badge/Docker%20Compose-2496ED?style=flat&logo=docker&logoColor=white) ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=flat&logo=ubuntu&logoColor=white) |
+| **CI/CD** | ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?style=flat&logo=githubactions&logoColor=white) ![JaCoCo](https://img.shields.io/badge/JaCoCo-D22128?style=flat&logo=sonarqube&logoColor=white) ![JUnit5](https://img.shields.io/badge/JUnit%205-25A162?style=flat&logo=junit5&logoColor=white) ![Husky](https://img.shields.io/badge/Husky-42B983?style=flat&logo=git&logoColor=white) ![commitlint](https://img.shields.io/badge/commitlint-000000?style=flat&logo=commitlint&logoColor=white) ![CodeRabbit](https://img.shields.io/badge/CodeRabbit-FF570A?style=flat&logo=codereview&logoColor=white) |
+| **모니터링 · 성능** | ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white) ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat&logo=grafana&logoColor=white) ![Loki](https://img.shields.io/badge/Loki-F46800?style=flat&logo=grafana&logoColor=white) ![Alloy](https://img.shields.io/badge/Grafana%20Alloy-F46800?style=flat&logo=grafana&logoColor=white) ![Micrometer](https://img.shields.io/badge/Micrometer-117A8B?style=flat&logo=micrometer&logoColor=white) ![Gatling](https://img.shields.io/badge/Gatling-FF9E2A?style=flat&logo=gatling&logoColor=white) ![k6](https://img.shields.io/badge/k6-7D64FF?style=flat&logo=k6&logoColor=white) |
+| **API 문서** | ![Swagger](https://img.shields.io/badge/Swagger%20UI-85EA2D?style=flat&logo=swagger&logoColor=black) ![OpenAPI](https://img.shields.io/badge/springdoc%20OpenAPI-6BA539?style=flat&logo=openapiinitiative&logoColor=white) |
+| **협업** | ![Notion](https://img.shields.io/badge/Notion-000000?style=flat&logo=notion&logoColor=white) ![Figma](https://img.shields.io/badge/Figma%20%2F%20FigJam-F24E1E?style=flat&logo=figma&logoColor=white) ![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat&logo=slack&logoColor=white) ![GitHub Projects](https://img.shields.io/badge/GitHub%20Projects-181717?style=flat&logo=github&logoColor=white) ![Google Sheets](https://img.shields.io/badge/Google%20Sheets-34A853?style=flat&logo=googlesheets&logoColor=white) |
+
+---
+
+## 7. 산출물
+
+| 산출물 | 상세 설명 | 링크 |
+| :--- | :--- | :---: |
+| **📊 통합 명세서** | 기능 명세서 · 요구사항 명세서 · API 명세서 · 이슈 단위 · 진행 요약 통합 시트 | [바로가기](https://docs.google.com/spreadsheets/d/1orIoqAX5NUv8rB3I7x58Ae_NT1sThZx6XoPvBz1oO6M/edit?gid=480022386#gid=480022386) |
+| **📗 스웨거 (Swagger UI)** | 배포 서버에서 제공하는 HTTP API 문서 | [바로가기](https://api.bidwin.site/swagger-ui/index.html) |
+| **🔗 이슈 관계도** | 이슈 분할과 선후 의존 관계(위상 정렬)를 정리 | [바로가기]() |
+| **🔄 상태 전이도** | 회원 · 경매 · 거래 도메인의 상태 전이 다이어그램 | [바로가기]() |
+| **📑 상태 전이표** | 전이 조건과 부수 효과(보증금 처리 등)를 표로 고정 | [바로가기]() |
+| **✅ 행위표** | 경매 상태별로 허용되는 사용자 행위 매트릭스 | [바로가기]() |
+| **🎨 디자인 시트** | 컬러 · 타이포그래피 · 컴포넌트 스타일 정의서 | [바로가기]() |
+| **🖼️ 와이어프레임** | 전체 화면 구성과 플로우 설계 | [바로가기](https://www.figma.com/design/j9T8YCyN5ILPBUmoHurPlc/Bidwin?node-id=0-1&t=nJuW1NwHBt89iUkY-1) |
+| **📅 일정 관리 (GitHub Project)** | 스프린트 관리 및 Task 분배 | [바로가기](https://github.com/orgs/softeerbootcamp-8th/projects/8) |
+| **📝 전체 문서 관리 (Notion)** | 매일 스크럼, 아이디어 회의, 주간 회고록 | [바로가기](https://softeer04.notion.site/HMG-Softeer-4-TIKITAKA-39f6b34e4aac80bcb442fdccba74ab57?source=copy_link) |
+---
+
+## 8. 그라운드 룰
 
 <details>
 <summary><b>🤝 [팀 Ground Rules] 우리 팀의 협업 & 소통 규칙 (클릭하여 펼치기)</b></summary>
@@ -200,43 +269,56 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ---
 
-## 7. 팀 구성
+## 9. 팀 구성
 
 <table align="center" width="100%">
   <thead>
     <tr>
       <th align="center" width="20%">프로필 사진</th>
-      <th align="center" width="25%">이름 / 역할</th>
-      <th align="left" width="40%">담당 업무 및 기술 스택</th>
+      <th align="center" width="20%">이름 / 역할</th>
+      <th align="left" width="45%">담당 업무</th>
       <th align="center" width="15%">링크</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td align="center">*(이미지 영역)*</td>
+      <td align="center"><img width="354" height="473" alt="image" src="https://github.com/user-attachments/assets/49de5533-0d32-4b70-976a-750835347aeb" />
+</td>
       <td align="center"><b>김근성</b><br><sub>팀장, BE</sub></td>
       <td>
+        <ul>
+          <li><b>세션 기반 인증·인가 전반</b> — 로그인·로그아웃, 세션 보안 정책, 인증 필터·인터셉터 설계</li>
+          <li><b>SSE 실시간 경매·거래 브로드캐스트</b> — 연결 관리와 하트비트, 커넥션 풀 점유 문제 해결, 부하 테스트 기반 성능 개선</li>
+          <li><b>스케쥴러 기반 경매 마감 로직</b> — 경매 마감 경합 제어, 배치를 통한 성능 개선</li>
+          <li><b>Top-K 알고리즘을 통한 가격순 정렬</b> — 기존 불가능하다 판단되었던 가격순 정렬 기반 마련, 알고리즘 로직을 통한 성능 개선</li>
+        </ul>
       </td>
       <td align="center">
-        <a href="https://github.com"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
+        <a href="https://github.com/rootachieve"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
       </td>
     </tr>
     <tr>
-      <td align="center">*(이미지 영역)*</td>
+      <td align="center"><img width="354" height="472" alt="image" src="https://github.com/user-attachments/assets/bf79a8ed-b853-49f3-9410-4f605bbcfe43" />
+</td>
       <td align="center"><b>허찬욱</b><br><sub>BE</sub></td>
       <td>
+        <ul>
+        </ul>
       </td>
       <td align="center">
-        <a href="https://github.com"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
+        <a href="https://github.com/Heee-oh"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
       </td>
     </tr>
     <tr>
-      <td align="center">*(이미지 영역)*</td>
+      <td align="center"><img width="413" height="531" alt="image" src="https://github.com/user-attachments/assets/7e6e77dc-7b97-4f0b-a29f-b9823e314c8a" />
+</td>
       <td align="center"><b>노승억</b><br><sub>BE</sub></td>
       <td>
+        <ul>
+        </ul>
       </td>
       <td align="center">
-        <a href="https://github.com"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
+        <a href="https://github.com/Rhoo-se"><img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white"/></a>
       </td>
     </tr>
   </tbody>
