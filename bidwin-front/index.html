@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      본문 폰트. 한글 자소 단위로 쪼갠 dynamic subset이라 화면에 실제로 나온 글자의
+      조각만 내려받는다. font-family는 src/styles/theme.css의 --font-sans에서 건다.
+    -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+    />
     <title>bidwin-front</title>
   </head>
   <body>

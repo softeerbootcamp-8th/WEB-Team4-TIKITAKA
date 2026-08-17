@@ -38,9 +38,10 @@
   --color-accent-yellow: #f4b000;
 
   /* Typography */
+  /* Pretendard는 index.html에서 CDN으로 불러온다(가변 폰트, weight 45~920). */
   --font-sans:
-    'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+    'Pretendard Variable', Pretendard, -apple-system, system-ui, 'Segoe UI',
+    Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   /* Radius — DESIGN.md 스케일로 Tailwind 기본 rounded-* 스케일을 대체한다 */
