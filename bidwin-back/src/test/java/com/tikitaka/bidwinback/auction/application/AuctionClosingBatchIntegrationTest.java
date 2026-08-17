@@ -196,6 +196,38 @@ class AuctionClosingBatchIntegrationTest {
     }
 
     @Test
+    void 거래가_이미_있는_경매가_섞여도_남은_후보까지_마감한다() {
+        // given
+        Member seller = persistMember("batch-settled-seller");
+        Member settledWinner = persistMember("batch-settled-winner");
+        Member nextWinner = persistMember("batch-settled-next");
+        UpAuction alreadySettled = persistAuction(seller);
+        UpAuction behind = persistAuction(seller);
+        long settledPrice = START_PRICE + BID_UNIT;
+        placePublicBid(alreadySettled.getId(), settledWinner.getId(), settledPrice);
+        placePublicBid(behind.getId(), nextWinner.getId(), START_PRICE + (BID_UNIT * 2));
+        // 앞선 배치가 거래만 남기고 끊긴 상태. 예전에는 여기서 유니크 제약으로 죽어
+        // 뒤에 줄 선 후보가 통째로 마감되지 않았다.
+        insertTradeWithoutClosing(alreadySettled.getId(), settledWinner.getId(), settledPrice);
+        endNow(alreadySettled.getId());
+        endNow(behind.getId());
+
+        // when
+        int closed = auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+
+        // then
+        assertAll(
+                () -> assertThat(closed).isGreaterThanOrEqualTo(2),
+                () -> assertThat(statusOf(alreadySettled.getId())).isEqualTo("COMPLETED"),
+                () -> assertThat(statusOf(behind.getId())).isEqualTo("COMPLETED"),
+                () -> assertThat(tradesOf(alreadySettled.getId())).hasSize(1),
+                () -> assertThat(((Number) tradesOf(alreadySettled.getId()).get(0)[1]).longValue())
+                        .isEqualTo(settledPrice),
+                () -> assertThat(tradesOf(behind.getId())).hasSize(1)
+        );
+    }
+
+    @Test
     void 남은_후보가_없으면_아무것도_처리하지_않는다() {
 
         int drained;
@@ -250,6 +282,21 @@ class AuctionClosingBatchIntegrationTest {
             );
         }
         assertThat(updated).isEqualTo(1);
+    }
+
+    private void insertTradeWithoutClosing(Long auctionId, Long buyerId, long finalPrice) {
+        entityManager.createNativeQuery("""
+                        INSERT INTO auction_trade
+                            (auction_id, buyer_id, status, final_price,
+                             purchased_at, created_at, last_modified_at)
+                        VALUES (:auctionId, :buyerId, 'WAITING_CONFIRM', :finalPrice,
+                                SYSDATE(6), SYSDATE(6), SYSDATE(6))
+                        """)
+                .setParameter("auctionId", auctionId)
+                .setParameter("buyerId", buyerId)
+                .setParameter("finalPrice", finalPrice)
+                .executeUpdate();
+        entityManager.clear();
     }
 
     private void endNow(Long auctionId) {

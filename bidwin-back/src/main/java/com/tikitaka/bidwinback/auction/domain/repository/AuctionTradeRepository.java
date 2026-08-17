@@ -25,6 +25,8 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
     // member 행에 공유 잠금을 남긴다. 같은 회원의 입찰과 보증금이 그 행을 배타 잠금하므로
     // 마감과 입찰이 겹칠 때 경합이 된다. 거래는 낙찰자 식별자만 필요하므로 join을 걷어낸다.
     // 낙찰자가 없는 경매는 buyer_id가 NULL이라 빠지므로 선점한 배치를 통째로 넘겨도 된다.
+    // 거래가 이미 있는 경매도 제외한다. 앞선 배치가 거래만 남기고 끊겨도 유니크 제약으로 죽지 않고,
+    // 뒤따르는 closeAll이 그 거래를 그대로 써서 마감한다.
     // 아래 두 CASE는 같은 조건으로 각각 낙찰자와 낙찰가를 고르므로 함께 고쳐야 한다.
     @Modifying
     @Query(value = """
@@ -57,7 +59,9 @@ public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long
                 FROM auction
                 WHERE auction.id IN (:auctionIds)
             ) AS winner
+            LEFT JOIN auction_trade settled ON settled.auction_id = winner.auction_id
             WHERE winner.buyer_id IS NOT NULL
+              AND settled.auction_id IS NULL
             """, nativeQuery = true)
     int insertWinnerTradesAll(
             @Param("auctionIds") List<Long> auctionIds,
