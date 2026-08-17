@@ -27,8 +27,9 @@ const TEXT = {
   forgotPassword: '비밀번호 찾기',
   signupPrompt: '아직 계정이 없으신가요?',
   signup: '회원가입',
-  imagePlaceholder: '이미지 영역',
 }
+
+const SHOWCASE_VARIANT = 'login'
 
 const ROUTE = {
   home: '/',
@@ -101,7 +102,7 @@ function LoginPage() {
   const hasError = error !== null
 
   return (
-    <AuthSplitLayout imagePlaceholder={TEXT.imagePlaceholder}>
+    <AuthSplitLayout variant={SHOWCASE_VARIANT}>
       <form
         noValidate
         onSubmit={handleSubmit}

@@ -36,7 +36,7 @@ function MyPage() {
   const [isMyInfoOpen, setIsMyInfoOpen] = useState(false)
   const initialServerTime = data?.sellingItems.find((item) => item.downPricing)
     ?.downPricing?.serverTime
-  const { serverOffsetMs, synchronize } = useServerClock(initialServerTime)
+  const { serverOffsetMs } = useServerClock(initialServerTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,7 +65,6 @@ function MyPage() {
     'list',
     data?.sellingItems.map((item) => item.auctionId) ?? [],
     {
-      onHeartbeat: synchronize,
       onState: (state) => {
         setData((current) => {
           if (!current) return current

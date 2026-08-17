@@ -43,10 +43,17 @@ export function computeDropHistory(pricing: DownPricing, now: number): PriceDrop
     Math.floor((now - pricing.startedAt) / pricing.priceDropIntervalMs),
   )
   const history: PriceDropEntry[] = []
+  let previousPrice = pricing.startPrice
 
   for (let i = 1; i <= elapsedDrops; i++) {
     const price = Math.max(pricing.startPrice - i * pricing.dropPrice, pricing.minimumPrice)
+    /*
+     * 최저가에 닿은 뒤에는 주기가 지나도 가격이 그대로다. 변동 내역은 "가격이 바뀐 기록"이므로
+     * 실제로 내려간 만큼만 남기고 멈춘다(같은 금액이 주기마다 쌓이지 않게).
+     */
+    if (price >= previousPrice) break
     history.push({ price, droppedAt: pricing.startedAt + i * pricing.priceDropIntervalMs })
+    previousPrice = price
   }
 
   return history

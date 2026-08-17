@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BidHistoryItem, BidHistoryResponse } from '../lib/api/auctions'
 import { apiUrl } from '../lib/api/client'
+import { useServerClock } from './useServerClock'
 
 export interface AuctionLiveState {
   auctionId: number
@@ -15,7 +16,6 @@ interface AuctionEventHandlers {
   onState?: (state: AuctionLiveState) => void
   onBidCreated?: (bid: BidCreatedEvent) => void
   onBidHistorySnapshot?: (history: BidHistoryResponse) => void
-  onHeartbeat?: (serverTime: number) => void
 }
 
 interface BidCreatedEvent extends BidHistoryItem {
@@ -44,6 +44,8 @@ export function useAuctionEvents(
 ): { status: ConnectionStatus; reconnect: () => void } {
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
+  /* 하트비트로 전역 서버 시계를 보정한다. SSE를 여는 화면이면 화면마다 챙기지 않아도 보정된다. */
+  const { synchronize } = useServerClock()
   const uniqueIds = [...new Set(auctionIds)].sort((a, b) => a - b)
   const idsKey = uniqueIds.join(',')
   const [status, setStatus] = useState<ConnectionStatus>('idle')
@@ -111,7 +113,7 @@ export function useAuctionEvents(
       markActivity()
       const serverTime = parseEvent<number>(event)
       if (typeof serverTime === 'number' && Number.isFinite(serverTime)) {
-        handlersRef.current.onHeartbeat?.(serverTime)
+        synchronize(serverTime)
       }
     }
 
@@ -147,7 +149,7 @@ export function useAuctionEvents(
       if (staleCheckId !== undefined) window.clearInterval(staleCheckId)
       source.close()
     }
-  }, [idsKey, mode, reconnectToken])
+  }, [idsKey, mode, reconnectToken, synchronize])
 
   return { status, reconnect }
 }
