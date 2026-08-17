@@ -56,7 +56,6 @@ const TEXT = {
   submitting: '가입 처리 중…',
   loginPrompt: '이미 계정이 있으신가요?',
   login: '로그인',
-  imagePlaceholder: '이미지 영역 2',
   signUpSuccess: '회원가입이 완료됐어요. 이메일 인증을 진행해주세요.',
   passVerifiedToast: '본인인증이 완료됐어요.',
 }
@@ -65,6 +64,8 @@ const ROUTE = {
   login: '/login',
   emailVerification: '/email-verification',
 }
+
+const SHOWCASE_VARIANT = 'signup'
 
 const ERROR_MESSAGE = {
   emptyField: '이메일, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.',
@@ -320,7 +321,7 @@ function SignupPage() {
   }
 
   return (
-    <AuthSplitLayout imagePlaceholder={TEXT.imagePlaceholder}>
+    <AuthSplitLayout variant={SHOWCASE_VARIANT}>
       <form
         noValidate
         onSubmit={handleSubmit}
