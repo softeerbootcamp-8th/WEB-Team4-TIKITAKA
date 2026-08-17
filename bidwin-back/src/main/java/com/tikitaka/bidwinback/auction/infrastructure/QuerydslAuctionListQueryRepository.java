@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.tikitaka.bidwinback.auction.domain.entity.QAuction.auction;
 import static com.tikitaka.bidwinback.auction.domain.entity.QBid.bid;
@@ -137,6 +138,26 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             AuctionListSearchCondition condition,
             int limit
     ) {
+        List<Predicate> statusPredicates = statusBranchPredicates(condition);
+        return IntStream.range(0, statusPredicates.size())
+                .mapToObj(branchIndex -> findUpPriceSnapshotsInBranch(
+                        condition,
+                        statusPredicates.get(branchIndex),
+                        limit,
+                        upPriceIndexHint(condition, branchIndex)
+                ))
+                .flatMap(List::stream)
+                .sorted(priceSnapshotOrder(condition.sort()))
+                .limit(limit)
+                .toList();
+    }
+
+    private List<AuctionPriceSnapshot> findUpPriceSnapshotsInBranch(
+            AuctionListSearchCondition condition,
+            Predicate statusPredicate,
+            long limit,
+            String indexHint
+    ) {
         return queryFactory
                 .select(new QUpAuctionPriceSnapshotDetails(
                         auction.id,
@@ -144,11 +165,15 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ))
                 .from(auction)
                 .where(
-                        searchPredicate(condition),
+                        searchPredicate(condition, statusPredicate),
                         auction.instanceOf(UpAuction.class)
                 )
                 .orderBy(upPriceOrderBy(condition.sort()))
                 .limit(limit)
+                .setHint(
+                        HibernateHints.HINT_QUERY_DATABASE,
+                        indexHint
+                )
                 .fetch()
                 .stream()
                 .map(UpAuctionPriceSnapshotDetails::toSnapshot)
@@ -414,6 +439,45 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             };
             case RECOMMENDED, DEADLINE, LATEST ->
                     throw new IllegalArgumentException("가격 정렬이 아닙니다: " + sort);
+        };
+    }
+
+    private Comparator<AuctionPriceSnapshot> priceSnapshotOrder(AuctionSort sort) {
+        Comparator<AuctionPriceSnapshot> idDescending = Comparator
+                .comparingLong(AuctionPriceSnapshot::auctionId)
+                .reversed();
+        return switch (sort) {
+            case PRICE_LOW -> Comparator
+                    .comparingLong(AuctionPriceSnapshot::sortPrice)
+                    .thenComparing(idDescending);
+            case PRICE_HIGH -> Comparator
+                    .comparingLong(AuctionPriceSnapshot::sortPrice)
+                    .reversed()
+                    .thenComparing(idDescending);
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + sort);
+        };
+    }
+
+    private String upPriceIndexHint(
+            AuctionListSearchCondition condition,
+            int branchIndex
+    ) {
+        AuctionListStatusFilter status = condition.status() != null
+                ? condition.status()
+                : AuctionListStatusFilter.ACTIVE;
+        if (branchIndex > 0) {
+            return "idx_auction_count";
+        }
+        if (status == AuctionListStatusFilter.ACTIVE
+                && condition.sort() == AuctionSort.PRICE_HIGH) {
+            return "idx_auction_active_current_price_desc_id_desc";
+        }
+        return switch (condition.sort()) {
+            case PRICE_LOW -> "idx_auction_current_price_asc_id_desc";
+            case PRICE_HIGH -> "idx_auction_current_price_desc_id_desc";
+            case RECOMMENDED, DEADLINE, LATEST ->
+                    throw new IllegalArgumentException("가격 정렬이 아닙니다: " + condition.sort());
         };
     }
 

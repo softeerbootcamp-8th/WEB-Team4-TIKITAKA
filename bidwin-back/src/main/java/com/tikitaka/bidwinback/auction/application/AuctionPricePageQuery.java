@@ -27,9 +27,13 @@ public class AuctionPricePageQuery {
             AuctionListSearchCondition condition,
             int page,
             int size,
-            long totalCount
+            long candidateCountLimit
     ) {
-        int topKSize = topKSize(page, size, totalCount);
+        int normalizedPage = Math.min(
+                Math.max(1, page),
+                AuctionListService.MAX_LIST_PAGES
+        );
+        int topKSize = topKSize(normalizedPage, size, candidateCountLimit);
         if (topKSize == 0) {
             return List.of();
         }
@@ -52,7 +56,7 @@ public class AuctionPricePageQuery {
                 .sorted(resultOrder)
                 .toList();
         int fromIndex = (int) Math.min(
-                (long) (page - 1) * size,
+                (long) (normalizedPage - 1) * size,
                 orderedTopK.size()
         );
         int toIndex = Math.min(fromIndex + size, orderedTopK.size());
@@ -133,9 +137,9 @@ public class AuctionPricePageQuery {
         }
     }
 
-    private int topKSize(int page, int size, long totalCount) {
+    private int topKSize(int page, int size, long candidateCountLimit) {
         long requested = Math.multiplyExact((long) page, size);
-        long required = Math.min(totalCount, requested);
+        long required = Math.min(candidateCountLimit, requested);
         if (required > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("가격순으로 조회할 페이지 범위가 너무 큽니다.");
         }

@@ -25,6 +25,7 @@ import java.util.List;
 public class AuctionListService {
 
     private static final int FIRST_PAGE = 1;
+    static final int MAX_LIST_PAGES = 100;
     private static final int DEFAULT_PAGE_SIZE = 16;
     private static final int MAX_PAGE_SIZE = 100;
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
@@ -50,24 +51,27 @@ public class AuctionListService {
                 query.category(),
                 asOf
         );
-        long totalCount = auctionListQueryRepository.count(condition);
-        int totalPages = totalPages(totalCount, size);
-        int currentPage = Math.min(Math.max(FIRST_PAGE, query.page()), totalPages);
+        int currentPage = normalizedPage(query.page());
         long offset = (long) (currentPage - FIRST_PAGE) * size;
+        // 정확한 COUNT를 생략하므로 totalCount는 클라이언트가 조회할 수 있는 상한이다.
+        long totalCount = (long) MAX_LIST_PAGES * size;
 
-        List<AuctionSummaryResponse> pageItems = totalCount == 0
-                ? List.of()
-                : findPage(condition, currentPage, size, totalCount, offset)
-                        .stream()
-                        .map(this::toSummary)
-                        .toList();
+        List<AuctionSummaryResponse> pageItems = findPage(
+                condition,
+                currentPage,
+                size,
+                totalCount,
+                offset
+        ).stream()
+                .map(this::toSummary)
+                .toList();
 
         return new AuctionListResponse(
                 pageItems,
                 toEpochMilli(serverTime),
                 toEpochMilli(asOf),
                 currentPage,
-                totalPages,
+                MAX_LIST_PAGES,
                 totalCount
         );
     }
@@ -76,7 +80,7 @@ public class AuctionListService {
             AuctionListSearchCondition condition,
             int currentPage,
             int size,
-            long totalCount,
+            long candidateCountLimit,
             long offset
     ) {
         return switch (condition.sort()) {
@@ -84,7 +88,7 @@ public class AuctionListService {
                     condition,
                     currentPage,
                     size,
-                    totalCount
+                    candidateCountLimit
             );
             case RECOMMENDED, DEADLINE, LATEST ->
                     auctionListQueryRepository.findPage(condition, offset, size);
@@ -133,9 +137,8 @@ public class AuctionListService {
         return Math.min(requestedSize, MAX_PAGE_SIZE);
     }
 
-    private int totalPages(long totalCount, int size) {
-        long calculated = Math.max(FIRST_PAGE, Math.ceilDiv(totalCount, size));
-        return (int) Math.min(calculated, Integer.MAX_VALUE);
+    private int normalizedPage(int requestedPage) {
+        return Math.min(Math.max(FIRST_PAGE, requestedPage), MAX_LIST_PAGES);
     }
 
     private long toEpochMilli(LocalDateTime dateTime) {
