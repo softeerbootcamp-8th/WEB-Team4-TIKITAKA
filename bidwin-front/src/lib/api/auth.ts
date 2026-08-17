@@ -14,6 +14,12 @@ const AUTH_API_PATH = {
   passwordResetConfirm: '/api/v1/auth/password-resets/confirm',
 }
 
+/* 화면 분기가 필요한 백엔드 ErrorCode */
+const AUTH_ERROR_CODE = {
+  /* 이메일 인증이 끝나지 않은 계정 (ErrorCode.EMAIL_VERIFICATION_PENDING) */
+  emailVerificationPending: 'MEMBER_409_3',
+}
+
 interface LoginRequest {
   email: string
   password: string
@@ -37,6 +43,14 @@ interface SignUpResponse {
 
 interface AvailabilityResponse {
   available: boolean
+}
+
+/* 백엔드 EmailVerificationSendResponse */
+interface EmailVerificationSendResponse {
+  /* 메일이 실제로 나갔는지. 재전송 제한에 걸리면 false */
+  sent: boolean
+  /* 다음 재전송이 가능해질 때까지 남은 시간(초) */
+  retryAfterSeconds: number
 }
 
 interface PasswordResetConfirmRequest {
@@ -65,8 +79,13 @@ function requestSignUp(request: SignUpRequest): Promise<ApiResult<SignUpResponse
   return postJson<SignUpResponse, SignUpRequest>(AUTH_API_PATH.signUp, request)
 }
 
-function requestEmailVerification(email: string): Promise<ApiResult<void>> {
-  return postJson<void, { email: string }>(AUTH_API_PATH.emailVerificationSend, { email })
+function requestEmailVerification(
+  email: string,
+): Promise<ApiResult<EmailVerificationSendResponse>> {
+  return postJson<EmailVerificationSendResponse, { email: string }>(
+    AUTH_API_PATH.emailVerificationSend,
+    { email },
+  )
 }
 
 function requestEmailVerificationConfirm(token: string): Promise<ApiResult<void>> {
@@ -99,6 +118,7 @@ function requestSession(): Promise<ApiResult<void>> {
 }
 
 export {
+  AUTH_ERROR_CODE,
   requestEmailAvailability,
   requestEmailVerification,
   requestEmailVerificationConfirm,
@@ -112,6 +132,7 @@ export {
 }
 export type {
   AvailabilityResponse,
+  EmailVerificationSendResponse,
   LoginRequest,
   PasswordResetConfirmRequest,
   SignUpRequest,
