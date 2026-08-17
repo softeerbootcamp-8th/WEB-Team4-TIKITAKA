@@ -145,7 +145,7 @@ class DepositSettlementServiceTest {
         List<Long> auctionIds = List.of(AUCTION_ID, 43L);
         long firstAmount = 30_000L;
         long secondAmount = 40_000L;
-        when(auctionDepositRepository.findLosingDepositsForUpdate(
+        when(auctionDepositRepository.findLosingDeposits(
                 auctionIds, DepositStatus.HELD
         ))
                 .thenReturn(List.of(deposit, secondDeposit));
@@ -172,7 +172,7 @@ class DepositSettlementServiceTest {
         service.refundLosingDeposits(auctionIds);
 
         // then
-        verify(auctionDepositRepository).findLosingDepositsForUpdate(
+        verify(auctionDepositRepository).findLosingDeposits(
                 auctionIds, DepositStatus.HELD);
         verify(auctionDepositRepository).settleIfHeldWithAmount(
                 DEPOSIT_ID, DepositStatus.REFUNDED.name(), firstAmount);

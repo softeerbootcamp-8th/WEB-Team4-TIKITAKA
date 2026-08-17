@@ -39,9 +39,7 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
             DepositStatus status
     );
 
-    // 마감 배치가 선점한 경매에서 낙찰자를 제외한 HELD 보증금을 잠근다. 이후 회원 행은
-    // 이 조회 순서대로 갱신해 여러 경매가 동시에 마감돼도 회원 행 잠금 순서를 고정한다.
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    // 마감 배치가 선점한 경매에서 낙찰자를 제외한 HELD 보증금을 조회한다.
     @Query("""
             select deposit
             from AuctionDeposit deposit
@@ -53,9 +51,8 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
                   where trade.auction.id = deposit.auction.id
                     and trade.buyer.id <> deposit.member.id
               )
-            order by deposit.member.id, deposit.id
             """)
-    List<AuctionDeposit> findLosingDepositsForUpdate(
+    List<AuctionDeposit> findLosingDeposits(
             @Param("auctionIds") List<Long> auctionIds,
             @Param("status") DepositStatus status
     );

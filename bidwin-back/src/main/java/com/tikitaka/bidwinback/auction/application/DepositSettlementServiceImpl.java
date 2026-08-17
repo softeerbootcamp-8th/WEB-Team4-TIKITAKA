@@ -91,7 +91,7 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
         }
 
         List<AuctionDeposit> deposits = auctionDepositRepository
-                .findLosingDepositsForUpdate(auctionIds, DepositStatus.HELD);
+                .findLosingDeposits(auctionIds, DepositStatus.HELD);
         Map<Long, Long> refundAmountsByMember = new TreeMap<>();
 
         for (AuctionDeposit deposit : deposits) {
@@ -105,7 +105,7 @@ public class DepositSettlementServiceImpl implements DepositSettlementService {
         }
 
         // 한 회원이 같은 마감 배치의 여러 경매에서 탈락해도 회원 행은 한 번만 갱신한다.
-        // TreeMap 순서대로 잠가 다른 마감 배치 및 판매자 정산과의 데드락 가능성을 줄인다.
+        // 회원 ID 순서로 갱신해 다른 정산 트랜잭션과의 회원 행 잠금 순서를 통일한다.
         for (Map.Entry<Long, Long> refund : refundAmountsByMember.entrySet()) {
             if (memberRepository.refundLockedPoint(refund.getKey(), refund.getValue()) != 1) {
                 throw new IllegalStateException("보증금 반환 중 잠금 포인트를 되돌리지 못했습니다.");
