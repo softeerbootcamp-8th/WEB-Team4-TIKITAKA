@@ -34,34 +34,27 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("batchSize") int batchSize
     );
 
+    // 선점한 배치를 낙찰·유찰로 한 번에 마감한다. 거래가 앞서 적재되므로 그 유무가 곧 낙찰 여부다.
+    // 낙찰과 유찰을 따로 돌리면 뒤 문장이 이미 마감된 행까지 id 목록만큼 다시 훑는다.
+    // 유찰분의 current_price는 COALESCE로 원래 값을 그대로 대입한다. 값이 같으면 MySQL이 변경으로
+    // 치지 않아 가격 인덱스를 건드리지 않는다.
     @Modifying(flushAutomatically = true)
     @Query(value = """
             UPDATE auction FORCE INDEX (PRIMARY)
-            JOIN auction_trade ON auction_trade.auction_id = auction.id
-            SET auction.status = 'COMPLETED',
-                auction.current_price = auction_trade.final_price,
+            LEFT JOIN auction_trade ON auction_trade.auction_id = auction.id
+            SET auction.status = CASE WHEN auction_trade.auction_id IS NULL
+                                      THEN 'UNSOLD'
+                                      ELSE 'COMPLETED'
+                                 END,
+                auction.current_price =
+                        COALESCE(auction_trade.final_price, auction.current_price),
                 auction.completed_at = :settledAt,
                 auction.revision = auction.revision + 1,
                 auction.last_modified_at = :settledAt
             WHERE auction.id IN (:auctionIds)
               AND auction.status IN ('OPEN', 'BID_ONGOING')
             """, nativeQuery = true)
-    int completeAll(
-            @Param("auctionIds") List<Long> auctionIds,
-            @Param("settledAt") LocalDateTime settledAt
-    );
-
-    @Modifying
-    @Query(value = """
-            UPDATE auction FORCE INDEX (PRIMARY)
-            SET status = 'UNSOLD',
-                completed_at = :settledAt,
-                revision = revision + 1,
-                last_modified_at = :settledAt
-            WHERE id IN (:auctionIds)
-              AND status IN ('OPEN', 'BID_ONGOING')
-            """, nativeQuery = true)
-    int markUnsoldAll(
+    int closeAll(
             @Param("auctionIds") List<Long> auctionIds,
             @Param("settledAt") LocalDateTime settledAt
     );

@@ -44,8 +44,7 @@ public class AuctionClosingService {
                 TradeStatus.WAITING_CONFIRM.name(),
                 settledAt
         );
-        int closed = auctionRepository.completeAll(claimedAuctionIds, settledAt);
-        closed += auctionRepository.markUnsoldAll(claimedAuctionIds, settledAt);
+        int closed = auctionRepository.closeAll(claimedAuctionIds, settledAt);
         verifyAllClosed(closed, candidates.size());
 
         publishClosedEvent(candidates, candidateStatus);
