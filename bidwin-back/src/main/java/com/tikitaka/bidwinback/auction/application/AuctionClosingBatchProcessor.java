@@ -39,7 +39,7 @@ public class AuctionClosingBatchProcessor {
                 log.error("경매 마감 배치 실패: status={}", status, exception);
                 return;
             }
-            if (closed < batchSize) {
+            if (closed == 0) {
                 return;
             }
         }

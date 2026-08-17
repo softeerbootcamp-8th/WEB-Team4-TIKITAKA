@@ -29,10 +29,10 @@ class AuctionClosingBatchProcessorTest {
     }
 
     @Test
-    void 배치가_가득_차면_남은_후보를_이어서_처리한다() {
+    void 후보가_남아_있는_동안_이어서_처리한다() {
         // given
         when(auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE))
-                .thenReturn(BATCH_SIZE, BATCH_SIZE, 1);
+                .thenReturn(BATCH_SIZE, BATCH_SIZE, 0);
         when(auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE))
                 .thenReturn(0);
 
@@ -44,7 +44,22 @@ class AuctionClosingBatchProcessorTest {
     }
 
     @Test
-    void 배치가_가득_차지_않으면_같은_상태를_더_조회하지_않는다() {
+    void 다른_서버가_후보를_쥐어_배치가_짧게_잡혀도_같은_상태를_이어서_처리한다() {
+        // given
+        when(auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE))
+                .thenReturn(BATCH_SIZE - 1, 1, 0);
+        when(auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE))
+                .thenReturn(0);
+
+        // when
+        processor.closeEndedAuctions();
+
+        // then
+        verify(auctionClosingService, times(3)).closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
+    }
+
+    @Test
+    void 후보를_한_건도_선점하지_못하면_같은_상태를_더_조회하지_않는다() {
         // given
         when(auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE))
                 .thenReturn(0);
