@@ -9,8 +9,11 @@ import com.tikitaka.bidwinback.global.common.ApiResponse;
 import com.tikitaka.bidwinback.global.config.OpenApiConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.presentation.dto.request.NicknameUpdateRequest;
 import com.tikitaka.bidwinback.member.presentation.dto.request.PasswordUpdateRequest;
+import com.tikitaka.bidwinback.member.presentation.dto.request.PointChargeRequest;
+import com.tikitaka.bidwinback.member.presentation.dto.response.DepositResponse;
 import com.tikitaka.bidwinback.member.presentation.dto.response.NicknameUpdateResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -22,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -89,5 +93,17 @@ public class MyPageAccountUpdateController {
         }
 
         return ResponseEntity.ok(ApiResponse.successWithoutData());
+    }
+
+    @Operation(summary = "포인트 충전(테스트용)", description = "실제 결제 없이 로그인 회원의 보증금 잔액을 바로 충전합니다.")
+    @PostMapping("/points/charge")
+    public ResponseEntity<ApiResponse<DepositResponse>> chargePoint(
+            @Login AuthMember authMember,
+            @Valid @RequestBody PointChargeRequest request
+    ) {
+        Member member = memberService.chargePoint(authMember.memberId(), request.amount());
+        return ResponseEntity.ok(ApiResponse.success(
+                new DepositResponse(member.getTotalPoint(), member.getLockedPoint())
+        ));
     }
 }

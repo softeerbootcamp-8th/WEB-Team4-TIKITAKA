@@ -15,13 +15,21 @@ import java.util.Optional;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_EMAIL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.DUPLICATE_NICKNAME;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.EMAIL_VERIFICATION_PENDING;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_POINT_CHARGE_AMOUNT;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.POINT_CHARGE_AMOUNT_EXCEEDED;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.EMAIL_UNIQUE_CONSTRAINT;
 import static com.tikitaka.bidwinback.member.domain.entity.Member.NICKNAME_UNIQUE_CONSTRAINT;
 
 @Service
 @RequiredArgsConstructor
 public class MemberService {
+
+    private static final long POINT_UNIT = 1_000L;
+    // 테스트 목적의 무상 충전 기능이라 반복 호출로 잔액이 한없이 불어나는 것까지 막지는
+    // 않되, 한 번의 요청이 만들 수 있는 피해 규모는 이 상한으로 제한한다.
+    private static final long MAX_POINT_CHARGE_AMOUNT = 100_000_000L;
 
     private final MemberRepository memberRepository;
 
@@ -133,5 +141,33 @@ public class MemberService {
                 MemberStatus.ACTIVE,
                 authVersion
         );
+    }
+
+    // 실제 결제 연동 없이 테스트를 위해 잔액을 바로 채워주는 기능이다.
+    @Transactional
+    public Member chargePoint(Long memberId, long amount) {
+        validateChargeAmount(amount);
+
+        int updatedRows = memberRepository.chargePointIfActive(memberId, amount);
+        if (updatedRows != 1) {
+            // 이 시점엔 이미 로그인 세션으로 존재가 확인된 회원이라, 갱신 실패는 사실상
+            // 활성 상태가 아니라는 뜻이다. 그래도 행 자체가 없는 극단적 경우까지 구분해둔다.
+            if (memberRepository.findById(memberId).isEmpty()) {
+                throw new MemberException(MEMBER_NOT_FOUND);
+            }
+            throw new MemberException(MEMBER_NOT_ACTIVE, "활성 상태의 회원만 포인트를 충전할 수 있습니다.");
+        }
+
+        return memberRepository.findById(memberId)
+                .orElseThrow(() -> new MemberException(MEMBER_NOT_FOUND));
+    }
+
+    private void validateChargeAmount(long amount) {
+        if (amount <= 0 || amount % POINT_UNIT != 0) {
+            throw new MemberException(INVALID_POINT_CHARGE_AMOUNT);
+        }
+        if (amount > MAX_POINT_CHARGE_AMOUNT) {
+            throw new MemberException(POINT_CHARGE_AMOUNT_EXCEEDED);
+        }
     }
 }

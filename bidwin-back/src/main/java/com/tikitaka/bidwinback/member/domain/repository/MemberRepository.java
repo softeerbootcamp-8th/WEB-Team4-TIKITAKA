@@ -92,4 +92,18 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
             @Param("memberId") Long memberId,
             @Param("amount") long amount
     );
+
+    // 테스트용 포인트 충전: 활성 회원만 사용 가능 잔액을 원자적으로 늘릴 수 있다.
+    @Modifying
+    @Query(value = """
+            UPDATE member
+            SET total_point = total_point + :amount,
+                last_modified_at = SYSDATE(6)
+            WHERE id = :memberId
+              AND status = 'ACTIVE'
+            """, nativeQuery = true)
+    int chargePointIfActive(
+            @Param("memberId") Long memberId,
+            @Param("amount") long amount
+    );
 }

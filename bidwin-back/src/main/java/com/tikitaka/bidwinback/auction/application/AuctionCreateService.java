@@ -47,6 +47,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_U
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_DROP_INTERVAL_EXCEEDS_DURATION;
 
 @Service
 @RequiredArgsConstructor
@@ -73,7 +74,7 @@ public class AuctionCreateService {
         AuctionDuration duration = AuctionDuration.from(request.durationMinutes());
 
         validateStartPriceUnit(request.startPrice());
-        validatePriceRelations(request);
+        validatePriceRelations(request, duration);
         List<UUID> uploadIds = validateImages(request.imageUploadIds());
         List<PendingAuctionImage> pendingImages = requireOwnedImageReservations(
                 memberId,
@@ -106,7 +107,7 @@ public class AuctionCreateService {
         }
     }
 
-    private void validatePriceRelations(AuctionCreateRequest request) {
+    private void validatePriceRelations(AuctionCreateRequest request, AuctionDuration duration) {
         if (request.auctionType() == AuctionType.UP) {
             Long buyNowPrice = request.buyNowPrice();
             if (buyNowPrice != null) {
@@ -129,7 +130,10 @@ public class AuctionCreateService {
         if (request.minimumPrice() >= request.startPrice()) {
             throw new AuctionException(INVALID_MINIMUM_PRICE);
         }
-        PriceDropInterval.from(request.priceDropInterval());
+        PriceDropInterval priceDropInterval = PriceDropInterval.from(request.priceDropInterval());
+        if (priceDropInterval.getMinutes() > duration.getMinutes()) {
+            throw new AuctionException(PRICE_DROP_INTERVAL_EXCEEDS_DURATION);
+        }
     }
 
     private void validatePriceUnit(long price, String fieldName) {

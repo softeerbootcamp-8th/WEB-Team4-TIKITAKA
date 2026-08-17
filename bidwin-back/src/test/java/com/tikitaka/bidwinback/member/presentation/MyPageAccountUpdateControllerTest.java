@@ -11,6 +11,8 @@ import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import com.tikitaka.bidwinback.member.application.MemberService;
+import com.tikitaka.bidwinback.member.domain.entity.Member;
+import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import com.tikitaka.bidwinback.member.presentation.dto.request.PasswordUpdateRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -37,7 +39,9 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_POINT_CHARGE_AMOUNT;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -170,6 +174,63 @@ class MyPageAccountUpdateControllerTest {
                         .changePassword(currentAuth, request, servletRequest)
         );
         assertEquals(ErrorCode.UNAUTHENTICATED, exception.getErrorCode());
+    }
+
+    @Test
+    void 포인트를_충전하면_갱신된_보증금_정보와_200을_응답한다() throws Exception {
+        Member member = Member.builder()
+                .email("member@example.com")
+                .password("encoded-password")
+                .name("홍길동")
+                .phoneNumber("01012345678")
+                .nickname("티키타카")
+                .status(MemberStatus.ACTIVE)
+                .totalPoint(3_000_000L)
+                .lockedPoint(500_000L)
+                .build();
+        when(memberService.chargePoint(1L, 1_000_000L)).thenReturn(member);
+
+        mockMvc.perform(post("/api/v1/mypage/points/charge")
+                        .session(authenticatedSession(authMember()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":1000000}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.balance").value(3_000_000))
+                .andExpect(jsonPath("$.data.inUse").value(500_000));
+    }
+
+    @Test
+    void 충전_금액을_보내지_않으면_400을_응답한다() throws Exception {
+        mockMvc.perform(post("/api/v1/mypage/points/charge")
+                        .session(authenticatedSession(authMember()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+
+        verifyNoInteractions(memberService);
+    }
+
+    @Test
+    void 서비스가_거부한_충전_금액이면_해당_에러코드로_400을_응답한다() throws Exception {
+        when(memberService.chargePoint(1L, 1_500L))
+                .thenThrow(new com.tikitaka.bidwinback.member.domain.exception.MemberException(
+                        INVALID_POINT_CHARGE_AMOUNT
+                ));
+
+        mockMvc.perform(post("/api/v1/mypage/points/charge")
+                        .session(authenticatedSession(authMember()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount":1500}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MEMBER_400_8"));
     }
 
     @Test

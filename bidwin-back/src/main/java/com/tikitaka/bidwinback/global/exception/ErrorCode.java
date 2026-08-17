@@ -92,6 +92,16 @@ public enum ErrorCode {
             "MEMBER_410_2",
             "이메일 인증 토큰이 만료되었습니다."
     ),
+    INVALID_POINT_CHARGE_AMOUNT(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_8",
+            "충전 금액은 1,000원 이상 1,000원 단위로 입력해야 합니다."
+    ),
+    POINT_CHARGE_AMOUNT_EXCEEDED(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_400_9",
+            "충전 금액은 1회 최대 1억 원까지 가능합니다."
+    ),
     DUPLICATE_EMAIL(
             HttpStatus.CONFLICT,
             "MEMBER_409_1",
@@ -162,7 +172,7 @@ public enum ErrorCode {
     INVALID_DURATION(
             HttpStatus.BAD_REQUEST,
             "AUCTION_400_6",
-            "경매 마감 시간은 30분/1시간/3시간/6시간 중에서 선택해야 합니다."
+            "경매 마감 시간은 6분/30분/1시간/3시간/6시간 중에서 선택해야 합니다."
     ),
     LOCATION_REQUIRED_FOR_DIRECT_TRADE(
             HttpStatus.BAD_REQUEST,
@@ -218,6 +228,11 @@ public enum ErrorCode {
             HttpStatus.BAD_REQUEST,
             "AUCTION_400_11",
             "인하 주기는 1분/3분/5분/10분 중에서 선택해야 합니다."
+    ),
+    PRICE_DROP_INTERVAL_EXCEEDS_DURATION(
+            HttpStatus.BAD_REQUEST,
+            "AUCTION_400_12",
+            "인하 주기는 경매 진행 시간보다 길 수 없습니다."
     ),
 
     // Upload

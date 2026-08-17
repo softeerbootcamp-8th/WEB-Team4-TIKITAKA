@@ -110,7 +110,12 @@ function MyPage() {
 
       <ActiveTradeBanner trades={data.activeTrades} />
       <ProfileCard profile={data.profile} onManage={() => setIsMyInfoOpen(true)} />
-      <DepositCard deposit={data.deposit} />
+      <DepositCard
+        deposit={data.deposit}
+        onChargeDeposit={(deposit) => {
+          setData((current) => (current ? { ...current, deposit } : current))
+        }}
+      />
 
       <MyItemSection
         title={SELLING_SECTION_TEXT.title}

@@ -38,6 +38,7 @@ export const TRADE_TYPE_OPTIONS = [
 ] as const
 
 export const AUCTION_DURATION_OPTIONS = [
+  { value: '6', label: '6분' },
   { value: '30', label: '30분' },
   { value: '60', label: '1시간' },
   { value: '180', label: '3시간' },

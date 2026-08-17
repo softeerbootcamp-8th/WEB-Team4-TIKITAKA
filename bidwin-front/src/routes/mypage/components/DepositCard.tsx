@@ -1,17 +1,27 @@
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import { formatWon } from '../../../lib/format'
-import { DEPOSIT_TEXT, HISTORY_TAB, historyPath } from '../constants'
+import { DEPOSIT_CHARGE_TEXT, DEPOSIT_TEXT, HISTORY_TAB, historyPath } from '../constants'
 import type { DepositAccount } from '../types'
+import DepositChargeModal from './DepositChargeModal'
 
 const CHEVRON_SIZE = 14
 
 /*
- * 보증금 현황. 입금·인출은 이 화면에서 하지 않고, 입찰·거래에 따라 자동으로 오간다.
- * 그래서 버튼 대신 "지금 얼마를 쓸 수 있는지"를 먼저 보여준다.
+ * 보증금 현황. 낙찰·거래에 따른 입출금은 자동으로 처리되고,
+ * 테스트를 위한 충전만 이 카드에서 직접 할 수 있다.
  */
-function DepositCard({ deposit }: { deposit: DepositAccount }) {
+function DepositCard({
+  deposit,
+  onChargeDeposit,
+}: {
+  deposit: DepositAccount
+  onChargeDeposit: (deposit: DepositAccount) => void
+}) {
+  const [isChargeOpen, setIsChargeOpen] = useState(false)
   const total = deposit.balance + deposit.inUse
 
   return (
@@ -40,6 +50,20 @@ function DepositCard({ deposit }: { deposit: DepositAccount }) {
       </div>
 
       <p className="mt-base text-xs leading-relaxed text-muted">{DEPOSIT_TEXT.notice}</p>
+
+      <Button
+        variant="secondary"
+        className="mt-base w-full"
+        onClick={() => setIsChargeOpen(true)}
+      >
+        {DEPOSIT_CHARGE_TEXT.action}
+      </Button>
+
+      <DepositChargeModal
+        isOpen={isChargeOpen}
+        onClose={() => setIsChargeOpen(false)}
+        onCharge={onChargeDeposit}
+      />
     </Card>
   )
 }
