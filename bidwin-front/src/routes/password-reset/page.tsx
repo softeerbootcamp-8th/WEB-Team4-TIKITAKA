@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
 import EmailSentCard from '../../components/auth/EmailSentCard'
+import type { ResendResult } from '../../components/auth/EmailSentCard'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import TextInput from '../../components/ui/TextInput'
@@ -18,6 +19,12 @@ function PasswordResetRequestPage() {
   async function sendResetLink(targetEmail: string): Promise<string | null> {
     const result = await requestPasswordReset(targetEmail)
     return result.ok ? null : result.message
+  }
+
+  /* 재설정 메일은 발송 여부를 따로 알려주지 않으므로 요청 성공을 발송으로 본다. */
+  async function resendResetLink(targetEmail: string): Promise<ResendResult> {
+    const error = await sendResetLink(targetEmail)
+    return error ? { sent: false, error } : { sent: true }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -56,7 +63,7 @@ function PasswordResetRequestPage() {
           }
           resendLabel="재설정 메일 재전송"
           resendToastMessage="재설정 메일을 다시 보냈어요."
-          onResend={() => sendResetLink(sentEmail)}
+          onResend={() => resendResetLink(sentEmail)}
           footer={<LoginLink />}
         />
       ) : (

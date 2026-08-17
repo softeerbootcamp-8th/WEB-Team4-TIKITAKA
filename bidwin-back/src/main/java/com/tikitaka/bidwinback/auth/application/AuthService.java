@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationIssueResult;
 import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationTokenService;
 import com.tikitaka.bidwinback.auth.application.passwordreset.PasswordResetTokenService;
 import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
@@ -12,9 +13,11 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilit
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.EmailVerificationSendResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.MailRateLimitProperties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.application.MemberService;
@@ -34,6 +37,7 @@ public class AuthService {
     private final EmailVerificationTokenService emailVerificationTokenService;
     private final Clock clock;
     private final TokenMailDispatcher tokenMailDispatcher;
+    private final MailRateLimitProperties mailRateLimitProperties;
 
     public AvailabilityResponse checkEmailAvailability(EmailAvailabilityRequest request) {
         memberService.validateEmailAvailable(request.email());
@@ -61,18 +65,30 @@ public class AuthService {
         return SignUpResponse.from(member);
     }
 
-    public void sendVerificationEmail(EmailVerificationSendRequest request) {
-        // 회원 존재 여부가 응답으로 노출되지 않도록 미가입·PENDING이 아닌 회원은 동일하게 처리한다.
-        memberService.findByEmail(request.email())
+    public EmailVerificationSendResponse sendVerificationEmail(EmailVerificationSendRequest request) {
+        // 회원 존재 여부가 응답으로 노출되지 않도록 미가입·PENDING이 아닌 회원도 발송한 것과 같게 응답한다.
+        return memberService.findByEmail(request.email())
                 .filter(member -> member.getStatus() == MemberStatus.PENDING)
-                .ifPresent(member -> {
-                    emailVerificationTokenService.issue(member)
-                            .ifPresent(rawToken -> tokenMailDispatcher.send(
-                                    MailPurpose.EMAIL_VERIFICATION,
-                                    member.getEmail(),
-                                    rawToken
-                            ));
-                });
+                .map(this::issueAndSendVerificationMail)
+                .orElseGet(() -> EmailVerificationSendResponse.of(
+                        true,
+                        mailRateLimitProperties.cooldown()
+                ));
+    }
+
+    private EmailVerificationSendResponse issueAndSendVerificationMail(Member member) {
+        EmailVerificationIssueResult issueResult = emailVerificationTokenService.issue(member);
+        if (!issueResult.isIssued()) {
+            // 재전송 제한에 걸린 요청은 남은 대기 시간만 알려주고 메일을 보내지 않는다.
+            return EmailVerificationSendResponse.of(false, issueResult.retryAfter());
+        }
+
+        tokenMailDispatcher.send(
+                MailPurpose.EMAIL_VERIFICATION,
+                member.getEmail(),
+                issueResult.rawToken()
+        );
+        return EmailVerificationSendResponse.of(true, issueResult.retryAfter());
     }
 
     public void verifyEmail(EmailVerificationRequest request) {
@@ -89,7 +105,14 @@ public class AuthService {
                 encodedPassword
         );
 
-        if (!passwordMatches || member.getStatus() != MemberStatus.ACTIVE) {
+        if (!passwordMatches) {
+            throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        // 비밀번호까지 맞은 요청에만 상태를 알려준다. 화면은 이 코드를 보고 이메일 인증으로 안내한다.
+        if (member.getStatus() == MemberStatus.PENDING) {
+            throw new AuthException(ErrorCode.EMAIL_VERIFICATION_PENDING);
+        }
+        if (member.getStatus() != MemberStatus.ACTIVE) {
             throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
         }
 

@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -32,17 +34,24 @@ public class EmailVerificationTokenService {
     private final MailRateLimitProperties mailRateLimitProperties;
 
     @Transactional
-    public Optional<String> issue(Member member) {
+    public EmailVerificationIssueResult issue(Member member) {
         Long memberId = member.getId();
         Optional<Member> lockedMember = memberRepository.findByIdForUpdate(memberId);
         if (lockedMember.isEmpty()
                 || lockedMember.get().getStatus() != MemberStatus.PENDING) {
-            return Optional.empty();
+            // 회원 상태가 응답으로 드러나지 않도록 새로 발급했을 때와 같은 대기 시간을 돌려준다.
+            return EmailVerificationIssueResult.notIssued(mailRateLimitProperties.cooldown());
         }
 
         LocalDateTime issuedAt = LocalDateTime.now();
-        if (isRateLimited(memberId, issuedAt)) {
-            return Optional.empty();
+        List<LocalDateTime> recentIssuedAt = emailVerificationTokenRepository.findIssuedAtSince(
+                memberId,
+                issuedAt.minus(mailRateLimitProperties.window())
+        );
+
+        Duration retryAfter = retryAfter(recentIssuedAt, issuedAt);
+        if (!retryAfter.isZero()) {
+            return EmailVerificationIssueResult.notIssued(retryAfter);
         }
 
         String rawToken = tokenGenerator.generate();
@@ -57,25 +66,56 @@ public class EmailVerificationTokenService {
                 )
         );
 
-        return Optional.of(rawToken);
+        return EmailVerificationIssueResult.issued(
+                rawToken,
+                retryAfterIncluding(issuedAt, recentIssuedAt)
+        );
     }
 
-    private boolean isRateLimited(Long memberId, LocalDateTime issuedAt) {
+    // 방금 발급한 건까지 포함해 다음 재발급까지 남은 시간을 다시 계산한다.
+    private Duration retryAfterIncluding(
+            LocalDateTime issuedAt,
+            List<LocalDateTime> recentIssuedAt
+    ) {
+        List<LocalDateTime> issuedAtDesc = new ArrayList<>(recentIssuedAt.size() + 1);
+        issuedAtDesc.add(issuedAt);
+        issuedAtDesc.addAll(recentIssuedAt);
+        return retryAfter(issuedAtDesc, issuedAt);
+    }
+
+    /*
+     * 다음 발급이 가능해질 때까지 남은 시간. 지금 발급할 수 있으면 0이다.
+     * 쿨다운과 창 단위 상한 중 더 늦게 풀리는 쪽을 기준으로 삼는다.
+     */
+    private Duration retryAfter(List<LocalDateTime> issuedAtDesc, LocalDateTime now) {
+        Duration retryAfter = Duration.ZERO;
+
         Duration cooldown = mailRateLimitProperties.cooldown();
-        // 쿨다운 시간 내 발급 이력이 있으면 재발급을 제한한다.
-        if (!cooldown.isZero()
-                && emailVerificationTokenRepository.countIssuedSince(
-                        memberId,
-                        issuedAt.minus(cooldown)
-                ) > 0) {
-            return true;
+        if (!cooldown.isZero() && !issuedAtDesc.isEmpty()) {
+            LocalDateTime latestIssuedAt = issuedAtDesc.getFirst();
+            retryAfter = later(retryAfter, remainingUntil(latestIssuedAt.plus(cooldown), now));
         }
 
-        // 제한 시간 내 최대 발급 횟수에 도달했는지 확인한다.
-        return emailVerificationTokenRepository.countIssuedSince(
-                memberId,
-                issuedAt.minus(mailRateLimitProperties.window())
-        ) >= mailRateLimitProperties.maxCount();
+        int maxCount = mailRateLimitProperties.maxCount();
+        if (issuedAtDesc.size() >= maxCount) {
+            // 상한을 채운 발급 중 가장 오래된 건이 창을 벗어나야 다시 발급할 수 있다.
+            LocalDateTime blockingIssuedAt = issuedAtDesc.get(maxCount - 1);
+            retryAfter = later(
+                    retryAfter,
+                    remainingUntil(blockingIssuedAt.plus(mailRateLimitProperties.window()), now)
+            );
+        }
+
+        return retryAfter;
+    }
+
+    private Duration remainingUntil(LocalDateTime availableAt, LocalDateTime now) {
+        Duration remaining = Duration.between(now, availableAt);
+        return remaining.isNegative() ? Duration.ZERO : remaining;
+    }
+
+    private Duration later(Duration left, Duration right) {
+        return left.compareTo(right) >= 0 ? left : right;
     }
 
     @Transactional

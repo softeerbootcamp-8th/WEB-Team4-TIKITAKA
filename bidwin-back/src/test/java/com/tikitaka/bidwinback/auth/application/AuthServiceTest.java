@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auth.application;
 
+import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationIssueResult;
 import com.tikitaka.bidwinback.auth.application.emailverification.EmailVerificationTokenService;
 import com.tikitaka.bidwinback.auth.application.passwordreset.PasswordResetTokenService;
 import com.tikitaka.bidwinback.auth.domain.enums.MailPurpose;
@@ -12,9 +13,11 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilit
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.EmailVerificationSendResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
+import com.tikitaka.bidwinback.global.config.MailRateLimitProperties;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.member.application.MemberService;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
@@ -43,6 +46,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -51,6 +55,12 @@ import java.util.Optional;
 class AuthServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
+    private static final Duration COOLDOWN = Duration.ofMinutes(1);
+    private static final MailRateLimitProperties MAIL_RATE_LIMIT = new MailRateLimitProperties(
+            COOLDOWN,
+            Duration.ofMinutes(15),
+            5
+    );
 
     @Mock
     private MemberRepository memberRepository;
@@ -77,7 +87,8 @@ class AuthServiceTest {
                 passwordResetTokenService,
                 emailVerificationTokenService,
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                tokenMailDispatcher
+                tokenMailDispatcher,
+                MAIL_RATE_LIMIT
         );
     }
 
@@ -187,10 +198,12 @@ class AuthServiceTest {
                 .build();
         when(memberRepository.findByEmail(member.getEmail()))
                 .thenReturn(Optional.of(member));
-        when(emailVerificationTokenService.issue(member))
-                .thenReturn(Optional.of("raw-email-verification-token"));
+        when(emailVerificationTokenService.issue(member)).thenReturn(
+                EmailVerificationIssueResult.issued("raw-email-verification-token", COOLDOWN)
+        );
 
-        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+        EmailVerificationSendResponse response =
+                authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
 
         verify(emailVerificationTokenService).issue(member);
         verify(tokenMailDispatcher).send(
@@ -198,10 +211,12 @@ class AuthServiceTest {
                 member.getEmail(),
                 "raw-email-verification-token"
         );
+        assertTrue(response.sent());
+        assertEquals(COOLDOWN.toSeconds(), response.retryAfterSeconds());
     }
 
     @Test
-    void 이메일_인증_발급이_제한되면_메일을_전송하지_않는다() {
+    void 이메일_인증_발급이_제한되면_메일을_전송하지_않고_남은_대기_시간을_응답한다() {
         Member member = Member.builder()
                 .email("member@example.com")
                 .password("encoded-password")
@@ -211,11 +226,16 @@ class AuthServiceTest {
                 .build();
         when(memberRepository.findByEmail(member.getEmail()))
                 .thenReturn(Optional.of(member));
-        when(emailVerificationTokenService.issue(member)).thenReturn(Optional.empty());
+        when(emailVerificationTokenService.issue(member)).thenReturn(
+                EmailVerificationIssueResult.notIssued(Duration.ofSeconds(42))
+        );
 
-        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+        EmailVerificationSendResponse response =
+                authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
 
         verifyNoInteractions(tokenMailDispatcher);
+        assertFalse(response.sent());
+        assertEquals(42L, response.retryAfterSeconds());
     }
 
     @Test
@@ -223,9 +243,13 @@ class AuthServiceTest {
         when(memberRepository.findByEmail("unknown@example.com"))
                 .thenReturn(Optional.empty());
 
-        authService.sendVerificationEmail(new EmailVerificationSendRequest("unknown@example.com"));
+        EmailVerificationSendResponse response =
+                authService.sendVerificationEmail(new EmailVerificationSendRequest("unknown@example.com"));
 
         verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
+        // 가입 여부가 드러나지 않도록 실제로 보낸 것과 같은 응답을 돌려준다.
+        assertTrue(response.sent());
+        assertEquals(COOLDOWN.toSeconds(), response.retryAfterSeconds());
     }
 
     @Test
@@ -241,9 +265,13 @@ class AuthServiceTest {
         when(memberRepository.findByEmail(member.getEmail()))
                 .thenReturn(Optional.of(member));
 
-        authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
+        EmailVerificationSendResponse response =
+                authService.sendVerificationEmail(new EmailVerificationSendRequest(member.getEmail()));
 
         verifyNoInteractions(emailVerificationTokenService, tokenMailDispatcher);
+        // 회원 상태가 드러나지 않도록 실제로 보낸 것과 같은 응답을 돌려준다.
+        assertTrue(response.sent());
+        assertEquals(COOLDOWN.toSeconds(), response.retryAfterSeconds());
     }
 
     private SignUpRequest createSignUpRequest() {
@@ -343,6 +371,46 @@ class AuthServiceTest {
 
         // then
         assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
+    }
+
+    @Test
+    void 이메일_인증_전인_회원은_인증이_필요하다는_응답을_받는다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.PENDING);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.EMAIL_VERIFICATION_PENDING, exception.getErrorCode());
+    }
+
+    @Test
+    void 비밀번호가_틀리면_회원_상태를_확인하지_않고_인증에_실패한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "wrong-password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
+        // 비밀번호를 모르는 요청에는 이메일 인증 대기 여부도 알려주지 않는다.
+        verify(member, never()).getStatus();
     }
 
     @Test

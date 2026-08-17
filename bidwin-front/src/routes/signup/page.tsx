@@ -1,16 +1,17 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Check, ShieldCheck } from 'lucide-react'
 import AuthFormError from '../../components/auth/AuthFormError'
 import AuthSplitLayout from '../../components/auth/AuthSplitLayout'
 import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
 import Button from '../../components/ui/Button'
 import TextInput from '../../components/ui/TextInput'
+import { useEmailVerificationRedirect } from '../../hooks/useEmailVerificationRedirect'
 import { useToast } from '../../hooks/useToast'
 import {
+  AUTH_ERROR_CODE,
   requestEmailAvailability,
-  requestEmailVerification,
   requestNicknameAvailability,
   requestSignUp,
 } from '../../lib/api/auth'
@@ -62,7 +63,6 @@ const TEXT = {
 
 const ROUTE = {
   login: '/login',
-  emailVerification: '/email-verification',
 }
 
 const SHOWCASE_VARIANT = 'signup'
@@ -138,7 +138,7 @@ function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { showToast } = useToast()
-  const navigate = useNavigate()
+  const redirectToEmailVerification = useEmailVerificationRedirect()
 
   const isIdentityVerified = identity !== null
   const trimmedEmail = email.trim()
@@ -188,6 +188,12 @@ function SignupPage() {
     setEmailAvailability({ status: 'checking', value: trimmedEmail, message: null })
     const result = await requestEmailAvailability(trimmedEmail)
     if (requestId !== emailAvailabilityRequestId.current) return
+
+    /* 가입만 해두고 이메일 인증이 남은 계정이면 다시 가입시키는 대신 인증 화면으로 보낸다. */
+    if (!result.ok && result.code === AUTH_ERROR_CODE.emailVerificationPending) {
+      await redirectToEmailVerification(trimmedEmail)
+      return
+    }
 
     if (!result.ok || !result.data.available) {
       setEmailAvailability({
@@ -293,25 +299,20 @@ function SignupPage() {
     })
 
     if (!signUpResult.ok) {
+      if (signUpResult.code === AUTH_ERROR_CODE.emailVerificationPending) {
+        await redirectToEmailVerification(trimmedEmail)
+        return
+      }
+
       setIsSubmitting(false)
       /* 중복 이메일·닉네임 등 백엔드 검증 실패는 서버 메시지를 그대로 같은 자리에 보여준다. */
       setError(signUpResult.message)
       return
     }
 
-    const emailVerificationResult = await requestEmailVerification(signUpResult.data.email)
-    setIsSubmitting(false)
-
     showToast(TEXT.signUpSuccess)
     /* 신규 회원은 PENDING 상태이므로 이메일 인증 안내 화면으로 이어준다. */
-    navigate(ROUTE.emailVerification, {
-      state: {
-        email: signUpResult.data.email,
-        initialSendError: emailVerificationResult.ok
-          ? undefined
-          : emailVerificationResult.message,
-      },
-    })
+    await redirectToEmailVerification(signUpResult.data.email)
   }
 
   const hasError = error !== null

@@ -21,6 +21,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -81,7 +82,7 @@ class EmailVerificationTokenServiceTest {
         when(tokenGenerator.generate()).thenReturn(rawToken);
         when(tokenHasher.hash(rawToken)).thenReturn(tokenHash);
 
-        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
+        EmailVerificationIssueResult issueResult = emailVerificationTokenService.issue(member);
 
         ArgumentCaptor<LocalDateTime> issuedAtCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<EmailVerificationToken> tokenCaptor =
@@ -92,7 +93,9 @@ class EmailVerificationTokenServiceTest {
         inOrder.verify(emailVerificationTokenRepository).save(tokenCaptor.capture());
 
         EmailVerificationToken savedToken = tokenCaptor.getValue();
-        assertThat(issuedToken).contains(rawToken);
+        assertThat(issueResult.isIssued()).isTrue();
+        assertThat(issueResult.rawToken()).isEqualTo(rawToken);
+        assertThat(issueResult.retryAfter()).isEqualTo(Duration.ofMinutes(1));
         assertThat(savedToken.getMember()).isSameAs(member);
         assertThat(savedToken.getTokenHash()).isEqualTo(tokenHash);
         assertThat(savedToken.getExpiresAt())
@@ -102,35 +105,61 @@ class EmailVerificationTokenServiceTest {
     }
 
     @Test
-    void 쿨다운_중에는_이메일_인증_토큰을_발급하지_않는다() {
+    void 쿨다운_중에는_이메일_인증_토큰을_발급하지_않고_남은_시간을_알려준다() {
         when(member.getId()).thenReturn(1L);
         when(member.getStatus()).thenReturn(MemberStatus.PENDING);
         when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
-        when(emailVerificationTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
-                .thenReturn(1L);
+        when(emailVerificationTokenRepository.findIssuedAtSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(List.of(LocalDateTime.now().minusSeconds(50)));
 
-        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
+        EmailVerificationIssueResult issueResult = emailVerificationTokenService.issue(member);
 
-        assertThat(issuedToken).isEmpty();
+        assertThat(issueResult.isIssued()).isFalse();
+        // 쿨다운 1분에서 이미 50초가 지났으므로 10초 안팎이 남는다.
+        assertThat(issueResult.retryAfter())
+                .isBetween(Duration.ofSeconds(9), Duration.ofSeconds(10));
         verifyNoInteractions(tokenGenerator, tokenHasher);
         verify(emailVerificationTokenRepository, never())
                 .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
     }
 
     @Test
-    void 윈도우_내_최대_횟수에_도달하면_이메일_인증_토큰을_발급하지_않는다() {
+    void 윈도우_내_최대_횟수에_도달하면_창이_풀릴_때까지_기다리게_한다() {
+        LocalDateTime now = LocalDateTime.now();
         when(member.getId()).thenReturn(1L);
         when(member.getStatus()).thenReturn(MemberStatus.PENDING);
         when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
-        when(emailVerificationTokenRepository.countIssuedSince(eq(1L), any(LocalDateTime.class)))
-                .thenReturn(0L, 5L);
+        when(emailVerificationTokenRepository.findIssuedAtSince(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(List.of(
+                        now.minusMinutes(2),
+                        now.minusMinutes(4),
+                        now.minusMinutes(6),
+                        now.minusMinutes(8),
+                        now.minusMinutes(10)
+                ));
 
-        Optional<String> issuedToken = emailVerificationTokenService.issue(member);
+        EmailVerificationIssueResult issueResult = emailVerificationTokenService.issue(member);
 
-        assertThat(issuedToken).isEmpty();
+        assertThat(issueResult.isIssued()).isFalse();
+        // 가장 오래된 발급(10분 전)이 15분 창을 벗어나는 5분 뒤에야 다시 보낼 수 있다.
+        assertThat(issueResult.retryAfter())
+                .isBetween(Duration.ofMinutes(4).plusSeconds(59), Duration.ofMinutes(5));
         verifyNoInteractions(tokenGenerator, tokenHasher);
         verify(emailVerificationTokenRepository, never())
                 .revokeAllActiveByMemberId(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void PENDING이_아닌_회원에게는_이메일_인증_토큰을_발급하지_않는다() {
+        when(member.getId()).thenReturn(1L);
+        when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
+
+        EmailVerificationIssueResult issueResult = emailVerificationTokenService.issue(member);
+
+        assertThat(issueResult.isIssued()).isFalse();
+        // 회원 상태가 드러나지 않도록 새로 발급했을 때와 같은 대기 시간을 돌려준다.
+        assertThat(issueResult.retryAfter()).isEqualTo(Duration.ofMinutes(1));
+        verifyNoInteractions(tokenGenerator, tokenHasher);
     }
 
     @Test

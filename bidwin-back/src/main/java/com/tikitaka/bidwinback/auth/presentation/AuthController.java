@@ -10,6 +10,7 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilit
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.EmailVerificationSendResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
@@ -77,13 +78,17 @@ public class AuthController {
                 .body(ApiResponse.success(response));
     }
 
-    @Operation(summary = "회원가입 인증 메일 발송", description = "입력한 이메일로 회원가입 인증 링크를 발송합니다.")
+    @Operation(
+            summary = "회원가입 인증 메일 발송",
+            description = "입력한 이메일로 회원가입 인증 링크를 발송합니다. "
+                    + "재전송 제한에 걸리면 발송하지 않고 남은 대기 시간만 응답합니다."
+    )
     @PostMapping("/signups/email/send")
-    public ResponseEntity<ApiResponse<Void>> sendVerificationEmail(
+    public ResponseEntity<ApiResponse<EmailVerificationSendResponse>> sendVerificationEmail(
             @Valid @RequestBody EmailVerificationSendRequest request
     ) {
-        authService.sendVerificationEmail(request);
-        return ResponseEntity.ok(ApiResponse.successWithoutData());
+        EmailVerificationSendResponse response = authService.sendVerificationEmail(request);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @Operation(summary = "회원가입 이메일 인증", description = "메일로 전달된 토큰을 검증해 이메일 인증을 완료합니다.")

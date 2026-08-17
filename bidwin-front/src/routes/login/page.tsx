@@ -7,7 +7,8 @@ import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
 import Button from '../../components/ui/Button'
 import TextInput from '../../components/ui/TextInput'
 import { useAuth } from '../../hooks/useAuth'
-import { requestLogin } from '../../lib/api/auth'
+import { useEmailVerificationRedirect } from '../../hooks/useEmailVerificationRedirect'
+import { AUTH_ERROR_CODE, requestLogin } from '../../lib/api/auth'
 import {
   EMAIL_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -65,6 +66,7 @@ function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { setAuthenticated } = useAuth()
+  const redirectToEmailVerification = useEmailVerificationRedirect()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -88,13 +90,20 @@ function LoginPage() {
 
     setIsSubmitting(true)
     const result = await requestLogin({ email: email.trim(), password })
-    setIsSubmitting(false)
 
     if (!result.ok) {
+      /* 이메일 인증만 남은 계정이면 로그인 실패로 막지 않고 인증 화면으로 이어준다. */
+      if (result.code === AUTH_ERROR_CODE.emailVerificationPending) {
+        await redirectToEmailVerification(email.trim())
+        return
+      }
+
+      setIsSubmitting(false)
       setError(result.message)
       return
     }
 
+    setIsSubmitting(false)
     setAuthenticated(true)
     navigate(safeNextPath(searchParams.get('next')), { replace: true })
   }
