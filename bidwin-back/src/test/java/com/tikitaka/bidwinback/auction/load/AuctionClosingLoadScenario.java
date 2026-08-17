@@ -316,6 +316,8 @@ class AuctionClosingLoadScenario {
                 + (result.pendingAuctions() * config.losersPerAuction());
 
         assertThat(result.poisonAuctionStatus()).isEqualTo("BID_ONGOING");
+        assertThat(result.completedAuctions()).isEqualTo(config.auctionCount() - 1L);
+        assertThat(result.pendingAuctions()).isEqualTo(1L);
         assertThat(result.completedAuctions() + result.pendingAuctions())
                 .isEqualTo(config.auctionCount());
         assertThat(result.trades()).isEqualTo(result.completedAuctions());

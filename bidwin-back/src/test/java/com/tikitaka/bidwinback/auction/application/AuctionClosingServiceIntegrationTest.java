@@ -34,7 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
-@SpringBootTest(properties = "app.storage.s3.bucket=test-bucket")
+@SpringBootTest(properties = {
+        "app.storage.s3.bucket=test-bucket",
+        "app.auction.closing-interval=24h"
+})
 class AuctionClosingServiceIntegrationTest {
 
     private static final long BID_UNIT = 1_000L;
@@ -45,6 +48,9 @@ class AuctionClosingServiceIntegrationTest {
 
     @Autowired
     private AuctionClosingService auctionClosingService;
+
+    @Autowired
+    private AuctionClosingBatchProcessor batchProcessor;
 
     @Autowired
     private AuctionRepository auctionRepository;
@@ -185,6 +191,52 @@ class AuctionClosingServiceIntegrationTest {
     }
 
     @Test
+    void 두_개별_재처리가_겹쳐도_비낙찰_보증금은_한_번만_반환된다() throws Exception {
+        // given
+        ClosingFixture fixture = createEndedAuctionWithWinnerAndLoser(DEPOSIT_AMOUNT);
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            // when
+            Future<Integer> first = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeOne(
+                        AuctionStatus.BID_ONGOING,
+                        fixture.auctionId()
+                );
+            });
+            Future<Integer> second = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeOne(
+                        AuctionStatus.BID_ONGOING,
+                        fixture.auctionId()
+                );
+            });
+            int closed = first.get(10, TimeUnit.SECONDS)
+                    + second.get(10, TimeUnit.SECONDS);
+
+            // then
+            assertAll(
+                    () -> assertThat(closed).isEqualTo(1),
+                    () -> assertThat(findStatus(fixture.auctionId()))
+                            .isEqualTo(AuctionStatus.COMPLETED),
+                    () -> assertThat(findTradeCount(fixture.auctionId())).isEqualTo(1L),
+                    () -> assertThat(findDepositStatus(
+                            fixture.auctionId(), fixture.loserId()))
+                            .isEqualTo(DepositStatus.REFUNDED.name()),
+                    () -> assertThat(findMemberPoints(fixture.loserId()))
+                            .isEqualTo(new PointSnapshot(
+                                    INITIAL_TOTAL_POINT + DEPOSIT_AMOUNT,
+                                    0L
+                            ))
+            );
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void 비낙찰_잠금포인트가_부족하면_경매마감과_보증금반환이_함께_롤백된다() {
         // given
         long insufficientLockedPoint = DEPOSIT_AMOUNT - 1;
@@ -208,6 +260,67 @@ class AuctionClosingServiceIntegrationTest {
                         .isEqualTo(DepositStatus.HELD.name()),
                 () -> assertThat(findMemberPoints(fixture.loserId()))
                         .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT, insufficientLockedPoint))
+        );
+    }
+
+    @Test
+    void 한_경매의_정산이_실패해도_다른_경매는_마감하고_실패한_경매만_재시도한다() {
+        // given
+        ClosingFixture firstHealthy = createEndedAuctionWithWinnerAndLoser(DEPOSIT_AMOUNT);
+        long insufficientLockedPoint = DEPOSIT_AMOUNT - 1;
+        ClosingFixture failed = createEndedAuctionWithWinnerAndLoser(insufficientLockedPoint);
+        ClosingFixture secondHealthy = createEndedAuctionWithWinnerAndLoser(DEPOSIT_AMOUNT);
+
+        // when
+        batchProcessor.closeEndedAuctions();
+
+        // then
+        assertAll(
+                () -> assertThat(findStatus(firstHealthy.auctionId()))
+                        .isEqualTo(AuctionStatus.COMPLETED),
+                () -> assertThat(findTradeCount(firstHealthy.auctionId())).isEqualTo(1L),
+                () -> assertThat(findDepositStatus(
+                        firstHealthy.auctionId(), firstHealthy.loserId()))
+                        .isEqualTo(DepositStatus.REFUNDED.name()),
+                () -> assertThat(findMemberPoints(firstHealthy.loserId()))
+                        .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT + DEPOSIT_AMOUNT, 0L)),
+                () -> assertThat(findStatus(secondHealthy.auctionId()))
+                        .isEqualTo(AuctionStatus.COMPLETED),
+                () -> assertThat(findTradeCount(secondHealthy.auctionId())).isEqualTo(1L),
+                () -> assertThat(findDepositStatus(
+                        secondHealthy.auctionId(), secondHealthy.loserId()))
+                        .isEqualTo(DepositStatus.REFUNDED.name()),
+                () -> assertThat(findMemberPoints(secondHealthy.loserId()))
+                        .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT + DEPOSIT_AMOUNT, 0L)),
+                () -> assertThat(findStatus(failed.auctionId()))
+                        .isEqualTo(AuctionStatus.BID_ONGOING),
+                () -> assertThat(findTradeCount(failed.auctionId())).isZero(),
+                () -> assertThat(findDepositStatus(failed.auctionId(), failed.winnerId()))
+                        .isEqualTo(DepositStatus.HELD.name()),
+                () -> assertThat(findMemberPoints(failed.winnerId()))
+                        .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT, DEPOSIT_AMOUNT)),
+                () -> assertThat(findDepositStatus(failed.auctionId(), failed.loserId()))
+                        .isEqualTo(DepositStatus.HELD.name()),
+                () -> assertThat(findMemberPoints(failed.loserId()))
+                        .isEqualTo(new PointSnapshot(
+                                INITIAL_TOTAL_POINT,
+                                insufficientLockedPoint
+                        ))
+        );
+
+        // when
+        updateLockedPoint(failed.loserId(), DEPOSIT_AMOUNT);
+        batchProcessor.closeEndedAuctions();
+
+        // then
+        assertAll(
+                () -> assertThat(findStatus(failed.auctionId()))
+                        .isEqualTo(AuctionStatus.COMPLETED),
+                () -> assertThat(findTradeCount(failed.auctionId())).isEqualTo(1L),
+                () -> assertThat(findDepositStatus(failed.auctionId(), failed.loserId()))
+                        .isEqualTo(DepositStatus.REFUNDED.name()),
+                () -> assertThat(findMemberPoints(failed.loserId()))
+                        .isEqualTo(new PointSnapshot(INITIAL_TOTAL_POINT + DEPOSIT_AMOUNT, 0L))
         );
     }
 
@@ -319,6 +432,20 @@ class AuctionClosingServiceIntegrationTest {
                             WHERE id = :auctionId
                             """)
                     .setParameter("auctionId", auctionId)
+                    .executeUpdate();
+            return null;
+        });
+    }
+
+    private void updateLockedPoint(Long memberId, long lockedPoint) {
+        executeInTransaction(entityManager -> {
+            entityManager.createNativeQuery("""
+                            UPDATE member
+                            SET locked_point = :lockedPoint
+                            WHERE id = :memberId
+                            """)
+                    .setParameter("lockedPoint", lockedPoint)
+                    .setParameter("memberId", memberId)
                     .executeUpdate();
             return null;
         });

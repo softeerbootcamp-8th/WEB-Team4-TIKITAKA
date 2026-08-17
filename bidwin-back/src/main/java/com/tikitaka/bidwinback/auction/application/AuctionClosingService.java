@@ -10,6 +10,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionClosingCandi
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -31,6 +32,28 @@ public class AuctionClosingService {
                         candidateStatus.name(),
                         batchSize
                 );
+        return closeClaimed(candidates, candidateStatus);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findClosingCandidateIds(AuctionStatus candidateStatus, int limit) {
+        return auctionRepository.findClosingCandidateIds(candidateStatus.name(), limit);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int closeOne(AuctionStatus candidateStatus, Long auctionId) {
+        List<AuctionClosingCandidate> candidates =
+                auctionRepository.findClosingCandidateForUpdateSkipLocked(
+                        auctionId,
+                        candidateStatus.name()
+                );
+        return closeClaimed(candidates, candidateStatus);
+    }
+
+    private int closeClaimed(
+            List<AuctionClosingCandidate> candidates,
+            AuctionStatus candidateStatus
+    ) {
         if (candidates.isEmpty()) {
             return 0;
         }

@@ -34,6 +34,35 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("batchSize") int batchSize
     );
 
+    // 벌크 롤백 뒤 개별 재처리할 후보 스냅샷이다. 실제 선점과 상태 재검사는 아래 단건 쿼리에서 한다.
+    @Query(value = """
+            SELECT auction.id
+            FROM auction FORCE INDEX (idx_auction_status_ended_at)
+            WHERE auction.status = :status
+              AND auction.ended_at <= NOW(6)
+            ORDER BY auction.ended_at, auction.id
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<Long> findClosingCandidateIds(
+            @Param("status") String status,
+            @Param("limit") int limit
+    );
+
+    // 여러 서버가 같은 스냅샷을 읽어도 단건 트랜잭션에서 다시 선점하므로 중복 마감을 막는다.
+    @Query(value = """
+            SELECT auction.id AS auctionId,
+                   auction.revision AS revision
+            FROM auction
+            WHERE auction.id = :auctionId
+              AND auction.status = :status
+              AND auction.ended_at <= NOW(6)
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<AuctionClosingCandidate> findClosingCandidateForUpdateSkipLocked(
+            @Param("auctionId") Long auctionId,
+            @Param("status") String status
+    );
+
     // 선점한 배치를 낙찰·유찰로 한 번에 마감한다. 거래가 앞서 적재되므로 그 유무가 곧 낙찰 여부다.
     // 낙찰과 유찰을 따로 돌리면 뒤 문장이 이미 마감된 행까지 id 목록만큼 다시 훑는다.
     // 유찰분의 current_price는 COALESCE로 원래 값을 그대로 대입한다. 값이 같으면 MySQL이 변경으로

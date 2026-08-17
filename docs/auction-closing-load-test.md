@@ -59,12 +59,13 @@ bidwin-back/build/reports/auction-closing-load/result.json
 - `healthyAuctionsBlocked`: 오류 경매 외에 함께 처리되지 못한 정상 경매 수
 - `endToEndThroughputPerSecond`: 마감 트랜잭션과 커밋 후 SSE·Redis 발행까지 포함해 초당 완료한 경매 수
 
-현재처럼 배치 전체가 하나의 트랜잭션이면 기본 설정에서 오류 한 건 때문에 정상 경매 99건도 함께 롤백될 수 있다.
-경매별 실패 격리가 적용되면 같은 시나리오에서 오류 경매 한 건만 남고 정상 경매 99건은 완료되는 것이 목표다.
+정상 데이터는 벌크 트랜잭션으로 처리하고, 벌크가 실패하면 후보를 경매별 트랜잭션으로 다시 처리한다.
+따라서 같은 시나리오에서 오류 경매 한 건만 남고 정상 경매 99건은 완료돼야 한다.
+개별 처리에서도 실패한 경매는 현재 스케줄 실행에서는 건너뛰고 다음 실행에서 다시 시도한다.
 
 ```text
-현재 예상: completed=0, pending=100, healthyAuctionsBlocked=99
-개선 목표: completed=99, pending=1, healthyAuctionsBlocked=0
+검증 기대: completed=99, pending=1, healthyAuctionsBlocked=0
+회귀 징후: completed=0, pending=100, healthyAuctionsBlocked=99
 ```
 
 실행 시간은 로컬 장비와 DB 캐시의 영향을 받으므로 한 번의 절대값보다 동일 환경에서 5회 이상 반복한 중앙값을 비교한다. 스크립트는 실행할 때마다 한 쌍의 시나리오만 수행하므로 5회 비교가 필요하면 명령을 직접 5회 실행한다. 실패 격리 개선 전후에는 정상 시나리오 처리량도 함께 비교해 트랜잭션 분리 비용을 확인한다.
