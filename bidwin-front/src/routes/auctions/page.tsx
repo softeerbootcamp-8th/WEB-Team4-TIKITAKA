@@ -66,7 +66,7 @@ function AuctionListPage() {
   const [retryToken, setRetryToken] = useState(0)
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const { serverOffsetMs, synchronize } = useServerClock(response?.serverTime)
+  const { serverOffsetMs } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -126,7 +126,6 @@ function AuctionListPage() {
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {
-    onHeartbeat: synchronize,
     onState: (state) => {
       setResponse((current) => {
         if (!current) return current
