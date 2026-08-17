@@ -23,10 +23,7 @@ export const SEARCH_QUERY_PARAM = 'q'
 export const CATEGORY_QUERY_PARAM = 'category'
 
 export const LIST_TEXT = {
-  /* 검색어가 있을 때만 상한 앞에 붙는다. 별도 페이지 제목은 두지 않는다. */
-  searchResultPrefix: (keyword: string) => `'${keyword}' 검색 결과 최대`,
-  resultCountPrefix: '해당 경매 최대',
-  resultCountSuffix: '개',
+  searchResultTitle: (keyword: string) => `'${keyword}' 검색 결과`,
   emptyTitle: '조건에 맞는 경매가 없어요.',
   emptyDescription: '필터를 줄이거나 다른 검색어로 다시 찾아보세요.',
   emptyAction: '필터 초기화',
