@@ -183,7 +183,6 @@ function AuctionListPage() {
     setSearchParams({})
   }
 
-  const totalCount = response?.totalCount ?? 0
   const items = response?.items ?? []
   const filterPanel = (
     <FilterPanel
@@ -223,14 +222,17 @@ function AuctionListPage() {
               sort={sort}
               onChangeSort={setSort}
             />
-            <h1 className="py-sm text-lg font-bold text-ink">
-              {keyword ? LIST_TEXT.searchResultPrefix(keyword) : LIST_TEXT.resultCountPrefix}{' '}
-              <span className="text-primary">{totalCount.toLocaleString('ko-KR')}</span>
-              {LIST_TEXT.resultCountSuffix}
-            </h1>
+            {keyword && (
+              <h1 className="py-sm text-lg font-bold text-ink">
+                {LIST_TEXT.searchResultTitle(keyword)}
+              </h1>
+            )}
           </div>
 
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto pb-base">
+          <div
+            ref={listRef}
+            className={`min-h-0 flex-1 overflow-y-auto pb-base ${keyword ? '' : 'pt-sm'}`}
+          >
             {isLoading ? (
               <div role="status" aria-label="경매를 불러오는 중">
                 <span className="sr-only">경매를 불러오는 중…</span>
