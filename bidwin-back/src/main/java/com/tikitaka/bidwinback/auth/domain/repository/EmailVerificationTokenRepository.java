@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface EmailVerificationTokenRepository extends JpaRepository<EmailVerificationToken, Long> {
@@ -21,13 +22,15 @@ public interface EmailVerificationTokenRepository extends JpaRepository<EmailVer
             @Param("tokenHash") String tokenHash
     );
 
+    // 남은 재발급 대기 시간까지 계산해야 해서 횟수 대신 발급 시각을 최신순으로 가져온다.
     @Query("""
-            select count(token)
+            select token.createdAt
             from EmailVerificationToken token
             where token.member.id = :memberId
               and token.createdAt >= :issuedSince
+            order by token.createdAt desc
             """)
-    long countIssuedSince(
+    List<LocalDateTime> findIssuedAtSince(
             @Param("memberId") Long memberId,
             @Param("issuedSince") LocalDateTime issuedSince
     );
