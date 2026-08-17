@@ -82,6 +82,14 @@ const TRADE_LABEL = {
 const BID_UNIT = 1_000
 const BID_INCREMENT_OPTIONS = [1_000, 10_000, 50_000] as const
 const BID_HISTORY_LIMIT = 10
+/** 입찰가를 자동으로 올렸다는 안내를 남겨두는 시간. */
+const AMOUNT_RAISE_NOTICE_MS = 4_000
+
+const BID_TEXT = {
+  /* 누가 올렸는지 단정하지 않는다(내 입찰이 반영된 직후일 수도 있다). */
+  amountRaised: (amount: number) =>
+    `최고가가 올라 입찰 금액을 ${formatWon(amount)}으로 맞췄어요.`,
+} as const
 
 type ActionKind = 'bid' | 'buy' | null
 
@@ -816,6 +824,7 @@ function UpBidPanel({
   const nextMinBid = auction.currentPrice + BID_UNIT
   const [amount, setAmount] = useState(Math.min(nextMinBid, MAX_BID_PRICE))
   const [inputError, setInputError] = useState<string | null>(null)
+  const [raisedTo, setRaisedTo] = useState<number | null>(null)
   const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const ended = deadline.isEnded || !isOngoing(auction.status)
   const sealedBidActive = !ended && sealedStart.isEnded
@@ -827,6 +836,25 @@ function UpBidPanel({
   )
   const busy = pendingAction !== null
   const bidLimitReached = nextMinBid > MAX_BID_PRICE
+
+  /*
+   * 다른 사람의 입찰이 SSE로 넘어오면 적어둔 금액이 최소 입찰가보다 낮아져 그대로는 입찰할 수 없다.
+   * 그때는 최고가 + 입찰 단위로 자동으로 올려 바로 다시 입찰할 수 있게 한다.
+   * 이미 더 높게 적어둔 금액은 유효하므로 건드리지 않는다.
+   */
+  const amountRef = useRef(amount)
+  amountRef.current = amount
+  useEffect(() => {
+    if (amountRef.current >= nextMinBid) return
+    const raised = Math.min(nextMinBid, MAX_BID_PRICE)
+    /* 상한에 걸려 올릴 자리가 없으면 안내도 하지 않는다. */
+    if (raised === amountRef.current) return
+    setAmount(raised)
+    setInputError(null)
+    setRaisedTo(raised)
+    const timer = window.setTimeout(() => setRaisedTo(null), AMOUNT_RAISE_NOTICE_MS)
+    return () => window.clearTimeout(timer)
+  }, [nextMinBid])
 
   function handleChip(increment: number) {
     setAmount((current) => Math.min(
@@ -931,14 +959,22 @@ function UpBidPanel({
             ))}
           </div>
 
-          <TextInput
-            label={sealedBidActive ? '밀봉 입찰 금액' : '입찰 금액'}
-            inputMode="numeric"
-            value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
-            onChange={handleAmountChange}
-            error={inputError ?? actionError ?? undefined}
-            disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
-          />
+          <div className="flex flex-col gap-xs">
+            <TextInput
+              label={sealedBidActive ? '밀봉 입찰 금액' : '입찰 금액'}
+              inputMode="numeric"
+              value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
+              onChange={handleAmountChange}
+              error={inputError ?? actionError ?? undefined}
+              disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
+            />
+            {/* 입력값이 사용자 손을 거치지 않고 바뀌었으므로 왜 바뀐지 알려준다. */}
+            {raisedTo !== null && (
+              <p role="status" className="text-xs font-semibold text-primary">
+                {BID_TEXT.amountRaised(raisedTo)}
+              </p>
+            )}
+          </div>
 
           <Button
             size="lg"
