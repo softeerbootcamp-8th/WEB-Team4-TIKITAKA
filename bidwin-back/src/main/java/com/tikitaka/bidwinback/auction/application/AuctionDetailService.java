@@ -109,7 +109,10 @@ public class AuctionDetailService {
                 toEpochMilli(auction.getEndedAt().minusMinutes(SEALED_BID_WINDOW_MINUTES)),
                 auction.getTradeType(),
                 seller,
-                auction.getBuyNowPrice(),
+                // 요구사항: 입찰이 한 번이라도 들어와 status가 OPEN을 벗어나면 즉시구매가
+                // 더 이상 불가능해지므로(BuyNowTransactionService.validateAuction 참고),
+                // 응답에서도 즉시구매가를 더 이상 노출하지 않는다.
+                auction.getStatus() == AuctionStatus.OPEN ? auction.getBuyNowPrice() : null,
                 currentPrice,
                 bidCount
         );

@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Badge from '../../../components/ui/Badge'
+import RollingPrice from '../../../components/ui/RollingPrice'
 import { formatWon } from '../../../lib/format'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
 import type { DownPricing } from '../../../lib/auctionPricing'
@@ -114,7 +115,7 @@ function MyItemCard({ item, serverOffsetMs }: {
               {item.downPricing ? (
                 <DownCurrentPrice pricing={item.downPricing} serverOffsetMs={serverOffsetMs} />
               ) : (
-                formatWon(item.price)
+                <RollingPrice value={item.price} />
               )}
             </dd>
           </div>
@@ -129,7 +130,7 @@ function DownCurrentPrice({ pricing, serverOffsetMs }: {
   serverOffsetMs: number
 }) {
   const { currentPrice } = useDownAuctionClock(pricing, serverOffsetMs)
-  return formatWon(currentPrice)
+  return <RollingPrice value={currentPrice} />
 }
 
 export default MyItemSection

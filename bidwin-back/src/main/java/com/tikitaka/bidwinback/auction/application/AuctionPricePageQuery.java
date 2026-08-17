@@ -27,9 +27,13 @@ public class AuctionPricePageQuery {
             AuctionListSearchCondition condition,
             int page,
             int size,
-            long totalCount
+            long candidateCountLimit
     ) {
-        int topKSize = topKSize(page, size, totalCount);
+        int normalizedPage = Math.min(
+                Math.max(1, page),
+                AuctionListService.MAX_LIST_PAGES
+        );
+        int topKSize = topKSize(normalizedPage, size, candidateCountLimit);
         if (topKSize == 0) {
             return List.of();
         }
@@ -52,7 +56,7 @@ public class AuctionPricePageQuery {
                 .sorted(resultOrder)
                 .toList();
         int fromIndex = (int) Math.min(
-                (long) (page - 1) * size,
+                (long) (normalizedPage - 1) * size,
                 orderedTopK.size()
         );
         int toIndex = Math.min(fromIndex + size, orderedTopK.size());
@@ -133,9 +137,9 @@ public class AuctionPricePageQuery {
         }
     }
 
-    private int topKSize(int page, int size, long totalCount) {
+    private int topKSize(int page, int size, long candidateCountLimit) {
         long requested = Math.multiplyExact((long) page, size);
-        long required = Math.min(totalCount, requested);
+        long required = Math.min(candidateCountLimit, requested);
         if (required > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("가격순으로 조회할 페이지 범위가 너무 큽니다.");
         }
@@ -148,7 +152,8 @@ public class AuctionPricePageQuery {
     ) {
         return new AuctionPriceSnapshot(
                 candidate.auctionId(),
-                candidate.currentPriceAt(condition.asOf())
+                candidate.sortPriceAt(condition.asOf()),
+                candidate.displayPriceAt(condition.asOf())
         );
     }
 
@@ -178,7 +183,7 @@ public class AuctionPricePageQuery {
             return false;
         }
 
-        long worstTopKPrice = topK.element().currentPrice();
+        long worstTopKPrice = topK.element().sortPrice();
         // 경계가 같은 뒤쪽 레코드는 id tie-break에 따라 Top-K에 들어올 수 있으므로
         // 등호에서는 동률 경계를 소진하고, 가격이 엄격히 앞설 때만 즉시 중단한다.
         return switch (sort) {
@@ -199,7 +204,7 @@ public class AuctionPricePageQuery {
             return false;
         }
 
-        long worstTopKPrice = topK.element().currentPrice();
+        long worstTopKPrice = topK.element().sortPrice();
         // 같은 가격 경계를 모두 처리했으므로 남은 후보의 경계는 엄격히 뒤에 있다.
         // 이때는 Top-K 가격과 소진한 경계가 같아도 결과가 뒤집히지 않는다.
         return switch (sort) {
@@ -225,10 +230,10 @@ public class AuctionPricePageQuery {
                 .reversed();
         return switch (sort) {
             case PRICE_LOW -> Comparator
-                    .comparingLong(AuctionPriceSnapshot::currentPrice)
+                    .comparingLong(AuctionPriceSnapshot::sortPrice)
                     .thenComparing(idDescending);
             case PRICE_HIGH -> Comparator
-                    .comparingLong(AuctionPriceSnapshot::currentPrice)
+                    .comparingLong(AuctionPriceSnapshot::sortPrice)
                     .reversed()
                     .thenComparing(idDescending);
             case RECOMMENDED, DEADLINE, LATEST ->

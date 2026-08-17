@@ -19,12 +19,11 @@ export const BID_SCORE_WEIGHT = 3
 
 /** 검색어를 담는 쿼리 스트링 키. TopNav 검색과 이 페이지가 공유한다. */
 export const SEARCH_QUERY_PARAM = 'q'
+/** 홈 카테고리 버튼이 목록 화면에 전달하는 카테고리 코드. */
+export const CATEGORY_QUERY_PARAM = 'category'
 
 export const LIST_TEXT = {
-  /* 검색어가 있을 때만 건수 앞에 붙는다. 별도 페이지 제목은 두지 않는다. */
-  searchResultPrefix: (keyword: string) => `'${keyword}' 검색 결과`,
-  resultCountPrefix: '해당 경매',
-  resultCountSuffix: '개',
+  searchResultTitle: (keyword: string) => `'${keyword}' 검색 결과`,
   emptyTitle: '조건에 맞는 경매가 없어요.',
   emptyDescription: '필터를 줄이거나 다른 검색어로 다시 찾아보세요.',
   emptyAction: '필터 초기화',
@@ -56,8 +55,6 @@ export const FILTER_MODAL_TEXT = {
 } as const
 
 export const CARD_TEXT = {
-  bookmarkOn: '관심 경매에서 빼기',
-  bookmarkOff: '관심 경매에 담기',
   bidCountSuffix: '회 입찰',
   noBid: '입찰 없음',
   viewCountLabel: '조회수',

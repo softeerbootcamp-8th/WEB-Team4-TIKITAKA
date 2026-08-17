@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -231,6 +232,79 @@ class MemberServiceTest {
 
         assertThatExceptionOfType(MemberException.class)
                 .isThrownBy(() -> memberService.changeNickname(1L, "새닉네임"))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    @Test
+    void 포인트를_충전하면_잔액이_늘어난_회원을_반환한다() {
+        Member member = member("닉네임");
+        when(memberRepository.chargePointIfActive(1L, 1_000_000L)).thenReturn(1);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        Member result = memberService.chargePoint(1L, 1_000_000L);
+
+        assertThat(result).isSameAs(member);
+        verify(memberRepository).chargePointIfActive(1L, 1_000_000L);
+    }
+
+    @Test
+    void 충전_금액이_1000원_단위가_아니면_충전할_수_없다() {
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.chargePoint(1L, 1_500L))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.INVALID_POINT_CHARGE_AMOUNT);
+
+        verify(memberRepository, never()).chargePointIfActive(any(), anyLong());
+    }
+
+    @Test
+    void 충전_금액이_0원_이하이면_충전할_수_없다() {
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.chargePoint(1L, 0L))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.INVALID_POINT_CHARGE_AMOUNT);
+    }
+
+    @Test
+    void 충전_금액이_1억원을_초과하면_충전할_수_없다() {
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.chargePoint(1L, 101_000_000L))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.POINT_CHARGE_AMOUNT_EXCEEDED);
+
+        verify(memberRepository, never()).chargePointIfActive(any(), anyLong());
+    }
+
+    @Test
+    void 충전_금액이_1억원이면_충전할_수_있다() {
+        Member member = member("닉네임");
+        when(memberRepository.chargePointIfActive(1L, 100_000_000L)).thenReturn(1);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        assertThatCode(() -> memberService.chargePoint(1L, 100_000_000L))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void 비활성_회원은_포인트를_충전할_수_없다() {
+        Member member = member("닉네임");
+        when(memberRepository.chargePointIfActive(1L, 1_000_000L)).thenReturn(0);
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.chargePoint(1L, 1_000_000L))
+                .extracting(MemberException::getErrorCode)
+                .isEqualTo(ErrorCode.MEMBER_NOT_ACTIVE);
+    }
+
+    @Test
+    void 존재하지_않는_회원은_포인트를_충전할_수_없다() {
+        when(memberRepository.chargePointIfActive(1L, 1_000_000L)).thenReturn(0);
+        when(memberRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatExceptionOfType(MemberException.class)
+                .isThrownBy(() -> memberService.chargePoint(1L, 1_000_000L))
                 .extracting(MemberException::getErrorCode)
                 .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
     }

@@ -1,13 +1,16 @@
 import {
   BadgeCheck,
   Clock,
-  Flag,
-  Heart,
+  Gavel,
   ImageOff,
+  RotateCcw,
   ShieldCheck,
   TrendingDown,
   Truck,
   WifiOff,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import type { ChangeEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -21,12 +24,14 @@ import Badge from '../../../components/ui/Badge'
 import type { BadgeTone } from '../../../components/ui/Badge'
 import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
+import RollingPrice from '../../../components/ui/RollingPrice'
 import TextInput from '../../../components/ui/TextInput'
 import { useAuctionEvents } from '../../../hooks/useAuctionEvents'
 import type { ConnectionStatus } from '../../../hooks/useAuctionEvents'
 import { useAuth } from '../../../hooks/useAuth'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
+import { useRecentChange } from '../../../hooks/useRecentChange'
 import { useServerClock } from '../../../hooks/useServerClock'
 import { useToast } from '../../../hooks/useToast'
 import {
@@ -46,13 +51,11 @@ import type {
 } from '../../../lib/api/auctions'
 import type { ApiFailure } from '../../../lib/api/client'
 import { computeCurrentDownPrice, computeDropHistory } from '../../../lib/auctionPricing'
+import { notifyDepositChanged } from '../../../lib/depositEvents'
+import { MAX_BID_PRICE, MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
+import { AUCTION_CATEGORY_LABELS } from '../../../lib/auctionCategory'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
-
-const CATEGORY_LABEL = {
-  HOUSEHOLD: '생활용품',
-  FOOD: '먹거리',
-  FURNITURE: '가구',
-} as const
+import { CLOSE_HIGHLIGHT_MS, closePopStyle } from '../../../lib/motion'
 
 const STATUS_LABEL: Record<AuctionStatus, string> = {
   OPEN: '진행 중',
@@ -78,11 +81,47 @@ const TRADE_LABEL = {
 const BID_UNIT = 1_000
 const BID_INCREMENT_OPTIONS = [1_000, 10_000, 50_000] as const
 const BID_HISTORY_LIMIT = 10
+const CLOSE_ICON_SIZE = 16
+/** 입찰가를 자동으로 올렸다는 안내를 남겨두는 시간. */
+const AMOUNT_RAISE_NOTICE_MS = 4_000
+
+/*
+ * 마감(장마감) 안내. 시계가 마감 시각을 넘겼는데 서버 상태가 아직 안 넘어온 순간이 있어,
+ * 그 사이는 pending으로 따로 안내한다.
+ */
+const CLOSE_NOTICE = {
+  pending: {
+    title: '마감 시간이 지났어요',
+    description: '서버에서 결과를 확인하는 중이에요.',
+  },
+  WINNER_DETERMINING: {
+    title: '경매가 마감됐어요',
+    description: '낙찰자를 정하는 중이에요. 결과가 곧 반영돼요.',
+  },
+  COMPLETED: {
+    title: '거래가 확정됐어요',
+    description: '더 이상 입찰이나 구매를 할 수 없어요.',
+  },
+  UNSOLD: {
+    title: '유찰됐어요',
+    description: '낙찰자 없이 마감돼 거래가 성사되지 않았어요.',
+  },
+} as const
+
+const BID_TEXT = {
+  /* 누가 올렸는지 단정하지 않는다(내 입찰이 반영된 직후일 수도 있다). */
+  amountRaised: (amount: number) =>
+    `최고가가 올라 입찰 금액을 ${formatWon(amount)}으로 맞췄어요.`,
+} as const
 
 type ActionKind = 'bid' | 'buy' | null
 
-function isOngoing(status: AuctionStatus) {
+function isOngoing(status: AuctionStatus): status is 'OPEN' | 'BID_ONGOING' {
   return status === 'OPEN' || status === 'BID_ONGOING'
+}
+
+function closeNotice(status: AuctionStatus) {
+  return CLOSE_NOTICE[isOngoing(status) ? 'pending' : status]
 }
 
 function isTerminal(status: AuctionStatus) {
@@ -131,7 +170,7 @@ function AuctionDetailPage() {
   const { showToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
-  const serverOffsetMs = useServerClock(auction?.serverTime)
+  const { serverOffsetMs } = useServerClock(auction?.serverTime)
 
   useEffect(() => {
     if (!validAuctionId) {
@@ -240,6 +279,24 @@ function AuctionDetailPage() {
     },
   )
 
+  /*
+   * 마감은 배지와 패널만 조용히 바뀌어 놓치기 쉽다. 상태가 진행 중에서 넘어간 순간에만
+   * 토스트로 한 번 더 알린다(이미 마감된 경매를 열었거나 다른 경매로 이동한 경우는 제외).
+   */
+  const liveAuctionId = auction?.auctionId ?? null
+  const liveStatus = auction?.status ?? null
+  const previousStatusRef = useRef<{ auctionId: number; status: AuctionStatus } | null>(null)
+  useEffect(() => {
+    const previous = previousStatusRef.current
+    previousStatusRef.current = liveAuctionId === null || liveStatus === null
+      ? null
+      : { auctionId: liveAuctionId, status: liveStatus }
+    if (previous === null || liveStatus === null) return
+    if (previous.auctionId !== liveAuctionId) return
+    if (!isOngoing(previous.status) || isOngoing(liveStatus)) return
+    showToast(closeNotice(liveStatus).title, 'info')
+  }, [liveAuctionId, liveStatus, showToast])
+
   function redirectToLogin() {
     const next = `${location.pathname}${location.search}`
     navigate({
@@ -305,6 +362,7 @@ function AuctionDetailPage() {
       refreshBidHistory()
       showToast(`${formatWon(acceptedPrice)}으로 입찰했어요.`, 'success')
     }
+    notifyDepositChanged()
     return true
   }
 
@@ -347,6 +405,7 @@ function AuctionDetailPage() {
         finalPrice: result.data.finalPrice,
       }
     })
+    notifyDepositChanged()
     showToast(`${formatWon(result.data.finalPrice)}에 구매가 확정됐어요.`, 'success')
   }
 
@@ -500,7 +559,8 @@ function AuctionHeader({
   auction: AuctionDetail
   connectionStatus: ConnectionStatus
 }) {
-  const [interested, setInterested] = useState(false)
+  /* 상태 배지가 소리 없이 갈리지 않도록, 바뀐 직후에는 한 번 나타나는 연출을 준다. */
+  const statusChanged = useRecentChange(auction.status, CLOSE_HIGHLIGHT_MS)
   const liveLabel = connectionStatus === 'open'
     ? '실시간 연결됨'
     : connectionStatus === 'reconnecting'
@@ -511,41 +571,18 @@ function AuctionHeader({
 
   return (
     <div className="flex flex-col gap-sm">
-      <span className="text-xs text-muted">{CATEGORY_LABEL[auction.category]}</span>
+      <span className="text-xs text-muted">{AUCTION_CATEGORY_LABELS[auction.category]}</span>
 
-      <div className="flex flex-wrap items-start justify-between gap-sm">
-        <div>
-          <div className="flex flex-wrap items-center gap-xs">
+      <div>
+        <div className="flex flex-wrap items-center gap-xs">
+          <span className="inline-flex" style={closePopStyle(statusChanged)}>
             <Badge tone={STATUS_BADGE_TONE[auction.status]}>
               {STATUS_LABEL[auction.status]}
             </Badge>
-            <span className="text-xs text-muted" aria-live="polite">{liveLabel}</span>
-          </div>
-          <h1 className="mt-xs text-2xl font-bold text-ink">{auction.title}</h1>
+          </span>
+          <span className="text-xs text-muted" aria-live="polite">{liveLabel}</span>
         </div>
-
-        <div className="flex shrink-0 gap-xs">
-          <button
-            type="button"
-            onClick={() => setInterested((current) => !current)}
-            aria-pressed={interested}
-            className={`flex h-9 items-center gap-1 rounded-pill border px-base text-xs font-semibold transition-colors ${
-              interested
-                ? 'border-down-tint bg-down-tint text-down'
-                : 'border-hairline bg-canvas text-body hover:bg-surface-strong'
-            }`}
-          >
-            <Heart size={14} fill={interested ? 'currentColor' : 'none'} />
-            관심
-          </button>
-          <button
-            type="button"
-            className="flex h-9 items-center gap-1 rounded-pill border border-hairline bg-canvas px-base text-xs font-semibold text-body hover:bg-surface-strong"
-          >
-            <Flag size={14} />
-            신고
-          </button>
-        </div>
+        <h1 className="mt-xs text-2xl font-bold text-ink">{auction.title}</h1>
       </div>
     </div>
   )
@@ -554,27 +591,36 @@ function AuctionHeader({
 function AuctionGallery({ images, title }: { images: string[]; title: string }) {
   const [active, setActive] = useState(0)
   const [broken, setBroken] = useState<Record<number, boolean>>({})
+  const [isViewerOpen, setIsViewerOpen] = useState(false)
   const hasImages = images.length > 0
+  const canOpenViewer = hasImages && !broken[active]
 
   return (
     <div className="flex flex-col gap-sm">
-      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-surface-soft">
-        {!hasImages || broken[active] ? (
-          <div className="flex flex-col items-center gap-xs text-muted">
-            <ImageOff size={32} />
-            <span className="text-xs">
-              {hasImages ? '이미지를 불러오지 못했어요' : '등록된 이미지가 없어요'}
-            </span>
-          </div>
-        ) : (
+      {canOpenViewer ? (
+        <button
+          type="button"
+          onClick={() => setIsViewerOpen(true)}
+          aria-label="이미지 전체화면으로 보기"
+          className="flex aspect-square cursor-zoom-in items-center justify-center overflow-hidden rounded-xl bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
           <img
             src={images[active]}
             alt={title}
             className="h-full w-full object-cover"
             onError={() => setBroken((current) => ({ ...current, [active]: true }))}
           />
-        )}
-      </div>
+        </button>
+      ) : (
+        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-surface-soft">
+          <div className="flex flex-col items-center gap-xs text-muted">
+            <ImageOff size={32} />
+            <span className="text-xs">
+              {hasImages ? '이미지를 불러오지 못했어요' : '등록된 이미지가 없어요'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {hasImages && (
         <div className="flex gap-sm overflow-x-auto">
@@ -602,6 +648,124 @@ function AuctionGallery({ images, title }: { images: string[]; title: string }) 
           ))}
         </div>
       )}
+
+      {isViewerOpen && canOpenViewer && (
+        <ImageViewer
+          src={images[active]}
+          title={title}
+          onClose={() => setIsViewerOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+const MIN_IMAGE_ZOOM = 1
+const MAX_IMAGE_ZOOM = 3
+const IMAGE_ZOOM_STEP = 0.25
+
+function ImageViewer({
+  src,
+  title,
+  onClose,
+}: {
+  src: string
+  title: string
+  onClose: () => void
+}) {
+  const [zoom, setZoom] = useState(MIN_IMAGE_ZOOM)
+  const viewerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const previouslyFocused = document.activeElement
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const controls = viewerRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+      if (!controls?.length) return
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus()
+    }
+  }, [onClose])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} 이미지 전체화면`}
+      ref={viewerRef}
+      className="fixed inset-0 z-50 flex flex-col bg-surface-dark/95"
+    >
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/15 px-base text-on-dark sm:px-lg">
+        <span className="truncate text-sm font-semibold">{title}</span>
+        <div className="ml-base flex shrink-0 items-center gap-xs">
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.max(MIN_IMAGE_ZOOM, current - IMAGE_ZOOM_STEP))}
+            disabled={zoom === MIN_IMAGE_ZOOM}
+            aria-label="축소"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomOut size={20} />
+          </button>
+          <span className="w-12 text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.min(MAX_IMAGE_ZOOM, current + IMAGE_ZOOM_STEP))}
+            disabled={zoom === MAX_IMAGE_ZOOM}
+            aria-label="확대"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-40"
+          >
+            <ZoomIn size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(MIN_IMAGE_ZOOM)}
+            aria-label="크기 초기화"
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10"
+          >
+            <RotateCcw size={19} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="전체화면 닫기"
+            autoFocus
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <X size={22} />
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div
+          className="flex items-center justify-center p-base sm:p-lg"
+          style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+        >
+          <img src={src} alt={title} className="h-full w-full object-contain" />
+        </div>
+      </div>
     </div>
   )
 }
@@ -707,10 +871,12 @@ function UpBidPanel({
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const sealedStart = useCountdown(auction.sealedBidStartsAt - serverOffsetMs)
   const nextMinBid = auction.currentPrice + BID_UNIT
-  const [amount, setAmount] = useState(nextMinBid)
+  const [amount, setAmount] = useState(Math.min(nextMinBid, MAX_BID_PRICE))
   const [inputError, setInputError] = useState<string | null>(null)
+  const [raisedTo, setRaisedTo] = useState<number | null>(null)
   const [buyNowConfirmed, setBuyNowConfirmed] = useState(false)
   const ended = deadline.isEnded || !isOngoing(auction.status)
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
   const sealedBidActive = !ended && sealedStart.isEnded
   const canBuyNow = (
     !ended
@@ -719,21 +885,54 @@ function UpBidPanel({
     && auction.buyNowPrice !== null
   )
   const busy = pendingAction !== null
+  const bidLimitReached = nextMinBid > MAX_BID_PRICE
+
+  /*
+   * 다른 사람의 입찰이 SSE로 넘어오면 적어둔 금액이 최소 입찰가보다 낮아져 그대로는 입찰할 수 없다.
+   * 그때는 최고가 + 입찰 단위로 자동으로 올려 바로 다시 입찰할 수 있게 한다.
+   * 이미 더 높게 적어둔 금액은 유효하므로 건드리지 않는다.
+   */
+  const amountRef = useRef(amount)
+  amountRef.current = amount
+  useEffect(() => {
+    if (amountRef.current >= nextMinBid) return
+    const raised = Math.min(nextMinBid, MAX_BID_PRICE)
+    /* 상한에 걸려 올릴 자리가 없으면 안내도 하지 않는다. */
+    if (raised === amountRef.current) return
+    setAmount(raised)
+    setInputError(null)
+    setRaisedTo(raised)
+    const timer = window.setTimeout(() => setRaisedTo(null), AMOUNT_RAISE_NOTICE_MS)
+    return () => window.clearTimeout(timer)
+  }, [nextMinBid])
 
   function handleChip(increment: number) {
-    setAmount((current) => Math.max(current, auction.currentPrice) + increment)
+    setAmount((current) => Math.min(
+      Math.max(current, auction.currentPrice) + increment,
+      MAX_BID_PRICE,
+    ))
     setInputError(null)
     onClearError()
   }
 
   function handleAmountChange(event: ChangeEvent<HTMLInputElement>) {
     const raw = event.target.value.replace(/[^0-9]/g, '').slice(0, 15)
-    setAmount(raw === '' ? 0 : Number(raw))
+    const nextAmount = raw === '' ? 0 : Number(raw)
+    if (nextAmount >= MAX_PRICE_EXCLUSIVE) {
+      setInputError('입찰 금액은 1,000억 원 미만으로 입력해주세요.')
+      onClearError()
+      return
+    }
+    setAmount(nextAmount)
     setInputError(null)
     onClearError()
   }
 
   async function handleSubmit() {
+    if (amount >= MAX_PRICE_EXCLUSIVE) {
+      setInputError('입찰 금액은 1,000억 원 미만으로 입력해주세요.')
+      return
+    }
     if (!Number.isSafeInteger(amount) || amount < nextMinBid) {
       setInputError(`최소 ${formatWon(nextMinBid)} 이상 입찰해주세요.`)
       return
@@ -750,9 +949,11 @@ function UpBidPanel({
   return (
     <Card className="flex flex-col gap-lg p-lg">
       <div className="flex flex-wrap items-center gap-xs">
-        <Badge tone={ended ? 'ended' : sealedBidActive ? 'primary' : 'live'}>
-          {ended ? '마감' : sealedBidActive ? '밀봉 입찰' : '진행 중'}
-        </Badge>
+        <span className="inline-flex" style={closePopStyle(justClosed)}>
+          <Badge tone={ended ? 'ended' : sealedBidActive ? 'primary' : 'live'}>
+            {ended ? '마감' : sealedBidActive ? '밀봉 입찰' : '진행 중'}
+          </Badge>
+        </span>
         {auction.seller.verified && (
           <Badge tone="muted">
             <ShieldCheck size={13} />
@@ -763,7 +964,10 @@ function UpBidPanel({
 
       <div>
         <p className="text-xs text-muted">현재 공개 최고가</p>
-        <p className="text-3xl font-bold text-ink">{formatWon(auction.currentPrice)}</p>
+        <RollingPrice
+          value={auction.currentPrice}
+          className="block whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-ink"
+        />
         <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
           deadline.isUrgent ? 'text-down' : 'text-body'
         }`}>
@@ -781,6 +985,8 @@ function UpBidPanel({
         />
         <Stat label="거래 방식" value={TRADE_LABEL[auction.tradeType]} />
       </div>
+
+      {ended && <AuctionCloseNotice status={auction.status} justClosed={justClosed} />}
 
       {!ended && (
         <>
@@ -800,7 +1006,7 @@ function UpBidPanel({
                 key={increment}
                 type="button"
                 onClick={() => handleChip(increment)}
-                disabled={busy || hasSubmittedSealedBid && sealedBidActive}
+                disabled={busy || bidLimitReached || amount >= MAX_BID_PRICE || hasSubmittedSealedBid && sealedBidActive}
                 className="flex-1 rounded-pill border border-hairline py-sm text-sm font-semibold text-body hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
               >
                 +{increment.toLocaleString('ko-KR')}
@@ -808,21 +1014,31 @@ function UpBidPanel({
             ))}
           </div>
 
-          <TextInput
-            label={sealedBidActive ? '밀봉 입찰 금액' : '입찰 금액'}
-            inputMode="numeric"
-            value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
-            onChange={handleAmountChange}
-            error={inputError ?? actionError ?? undefined}
-            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
-          />
+          <div className="flex flex-col gap-xs">
+            <TextInput
+              label={sealedBidActive ? '밀봉 입찰 금액' : '입찰 금액'}
+              inputMode="numeric"
+              value={amount === 0 ? '' : amount.toLocaleString('ko-KR')}
+              onChange={handleAmountChange}
+              error={inputError ?? actionError ?? undefined}
+              disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
+            />
+            {/* 입력값이 사용자 손을 거치지 않고 바뀌었으므로 왜 바뀐지 알려준다. */}
+            {raisedTo !== null && (
+              <p role="status" className="text-xs font-semibold text-primary">
+                {BID_TEXT.amountRaised(raisedTo)}
+              </p>
+            )}
+          </div>
 
           <Button
             size="lg"
             onClick={handleSubmit}
-            disabled={busy || authPending || hasSubmittedSealedBid && sealedBidActive}
+            disabled={busy || authPending || bidLimitReached || hasSubmittedSealedBid && sealedBidActive}
           >
-            {pendingAction === 'bid'
+            {bidLimitReached
+              ? '입찰 가능 금액 상한 도달'
+              : pendingAction === 'bid'
               ? '입찰 처리 중…'
               : hasSubmittedSealedBid && sealedBidActive
                 ? '밀봉 입찰 제출 완료'
@@ -884,6 +1100,7 @@ function DownBuyPanel({
   const clock = useDownAuctionClock(auction, serverOffsetMs)
   const deadline = useCountdown(auction.deadline - serverOffsetMs)
   const ended = deadline.isEnded || auction.status !== 'OPEN'
+  const justClosed = useRecentChange(ended, CLOSE_HIGHLIGHT_MS) && ended
   const currentPrice = ended && auction.finalPrice !== null
     ? auction.finalPrice
     : ended
@@ -893,7 +1110,9 @@ function DownBuyPanel({
   return (
     <Card className="flex flex-col gap-lg p-lg">
       <div className="flex flex-wrap items-center gap-xs">
-        <Badge tone={ended ? 'ended' : 'live'}>{ended ? '마감' : '하락 중'}</Badge>
+        <span className="inline-flex" style={closePopStyle(justClosed)}>
+          <Badge tone={ended ? 'ended' : 'live'}>{ended ? '마감' : '하락 중'}</Badge>
+        </span>
         {auction.seller.verified && (
           <Badge tone="muted">
             <ShieldCheck size={13} />
@@ -906,9 +1125,12 @@ function DownBuyPanel({
         <p className="text-xs text-muted">
           {ended && auction.status === 'COMPLETED' ? '최종 구매가' : '지금 이 가격'}
         </p>
-        <p className="flex items-center gap-1.5">
-          <span className="text-3xl font-bold text-down">{formatWon(currentPrice)}</span>
-          {!ended && !clock.atFloor && <TrendingDown size={20} className="text-down" />}
+        <p className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <RollingPrice
+            value={currentPrice}
+            className="shrink-0 whitespace-nowrap text-[clamp(1.25rem,5vw,1.5rem)] font-bold tracking-tight text-down"
+          />
+          {!ended && !clock.atFloor && <TrendingDown size={20} className="shrink-0 text-down" />}
         </p>
         {!ended && !clock.atFloor && (
           <p className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
@@ -935,6 +1157,8 @@ function DownBuyPanel({
         <Stat label="하락 폭" value={formatWon(auction.dropPrice)} />
         <Stat label="거래 방식" value={TRADE_LABEL[auction.tradeType]} />
       </div>
+
+      {ended && <AuctionCloseNotice status={auction.status} justClosed={justClosed} />}
 
       {!ended && (
         <>
@@ -967,6 +1191,37 @@ function DownBuyPanel({
         </>
       )}
     </Card>
+  )
+}
+
+/*
+ * 마감된 뒤 그 자리에 남는 안내. 입찰·구매 영역이 사라진 자리를 비워두면 무슨 일이
+ * 일어났는지 알 수 없으므로, 왜 끝났고 지금 무슨 상태인지를 대신 채운다.
+ * 마감된 순간에는 한 번 나타나는 연출을 얹어 변화를 놓치지 않게 한다.
+ */
+function AuctionCloseNotice({
+  status,
+  justClosed,
+}: {
+  status: AuctionStatus
+  justClosed: boolean
+}) {
+  const notice = closeNotice(status)
+
+  return (
+    <div
+      role="status"
+      style={closePopStyle(justClosed)}
+      className="flex items-start gap-sm rounded-md bg-surface-soft p-base"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-strong text-body">
+        <Gavel size={CLOSE_ICON_SIZE} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-ink">{notice.title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-body">{notice.description}</p>
+      </div>
+    </div>
   )
 }
 

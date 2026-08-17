@@ -42,6 +42,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_TRAD
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.IDEMPOTENCY_KEY_REUSED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -147,6 +148,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         )).thenReturn(1);
         stubPersistedTrade();
@@ -173,11 +175,40 @@ class BuyNowServiceTest {
     }
 
     @Test
+    void 즉시구매가는_1000억_원부터_거절한다() {
+        // given
+        BuyNowCommand command = command(
+                AUCTION_ID,
+                100_000_000_000L,
+                BidStatus.BUY_NOW
+        );
+
+        // when
+        BidException exception = assertThrows(
+                BidException.class,
+                () -> transactionService.buy(command)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_LIMIT_EXCEEDED);
+        verifyNoInteractions(
+                memberRepository,
+                auctionRepository,
+                auctionDepositRepository,
+                auctionTradeRepository,
+                bidRepository,
+                requestRepository,
+                eventPublisher
+        );
+    }
+
+    @Test
     void OPEN_경매를_ACTIVE_회원이_낙찰가_전액을_잠그고_즉시구매한다() {
         stubReadyToPurchase();
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         ))
                 .thenReturn(1);
@@ -216,6 +247,7 @@ class BuyNowServiceTest {
         verify(auctionRepository).completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         );
         verify(memberRepository).movePointToLockedIfEnough(MEMBER_ID, FINAL_PRICE);
@@ -299,7 +331,8 @@ class BuyNowServiceTest {
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INSUFFICIENT_DEPOSIT);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
@@ -320,7 +353,8 @@ class BuyNowServiceTest {
         );
 
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());
         verify(bidRepository, never()).save(any());
@@ -337,6 +371,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         ))
                 .thenReturn(0);
@@ -387,6 +422,7 @@ class BuyNowServiceTest {
         when(auctionRepository.completeForBuyNow(
                 AUCTION_ID,
                 MEMBER_ID,
+                FINAL_PRICE,
                 PURCHASED_AT
         )).thenReturn(0);
         when(auctionRepository.currentDatabaseTime()).thenReturn(cutoffReachedAt);
@@ -424,7 +460,8 @@ class BuyNowServiceTest {
                 () -> assertThat(result.purchasedAt()).isEqualTo(PURCHASED_AT)
         );
         verifyNoInteractions(memberRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(
                 auctionDepositRepository,
@@ -452,7 +489,8 @@ class BuyNowServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(IDEMPOTENCY_KEY_REUSED);
         verifyNoInteractions(memberRepository, auctionRepository);
-        verify(auctionRepository, never()).completeForBuyNow(anyLong(), anyLong(), any());
+        verify(auctionRepository, never())
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verifyNoInteractions(
                 auctionDepositRepository,
@@ -617,7 +655,7 @@ class BuyNowServiceTest {
 
     private void verifyNoPurchaseMutation() {
         verify(auctionRepository, never())
-                .completeForBuyNow(anyLong(), anyLong(), any());
+                .completeForBuyNow(anyLong(), anyLong(), anyLong(), any());
         verify(memberRepository, never()).movePointToLockedIfEnough(anyLong(), anyLong());
         verify(auctionDepositRepository, never()).save(any());
         verify(auctionTradeRepository, never()).save(any());

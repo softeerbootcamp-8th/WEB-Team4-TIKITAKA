@@ -89,6 +89,7 @@ class AuctionDetailServiceTest {
         Image image = mock(Image.class);
         LocalDateTime deadline = LocalDateTime.of(2026, 8, 1, 13, 0);
         stubCommonAuction(auction, seller, deadline);
+        when(auction.getStatus()).thenReturn(AuctionStatus.OPEN);
         when(auction.getBuyNowPrice()).thenReturn(300_000L);
         when(image.getObjectKey()).thenReturn("auction-images/product.jpg");
         when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
@@ -118,6 +119,26 @@ class AuctionDetailServiceTest {
         assertThat(response.seller().verified()).isTrue();
         assertThat(response.seller().dealCount()).isEqualTo(12L);
         verify(auctionTradeRepository, never()).findFinalPriceByAuctionId(1L);
+    }
+
+    @Test
+    void 입찰이_들어와_진행중인_상승_경매는_즉시구매가를_응답하지_않는다() {
+        UpAuction auction = mock(UpAuction.class);
+        Member seller = mockSeller();
+        stubCommonAuction(auction, seller, LocalDateTime.of(2026, 8, 1, 13, 0));
+        // stubCommonAuction 기본값(BID_ONGOING)을 그대로 사용해, 입찰이 한 번이라도 들어와
+        // 즉시구매가 더 이상 불가능해진 경매를 재현한다.
+        when(auctionRepository.findDetailById(1L)).thenReturn(Optional.of(auction));
+        when(imageRepository.findByAuctionIdOrderByIdAsc(1L)).thenReturn(List.of());
+        when(auction.hasCurrentPrice()).thenReturn(true);
+        when(auction.getCurrentPrice()).thenReturn(240_000L);
+        when(bidRepository.countByAuctionId(1L)).thenReturn(3L);
+
+        UpAuctionDetailResponse response = (UpAuctionDetailResponse)
+                auctionDetailService.getDetail(1L);
+
+        assertThat(response.buyNowPrice()).isNull();
+        verify(auction, never()).getBuyNowPrice();
     }
 
     @Test

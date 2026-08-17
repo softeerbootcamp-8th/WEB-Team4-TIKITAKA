@@ -8,6 +8,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
@@ -17,6 +18,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryReposit
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
@@ -46,6 +48,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
 
     private static final LocalDateTime AS_OF = LocalDateTime.of(2026, 8, 3, 12, 0);
     private static final long START_PRICE = 100_000L;
+    private static final String PRICE_STATUS_KEYWORD = "price-branch";
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -115,6 +118,72 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         );
 
         assertThat(auctionListQueryRepository.count(condition)).isEqualTo(2L);
+    }
+
+    @Test
+    void 상태와_단일_카테고리를_asOf_기준으로_건수와_목록에_적용한다() {
+        Member seller = persistMember("filter-seller");
+        UpAuction activeHousehold = persistUp(
+                seller,
+                "활성 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction activeElectronics = persistUp(
+                seller,
+                "활성 디지털 경매",
+                AuctionCategory.ELECTRONICS
+        );
+        UpAuction completedBefore = persistUp(
+                seller,
+                "조기 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction endedBefore = persistUp(
+                seller,
+                "마감 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction completedAfter = persistUp(
+                seller,
+                "스냅샷 이후 종료 생활 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+
+        setAuctionTimeline(activeHousehold, AS_OF.minusHours(5), AS_OF.minusDays(1));
+        setAuctionTimeline(activeElectronics, AS_OF.minusHours(4), AS_OF.minusDays(1));
+        setAuctionTimeline(completedBefore, AS_OF.minusHours(3), AS_OF.minusDays(1));
+        setAuctionTimeline(endedBefore, AS_OF.minusHours(2), AS_OF.minusDays(1));
+        setAuctionTimeline(completedAfter, AS_OF.minusHours(1), AS_OF.minusDays(1));
+        setCompletedAt(completedBefore, AS_OF.minusMinutes(1));
+        setEndedAt(endedBefore, AS_OF.minusMinutes(1));
+        setCompletedAt(completedAfter, AS_OF.plusMinutes(1));
+        entityManager.clear();
+
+        AuctionListSearchCondition active = new AuctionListSearchCondition(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ACTIVE,
+                AuctionCategory.HOUSEHOLD,
+                AS_OF
+        );
+        AuctionListSearchCondition ended = new AuctionListSearchCondition(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ENDED,
+                AuctionCategory.HOUSEHOLD,
+                AS_OF
+        );
+
+        assertThat(auctionListQueryRepository.count(active)).isEqualTo(2L);
+        assertThat(findPage(active, 0, 10))
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(completedAfter.getId(), activeHousehold.getId());
+        assertThat(auctionListQueryRepository.count(ended)).isEqualTo(2L);
+        assertThat(findPage(ended, 0, 10))
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(endedBefore.getId(), completedBefore.getId());
     }
 
     @Test
@@ -236,6 +305,62 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void ALL_정렬은_UP_DOWN_후보를_병합한_뒤_offset을_적용한다() {
+        Member seller = persistMember("all-sort-seller");
+        Member bidder = persistMember("all-sort-bidder");
+        DownAuction oldestDown = persistDown(
+                seller,
+                "가장 오래된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        UpAuction oneBidUp = persistUp(
+                seller,
+                "입찰 한 건 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        DownAuction newerDown = persistDown(
+                seller,
+                "두 번째 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        UpAuction twoBidsUp = persistUp(
+                seller,
+                "입찰 두 건 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+
+        setAuctionTimeline(oldestDown, AS_OF.minusHours(4), AS_OF.minusDays(1));
+        setAuctionTimeline(newerDown, AS_OF.minusHours(2), AS_OF.minusDays(1));
+        setAuctionTimeline(oneBidUp, AS_OF.minusHours(1), AS_OF.minusDays(1));
+        setAuctionTimeline(twoBidsUp, AS_OF.minusMinutes(30), AS_OF.minusDays(1));
+        setEndedAt(twoBidsUp, AS_OF.plusHours(1));
+        setEndedAt(oneBidUp, AS_OF.plusHours(2));
+        setEndedAt(newerDown, AS_OF.plusHours(3));
+        setEndedAt(oldestDown, AS_OF.plusHours(4));
+        persistBid(oneBidUp, bidder, 120_000L);
+        persistBid(twoBidsUp, bidder, 120_000L);
+        persistBid(twoBidsUp, bidder, 130_000L);
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(
+                AuctionSort.RECOMMENDED,
+                AuctionSort.LATEST,
+                AuctionSort.DEADLINE
+        )) {
+            assertThat(findPage(condition(sort), 1, 2))
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::auctionId)
+                    .containsExactly(oneBidUp.getId(), newerDown.getId());
+        }
+    }
+
+    @Test
     void 모든_정렬은_동률이어도_auction_id로_순서를_고정한다() {
         Member seller = persistMember("sort-seller");
         UpAuction first = persistUp(seller, "동률 경매 A", AuctionCategory.HOUSEHOLD);
@@ -256,6 +381,122 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                     .extracting(AuctionListRow::auctionId)
                     .containsExactlyElementsOf(expectedIds);
         }
+    }
+
+    @Test
+    void 가격순_UP_상태분기_필터와_OR_baseline_결과가_동일하다() {
+        Member seller = persistMember("price-status-branch-seller");
+        UpAuction activeWithoutCompletion = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " active null",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction activeCompletedAfter = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " active after",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction endedCompletedBefore = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " ended before",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction endedWithoutCompletion = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " ended null",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction endedCompletedAfter = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " ended after",
+                AuctionCategory.HOUSEHOLD
+        );
+        UpAuction wrongCategory = persistUp(
+                seller,
+                PRICE_STATUS_KEYWORD + " wrong category",
+                AuctionCategory.FOOD
+        );
+        UpAuction wrongKeyword = persistUp(
+                seller,
+                "different keyword fixture",
+                AuctionCategory.HOUSEHOLD
+        );
+
+        for (Auction auction : List.of(
+                activeWithoutCompletion,
+                activeCompletedAfter,
+                endedCompletedBefore,
+                endedWithoutCompletion,
+                endedCompletedAfter,
+                wrongCategory,
+                wrongKeyword
+        )) {
+            setAuctionTimeline(auction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        }
+        setEndedAt(endedWithoutCompletion, AS_OF.minusMinutes(1));
+        setEndedAt(endedCompletedAfter, AS_OF.minusMinutes(1));
+        setCompletedAt(endedCompletedBefore, AS_OF.minusMinutes(1));
+        setCompletedAt(activeCompletedAfter, AS_OF.plusMinutes(1));
+        setCompletedAt(endedCompletedAfter, AS_OF.plusMinutes(1));
+
+        setCurrentPrice(activeWithoutCompletion, 100_000L);
+        setCurrentPrice(activeCompletedAfter, 100_000L);
+        setCurrentPrice(endedCompletedBefore, 300_000L);
+        setCurrentPrice(endedWithoutCompletion, 200_000L);
+        setCurrentPrice(endedCompletedAfter, 200_000L);
+        setCurrentPrice(wrongCategory, 1_000L);
+        setCurrentPrice(wrongKeyword, 1_000L);
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(AuctionSort.PRICE_LOW, AuctionSort.PRICE_HIGH)) {
+            AuctionListSearchCondition active = priceStatusCondition(sort, null);
+            AuctionListSearchCondition ended = priceStatusCondition(
+                    sort,
+                    AuctionListStatusFilter.ENDED
+            );
+
+            assertThat(active.status()).isNull();
+            assertPriceSnapshotsMatchOrBaseline(active, 10);
+            assertPriceSnapshotsMatchOrBaseline(ended, 10);
+        }
+
+        AuctionListSearchCondition activeLow = priceStatusCondition(
+                AuctionSort.PRICE_LOW,
+                null
+        );
+        AuctionListSearchCondition endedLow = priceStatusCondition(
+                AuctionSort.PRICE_LOW,
+                AuctionListStatusFilter.ENDED
+        );
+        AuctionListSearchCondition activeHigh = priceStatusCondition(
+                AuctionSort.PRICE_HIGH,
+                null
+        );
+        AuctionListSearchCondition endedHigh = priceStatusCondition(
+                AuctionSort.PRICE_HIGH,
+                AuctionListStatusFilter.ENDED
+        );
+
+        assertThat(auctionListQueryRepository.findUpPriceSnapshots(activeLow, 10))
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(activeCompletedAfter.getId(), activeWithoutCompletion.getId());
+        assertThat(auctionListQueryRepository.findUpPriceSnapshots(endedLow, 10))
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(
+                        endedCompletedAfter.getId(),
+                        endedWithoutCompletion.getId(),
+                        endedCompletedBefore.getId()
+                );
+        assertThat(auctionListQueryRepository.findUpPriceSnapshots(activeHigh, 10))
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(activeCompletedAfter.getId(), activeWithoutCompletion.getId());
+        assertThat(auctionListQueryRepository.findUpPriceSnapshots(endedHigh, 10))
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(
+                        endedCompletedBefore.getId(),
+                        endedCompletedAfter.getId(),
+                        endedWithoutCompletion.getId()
+                );
     }
 
     @Test
@@ -510,6 +751,53 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
     }
 
     @Test
+    void ACTIVE_스냅샷은_asOf_이후_완료된_DOWN의_저장_낙찰가를_표시한다() {
+        Member seller = persistMember("active-snapshot-completed-down-seller");
+        DownAuction completedAfterAsOf = persistDown(
+                seller,
+                "스냅샷 이후 완료된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(
+                completedAfterAsOf,
+                AS_OF.minusMinutes(10),
+                AS_OF.minusMinutes(10)
+        );
+        setCompletedAt(completedAfterAsOf, AS_OF.plusMinutes(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 60_000L)
+                .setParameter("auctionId", completedAfterAsOf.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(AuctionSort.LATEST, AuctionSort.DEADLINE)) {
+            List<AuctionListRow> rows = findPage(
+                    condition(AuctionType.DOWN, sort),
+                    0,
+                    10
+            );
+
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .singleElement()
+                    .satisfies(row -> {
+                        assertThat(row.auctionId()).isEqualTo(completedAfterAsOf.getId());
+                        assertThat(row.status()).isEqualTo(AuctionStatus.COMPLETED);
+                        // asOf 기준 계산가는 80,000원이지만 완료 후 저장된 낙찰가를 표시한다.
+                        assertThat(row.currentPrice()).isEqualTo(60_000L);
+                    });
+        }
+    }
+
+    @Test
     void 추천순과_가격순은_입찰_집계와_경매_유형별_현재가로_정렬한다() {
         Member seller = persistMember("aggregate-sort-seller");
         Member bidder = persistMember("aggregate-sort-bidder");
@@ -594,6 +882,201 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
             assertThat(listCurrentPrice)
                     .as("elapsedMinutes=%s", elapsedMinutes)
                     .isEqualTo(buyNowPrice);
+        }
+    }
+
+    @Test
+    void 완료된_DOWN_경매는_시간이_지나도_저장된_낙찰가를_조회한다() {
+        Member seller = persistMember("completed-down-price-seller");
+        DownAuction auction = persistDown(
+                seller,
+                "완료된 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(auction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice,
+                            completed_at = :completedAt
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 87_000L)
+                .setParameter("completedAt", AS_OF.minusMinutes(1))
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        AuctionListSearchCondition latest = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                AS_OF
+        );
+        AuctionListSearchCondition priceLow = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.PRICE_LOW,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                AS_OF
+        );
+
+        assertThat(findPage(latest, 0, 10)).singleElement().satisfies(row ->
+                assertThat(row.currentPrice()).isEqualTo(87_000L));
+        assertThat(findPage(priceLow, 0, 10)).singleElement().satisfies(row ->
+                assertThat(row.currentPrice()).isEqualTo(87_000L));
+    }
+
+    @Test
+    void 추천순_종료된_DOWN_경매는_저장된_낙찰가를_사용한다() {
+        Member seller = persistMember("recommended-completed-down-price-seller");
+        DownAuction auction = persistDown(
+                seller,
+                "추천순 완료 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(auction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice,
+                            completed_at = :completedAt
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 87_000L)
+                .setParameter("completedAt", AS_OF.minusMinutes(1))
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                AuctionType.DOWN,
+                AuctionSort.RECOMMENDED,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                AS_OF
+        );
+
+        assertThat(findPage(condition, 0, 10)).singleElement().satisfies(row -> {
+            assertThat(row.auctionId()).isEqualTo(auction.getId());
+            assertThat(row.currentPrice()).isEqualTo(87_000L);
+        });
+    }
+
+    @Test
+    void 종료된_미완료_DOWN_경매는_endedAt_시점_가격으로_고정한다() {
+        Member seller = persistMember("ended-down-price-seller");
+        DownAuction auction = persistDown(
+                seller,
+                "마감된 미완료 하락 경매",
+                AuctionCategory.HOUSEHOLD,
+                20_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(auction, AS_OF.minusMinutes(5), AS_OF.minusMinutes(5));
+        setEndedAt(auction, AS_OF.minusMinutes(1));
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(
+                AuctionSort.RECOMMENDED,
+                AuctionSort.LATEST,
+                AuctionSort.DEADLINE,
+                AuctionSort.PRICE_LOW,
+                AuctionSort.PRICE_HIGH
+        )) {
+            AuctionListSearchCondition condition = new AuctionListSearchCondition(
+                    AuctionType.DOWN,
+                    sort,
+                    null,
+                    AuctionListStatusFilter.ENDED,
+                    null,
+                    AS_OF
+            );
+
+            assertThat(findPage(condition, 0, 10))
+                    .as("sort=%s", sort)
+                    .singleElement()
+                    .satisfies(row -> {
+                        assertThat(row.auctionId()).isEqualTo(auction.getId());
+                        assertThat(row.currentPrice()).isEqualTo(100_000L);
+                    });
+        }
+    }
+
+    @Test
+    void 가격순_스냅샷_이후_완료된_DOWN은_정렬은_asOf_가격_표시는_낙찰가를_사용한다() {
+        Member seller = persistMember("price-snapshot-completed-after-seller");
+        DownAuction completedAfterAsOf = persistDown(
+                seller,
+                "스냅샷 이후 완료 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        DownAuction ongoing = persistDown(
+                seller,
+                "진행 중 경매",
+                AuctionCategory.HOUSEHOLD,
+                40_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(completedAfterAsOf, AS_OF.minusMinutes(10), AS_OF.minusMinutes(10));
+        setAuctionTimeline(ongoing, AS_OF.minusMinutes(15), AS_OF.minusMinutes(15));
+        setCompletedAt(completedAfterAsOf, AS_OF.plusMinutes(1));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 60_000L)
+                .setParameter("auctionId", completedAfterAsOf.getId())
+                .executeUpdate();
+        entityManager.clear();
+
+        for (AuctionSort sort : List.of(AuctionSort.PRICE_LOW, AuctionSort.PRICE_HIGH)) {
+            List<AuctionListRow> rows = findPage(
+                    new AuctionListSearchCondition(
+                            AuctionType.DOWN,
+                            sort,
+                            null,
+                            AS_OF
+                    ),
+                    0,
+                    2
+            );
+
+            List<Long> expectedIds = sort == AuctionSort.PRICE_LOW
+                    ? List.of(ongoing.getId(), completedAfterAsOf.getId())
+                    : List.of(completedAfterAsOf.getId(), ongoing.getId());
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::auctionId)
+                    .containsExactlyElementsOf(expectedIds);
+            assertThat(rows)
+                    .as("sort=%s", sort)
+                    .extracting(AuctionListRow::currentPrice)
+                    .containsExactly(
+                            sort == AuctionSort.PRICE_LOW
+                                    ? 70_000L
+                                    : 60_000L,
+                            sort == AuctionSort.PRICE_LOW
+                                    ? 60_000L
+                                    : 70_000L
+                    );
         }
     }
 
@@ -704,6 +1187,82 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         assertThat(rows).extracting(AuctionListRow::auctionId)
                 .containsExactly(auction.getId());
         assertThat(statistics.getEntityLoadCount()).isZero();
+    }
+
+    private void assertPriceSnapshotsMatchOrBaseline(
+            AuctionListSearchCondition condition,
+            int limit
+    ) {
+        List<AuctionPriceSnapshot> actual = auctionListQueryRepository
+                .findUpPriceSnapshots(condition, limit);
+        List<AuctionPriceSnapshot> baseline = baselineUpPriceSnapshotsWithOrStatus(
+                condition,
+                limit
+        );
+
+        assertThat(actual)
+                .as("sort=%s, status=%s", condition.sort(), condition.status())
+                .containsExactlyElementsOf(baseline);
+    }
+
+    private List<AuctionPriceSnapshot> baselineUpPriceSnapshotsWithOrStatus(
+            AuctionListSearchCondition condition,
+            int limit
+    ) {
+        String statusPredicate = condition.status() == AuctionListStatusFilter.ENDED
+                ? """
+                        (
+                            a.completedAt <= :asOf
+                            OR a.endedAt <= :asOf
+                        )
+                        """
+                : """
+                        (
+                            (a.completedAt IS NULL OR a.completedAt > :asOf)
+                            AND a.endedAt > :asOf
+                        )
+                        """;
+        String orderBy = condition.sort() == AuctionSort.PRICE_LOW
+                ? "a.currentPrice ASC, a.id DESC"
+                : "a.currentPrice DESC, a.id DESC";
+        String jpql = """
+                SELECT a.id, a.currentPrice
+                FROM Auction a
+                WHERE TYPE(a) = UpAuction
+                  AND a.startedAt <= :asOf
+                  AND %s
+                  AND a.category = :category
+                  AND a.title LIKE :keyword
+                ORDER BY %s
+                """.formatted(statusPredicate, orderBy);
+
+        return entityManager.createQuery(jpql, Object[].class)
+                .setParameter("asOf", AS_OF)
+                .setParameter("category", AuctionCategory.HOUSEHOLD)
+                .setParameter("keyword", "%" + PRICE_STATUS_KEYWORD + "%")
+                .setMaxResults(limit)
+                .getResultList()
+                .stream()
+                .map(row -> new AuctionPriceSnapshot(
+                        ((Number) row[0]).longValue(),
+                        ((Number) row[1]).longValue(),
+                        ((Number) row[1]).longValue()
+                ))
+                .toList();
+    }
+
+    private AuctionListSearchCondition priceStatusCondition(
+            AuctionSort sort,
+            AuctionListStatusFilter status
+    ) {
+        return new AuctionListSearchCondition(
+                AuctionType.UP,
+                sort,
+                PRICE_STATUS_KEYWORD,
+                status,
+                AuctionCategory.HOUSEHOLD,
+                AS_OF
+        );
     }
 
     private AuctionListSearchCondition condition(AuctionSort sort) {
@@ -902,6 +1461,17 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                         WHERE id = :auctionId
                         """)
                 .setParameter("startPrice", startPrice)
+                .setParameter("auctionId", auction.getId())
+                .executeUpdate();
+    }
+
+    private void setCurrentPrice(Auction auction, long currentPrice) {
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", currentPrice)
                 .setParameter("auctionId", auction.getId())
                 .executeUpdate();
     }

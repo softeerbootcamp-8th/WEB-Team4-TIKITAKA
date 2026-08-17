@@ -15,7 +15,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -66,7 +65,7 @@ class MailTokenIssueRateLimitConcurrencyTest {
     void 이메일_인증_토큰_동시_발급도_최대_횟수를_초과하지_않는다() throws Exception {
         long issuedCount = requestConcurrently(
                 pendingMember,
-                emailVerificationTokenService::issue
+                member -> emailVerificationTokenService.issue(member).isIssued()
         );
 
         assertThat(issuedCount).isEqualTo(MAX_ISSUE_COUNT);
@@ -78,7 +77,7 @@ class MailTokenIssueRateLimitConcurrencyTest {
     void 비밀번호_재설정_토큰_동시_발급도_최대_횟수를_초과하지_않는다() throws Exception {
         long issuedCount = requestConcurrently(
                 activeMember,
-                passwordResetTokenService::issue
+                member -> passwordResetTokenService.issue(member).isPresent()
         );
 
         assertThat(issuedCount).isEqualTo(MAX_ISSUE_COUNT);
@@ -88,7 +87,7 @@ class MailTokenIssueRateLimitConcurrencyTest {
 
     private long requestConcurrently(
             Member member,
-            Function<Member, Optional<String>> issueToken
+            Function<Member, Boolean> issueToken
     ) throws Exception {
         CyclicBarrier barrier = new CyclicBarrier(REQUEST_COUNT);
         ExecutorService executor = Executors.newFixedThreadPool(REQUEST_COUNT);
@@ -98,7 +97,7 @@ class MailTokenIssueRateLimitConcurrencyTest {
             for (int index = 0; index < REQUEST_COUNT; index++) {
                 Callable<Boolean> request = () -> {
                     barrier.await(5, TimeUnit.SECONDS);
-                    return issueToken.apply(member).isPresent();
+                    return issueToken.apply(member);
                 };
                 futures.add(executor.submit(request));
             }

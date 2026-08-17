@@ -17,16 +17,17 @@ import {
 import type { AuctionImagePresignResponse } from '../../../lib/api/auctionImage'
 import { requestAuctionCreate } from '../../../lib/api/auctions'
 import type { AuctionCategory } from '../../../lib/api/auctions'
+import { isAuthenticImageFile } from '../../../lib/imageValidation'
 import ImageUploader from './ImageUploader'
 import type { AuctionImageItem } from './ImageUploader'
 import {
-  ALLOWED_IMAGE_CONTENT_TYPES,
   AUCTION_DURATION_OPTIONS,
   AUCTION_TYPE_OPTIONS,
   CATEGORY_OPTIONS,
   ERROR_MESSAGE,
   MAX_IMAGE_COUNT,
   MAX_IMAGE_SIZE_BYTES,
+  PRICE_DROP_INTERVAL_OPTIONS,
   TEXT,
   TRADE_TYPE_OPTIONS,
 } from './constants'
@@ -41,6 +42,7 @@ const ROUTE = {
 type AuctionType = (typeof AUCTION_TYPE_OPTIONS)[number]['value']
 type AuctionDurationMinutes = (typeof AUCTION_DURATION_OPTIONS)[number]['value']
 type TradeType = (typeof TRADE_TYPE_OPTIONS)[number]['value']
+type PriceDropIntervalMinutes = (typeof PRICE_DROP_INTERVAL_OPTIONS)[number]['value']
 
 let nextImageItemId = 0
 function createImageItemId() {
@@ -66,16 +68,17 @@ function AuctionRegisterPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
   const [contact, setContact] = useState('')
-  const [durationMinutes, setDurationMinutes] = useState<AuctionDurationMinutes>(
-    AUCTION_DURATION_OPTIONS[0].value,
-  )
+  /* 배열 순서(6분이 데모용으로 맨 앞에 옴)와 무관하게 기본값은 30분으로 고정한다. */
+  const [durationMinutes, setDurationMinutes] = useState<AuctionDurationMinutes>('30')
   const [auctionType, setAuctionType] = useState<AuctionType>('DOWN')
   const [tradeType, setTradeType] = useState<TradeType>(TRADE_TYPE_OPTIONS[0].value)
   const [startPrice, setStartPrice] = useState('')
   const [buyNowPrice, setBuyNowPrice] = useState('')
   const [minimumPrice, setMinimumPrice] = useState('')
   const [dropPrice, setDropPrice] = useState('')
-  const [priceDropInterval, setPriceDropInterval] = useState('')
+  const [priceDropInterval, setPriceDropInterval] = useState<PriceDropIntervalMinutes>(
+    PRICE_DROP_INTERVAL_OPTIONS[0].value,
+  )
 
   const [images, setImages] = useState<AuctionImageItem[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +117,7 @@ function AuctionRegisterPage() {
         setError(ERROR_MESSAGE.imageTooLarge)
         continue
       }
-      if (!ALLOWED_IMAGE_CONTENT_TYPES.includes(file.type)) {
+      if (!(await isAuthenticImageFile(file))) {
         setError(ERROR_MESSAGE.unsupportedImageType)
         continue
       }
@@ -397,15 +400,11 @@ function AuctionRegisterPage() {
                 value={formatPriceDigits(dropPrice)}
                 onChange={handlePriceChange(setDropPrice)}
               />
-              <TextInput
+              <SegmentedControl
                 label={TEXT.priceDropIntervalLabel}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                suffix="분"
+                options={PRICE_DROP_INTERVAL_OPTIONS}
                 value={priceDropInterval}
-                onChange={handleFieldChange(setPriceDropInterval)}
-                placeholder={TEXT.priceDropIntervalPlaceholder}
+                onChange={setPriceDropInterval}
               />
             </>
           )}

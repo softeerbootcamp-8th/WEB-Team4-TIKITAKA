@@ -30,9 +30,79 @@
   }
 }
 
+/*
+ * price-drop-pop과 같은 "가격이 떨어졌다" 표현이지만 투명도를 건드리지 않는다.
+ * 인증 화면 소개 카드처럼 짧은 주기로 반복되는 자리에서는 값이 잠깐 사라지는 게 거슬린다.
+ */
+@keyframes price-step-down {
+  0% {
+    transform: translateY(-8px);
+  }
+  60% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 @keyframes drop-row-flash {
   0% {
     background-color: var(--color-down-tint);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/*
+ * 실시간(SSE) 반영을 눈에 보이게 하는 애니메이션.
+ * 숫자가 굴러가는 건 usePriceRoll이 값을 보간해서 만들고, 여기서는 "방금 바뀌었다"는
+ * 색 신호만 얹는다. 색만 쓰므로 움직임을 줄인 사용자에게도 그대로 보여줄 수 있다.
+ */
+@keyframes price-roll-up {
+  0%,
+  55% {
+    background-color: var(--color-up-tint);
+    color: var(--color-up);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes price-roll-down {
+  0%,
+  55% {
+    background-color: var(--color-down-tint);
+    color: var(--color-down);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* 마감된 순간 카드·배지가 자리에 나타나며 상태가 바뀐 걸 알린다. */
+@keyframes auction-close-pop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 마감된 카드 전체를 한 번 훑고 지나가는 음영. 목록·홈에서 어느 카드가 닫혔는지 보인다. */
+@keyframes auction-close-sweep {
+  0%,
+  40% {
+    background-color: var(--color-surface-strong);
   }
   100% {
     background-color: transparent;

@@ -32,7 +32,7 @@ public class TradeConfirmationService {
                 trade.getFinalPrice()
         );
         // 커밋 뒤 거래 SSE로 상태 변경(WAITING_CONFIRM→CONFIRMED)을 전파해 양쪽 화면을 갱신한다.
-        eventPublisher.publishEvent(new TradeStatusChanged(trade.getId()));
+        eventPublisher.publishEvent(TradeStatusChanged.from(trade));
         return TradeConfirmationResult.from(trade);
     }
 
@@ -49,7 +49,7 @@ public class TradeConfirmationService {
                 trade.getFinalPrice()
         );
         // 커밋 뒤 거래 SSE로 상태 변경(CONFIRMED→COMPLETED)을 전파해 양쪽 화면을 갱신한다.
-        eventPublisher.publishEvent(new TradeStatusChanged(trade.getId()));
+        eventPublisher.publishEvent(TradeStatusChanged.from(trade));
         return TradeConfirmationResult.from(trade);
     }
 

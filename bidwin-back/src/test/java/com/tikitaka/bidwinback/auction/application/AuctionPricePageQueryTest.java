@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCondition;
@@ -20,6 +21,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -238,8 +240,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = upCondition(AuctionSort.PRICE_HIGH);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(2L, 800L),
-                        new AuctionPriceSnapshot(3L, 700L)
+                        new AuctionPriceSnapshot(2L, 800L, 800L),
+                        new AuctionPriceSnapshot(3L, 700L, 700L)
                 ));
 
         // when
@@ -247,7 +249,7 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(800L, 700L);
     }
 
@@ -257,8 +259,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = upCondition(AuctionSort.PRICE_LOW);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(1L, 100L),
-                        new AuctionPriceSnapshot(2L, 200L)
+                        new AuctionPriceSnapshot(1L, 100L, 100L),
+                        new AuctionPriceSnapshot(2L, 200L, 200L)
                 ));
 
         // when
@@ -266,7 +268,7 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(100L, 200L);
         verify(auctionListQueryRepository, never()).findDownPriceCandidates(
                 any(),
@@ -281,8 +283,8 @@ class AuctionPricePageQueryTest {
         AuctionListSearchCondition condition = condition(null, AuctionSort.PRICE_HIGH);
         when(auctionListQueryRepository.findUpPriceSnapshots(condition, 2))
                 .thenReturn(List.of(
-                        new AuctionPriceSnapshot(1L, 500L),
-                        new AuctionPriceSnapshot(2L, 300L)
+                        new AuctionPriceSnapshot(1L, 500L, 500L),
+                        new AuctionPriceSnapshot(2L, 300L, 300L)
                 ));
         when(auctionListQueryRepository.findDownPriceCandidates(
                 eq(condition),
@@ -300,6 +302,68 @@ class AuctionPricePageQueryTest {
         assertThat(capturedSnapshots())
                 .extracting(AuctionPriceSnapshot::auctionId)
                 .containsExactly(1L, 3L);
+    }
+
+    @Test
+    void 상향_가격순_페이지_1_100_101은_최대_100페이지_top_k를_사용한다() {
+        int size = 2;
+        long candidateCountLimit = 100L * size;
+
+        for (AuctionSort sort : List.of(AuctionSort.PRICE_LOW, AuctionSort.PRICE_HIGH)) {
+            AuctionListSearchCondition condition = upCondition(sort);
+            for (int page : List.of(1, 100, 101)) {
+                auctionPricePageQuery.findPage(
+                        condition,
+                        page,
+                        size,
+                        candidateCountLimit
+                );
+            }
+
+            verify(auctionListQueryRepository).findUpPriceSnapshots(condition, size);
+            verify(auctionListQueryRepository, times(2))
+                    .findUpPriceSnapshots(condition, (int) candidateCountLimit);
+        }
+    }
+
+    @Test
+    void 하향과_ALL_가격순_페이지_1_100_101은_두_경매_유형_분기를_유지한다() {
+        int size = 2;
+        long candidateCountLimit = 100L * size;
+
+        for (AuctionType type : new AuctionType[]{AuctionType.DOWN, null}) {
+            for (AuctionSort sort : List.of(AuctionSort.PRICE_LOW, AuctionSort.PRICE_HIGH)) {
+                AuctionListSearchCondition condition = condition(type, sort);
+                when(auctionListQueryRepository.findDownPriceCandidates(
+                        eq(condition),
+                        isNull(),
+                        eq(1_000)
+                )).thenReturn(List.of());
+
+                for (int page : List.of(1, 100, 101)) {
+                    auctionPricePageQuery.findPage(
+                            condition,
+                            page,
+                            size,
+                            candidateCountLimit
+                    );
+                }
+
+                verify(auctionListQueryRepository, times(3)).findDownPriceCandidates(
+                        eq(condition),
+                        isNull(),
+                        eq(1_000)
+                );
+                if (type == null) {
+                    verify(auctionListQueryRepository).findUpPriceSnapshots(condition, size);
+                    verify(auctionListQueryRepository, times(2))
+                            .findUpPriceSnapshots(condition, (int) candidateCountLimit);
+                } else {
+                    verify(auctionListQueryRepository, never())
+                            .findUpPriceSnapshots(eq(condition), anyInt());
+                }
+            }
+        }
     }
 
     @Test
@@ -349,8 +413,93 @@ class AuctionPricePageQueryTest {
 
         // then
         assertThat(capturedSnapshots())
-                .extracting(AuctionPriceSnapshot::currentPrice)
+                .extracting(AuctionPriceSnapshot::displayPrice)
                 .containsExactly(80_000L);
+    }
+
+    @Test
+    void 하향_스냅샷_이후_완료된_경매는_정렬가는_asOf_계산가를_표시가는_낙찰가를_사용한다() {
+        // given
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
+        DownAuctionPriceCandidate completedAfterAsOf = new DownAuctionPriceCandidate(
+                1L,
+                100_000L,
+                40_000L,
+                AS_OF.minusMinutes(10),
+                AS_OF.plusHours(1),
+                10_000L,
+                5L,
+                AuctionStatus.COMPLETED,
+                AS_OF.plusMinutes(1),
+                60_000L
+        );
+        DownAuctionPriceCandidate ongoing = new DownAuctionPriceCandidate(
+                2L,
+                100_000L,
+                40_000L,
+                AS_OF.minusMinutes(15),
+                AS_OF.plusHours(1),
+                10_000L,
+                5L,
+                AuctionStatus.OPEN,
+                null,
+                null
+        );
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(List.of(completedAfterAsOf, ongoing));
+
+        // when
+        auctionPricePageQuery.findPage(condition, 1, 2, 2);
+
+        // then
+        List<AuctionPriceSnapshot> snapshots = capturedSnapshots();
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(2L, 1L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::sortPrice)
+                .containsExactly(70_000L, 80_000L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::displayPrice)
+                .containsExactly(70_000L, 60_000L);
+    }
+
+    @Test
+    void 하향_미완료_경매는_asOf가_endedAt을_지나도_endedAt_가격을_사용한다() {
+        // given
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
+        DownAuctionPriceCandidate ended = new DownAuctionPriceCandidate(
+                1L,
+                100_000L,
+                20_000L,
+                AS_OF.minusMinutes(5),
+                AS_OF.minusMinutes(1),
+                10_000L,
+                5L,
+                AuctionStatus.OPEN,
+                null,
+                null
+        );
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(List.of(ended));
+
+        // when
+        auctionPricePageQuery.findPage(condition, 1, 1, 1);
+
+        // then
+        List<AuctionPriceSnapshot> snapshots = capturedSnapshots();
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::sortPrice)
+                .containsExactly(100_000L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::displayPrice)
+                .containsExactly(100_000L);
     }
 
     private List<AuctionPriceSnapshot> capturedSnapshots() {
@@ -396,8 +545,12 @@ class AuctionPricePageQueryTest {
                 startPrice,
                 minimumPrice,
                 AS_OF.minusMinutes(elapsedMinutes),
+                AS_OF.plusDays(1),
                 dropPrice,
-                priceDropInterval
+                priceDropInterval,
+                AuctionStatus.OPEN,
+                null,
+                null
         );
     }
 }

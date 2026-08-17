@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -24,6 +25,8 @@ import com.tikitaka.bidwinback.upload.domain.entity.PendingAuctionImage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -43,10 +46,12 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_DURATIO
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_IMAGE_REFERENCE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_INPUT_VALUE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_MINIMUM_PRICE;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_DROP_INTERVAL;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_START_PRICE_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_DROP_INTERVAL_EXCEEDS_DURATION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -259,7 +264,7 @@ class AuctionCreateServiceTest {
                 .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
 
         var response = auctionCreateService.create(
-                MEMBER_ID, downRequest(150_000L, 10_000L, 30L)
+                MEMBER_ID, downRequest(150_000L, 10_000L, 10L)
         );
 
         ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
@@ -268,9 +273,25 @@ class AuctionCreateServiceTest {
         assertAll(
                 () -> assertThat(downAuction.getMinimumPrice()).isEqualTo(150_000L),
                 () -> assertThat(downAuction.getDropPrice()).isEqualTo(10_000L),
-                () -> assertThat(downAuction.getPriceDropInterval()).isEqualTo(30L),
+                () -> assertThat(downAuction.getPriceDropInterval()).isEqualTo(10L),
                 () -> assertThat(response.auctionId()).isEqualTo(AUCTION_ID)
         );
+    }
+
+    @Test
+    void 인하_주기가_경매_진행_시간보다_길면_등록할_수_없다() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(
+                        MEMBER_ID,
+                        withDuration(downRequest(150_000L, 10_000L, 10L), 6)
+                )
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(PRICE_DROP_INTERVAL_EXCEEDS_DURATION);
+        verify(auctionRepository, never()).save(any());
     }
 
     @Test
@@ -320,6 +341,27 @@ class AuctionCreateServiceTest {
         verify(auctionRepository, never()).save(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"ELECTRONICS", "FASHION", "SPORTS", "HOBBY", "BOOK", "OTHER"})
+    void 신규_카테고리로_경매를_등록할_수_있다(String category) {
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        List<PendingAuctionImage> pendingImages = ownedPendingImages();
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndUploadIdInForUpdate(
+                MEMBER_ID, DRAFT_ID, UPLOAD_IDS
+        )).thenReturn(pendingImages);
+        stubMatchingMetadata(pendingImages);
+        when(imageObjectKeyGenerator.generatePermanent(anyLong(), any(UUID.class), any()))
+                .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
+
+        auctionCreateService.create(MEMBER_ID, withCategory(upRequest(null), category));
+
+        ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
+        verify(auctionRepository).save(auctionCaptor.capture());
+        assertThat(auctionCaptor.getValue().getCategory())
+                .isEqualTo(AuctionCategory.valueOf(category));
+    }
+
     @Test
     void 허용되지_않은_진행_시간은_등록할_수_없다() {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
@@ -331,6 +373,25 @@ class AuctionCreateServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_DURATION);
         verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 진행_시간이_6분이면_밀봉입찰_데모용_경매로_등록할_수_있다() {
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        List<PendingAuctionImage> pendingImages = ownedPendingImages();
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndUploadIdInForUpdate(
+                MEMBER_ID, DRAFT_ID, UPLOAD_IDS
+        )).thenReturn(pendingImages);
+        stubMatchingMetadata(pendingImages);
+        when(imageObjectKeyGenerator.generatePermanent(anyLong(), any(UUID.class), any()))
+                .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
+
+        auctionCreateService.create(MEMBER_ID, withDuration(upRequest(null), 6));
+
+        ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
+        verify(auctionRepository).save(auctionCaptor.capture());
+        assertThat(auctionCaptor.getValue().getEndedAt()).isEqualTo(DB_NOW.plusMinutes(6));
     }
 
     @Test
@@ -378,7 +439,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(200_000L, 10_000L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(200_000L, 10_000L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_MINIMUM_PRICE);
@@ -390,7 +451,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_500L, 10_000L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_500L, 10_000L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
@@ -402,7 +463,7 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_500L, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_500L, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_UNIT);
@@ -414,10 +475,23 @@ class AuctionCreateServiceTest {
 
         AuctionException exception = assertThrows(
                 AuctionException.class,
-                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, null, 30L))
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, null, 10L))
         );
 
         assertThat(exception.getErrorCode()).isEqualTo(INVALID_INPUT_VALUE);
+        verify(auctionRepository, never()).save(any());
+    }
+
+    @Test
+    void 허용되지_않은_인하_주기는_등록할_수_없다() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(seller));
+
+        AuctionException exception = assertThrows(
+                AuctionException.class,
+                () -> auctionCreateService.create(MEMBER_ID, downRequest(150_000L, 10_000L, 30L))
+        );
+
+        assertThat(exception.getErrorCode()).isEqualTo(INVALID_PRICE_DROP_INTERVAL);
         verify(auctionRepository, never()).save(any());
     }
 

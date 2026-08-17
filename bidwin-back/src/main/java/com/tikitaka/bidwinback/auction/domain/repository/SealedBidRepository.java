@@ -11,7 +11,6 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
 
@@ -35,18 +34,20 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
             @Param("auctionIds") Collection<Long> auctionIds
     );
 
-    @Query("""
-            select sealedBid.id,
-                   bidder.id,
-                   bidder.nickname,
-                   sealedBid.price,
-                   sealedBid.submittedAt
-            from SealedBid sealedBid
-            join sealedBid.bidder bidder
-            where sealedBid.auction.id = :auctionId
-            order by sealedBid.submittedAt desc, sealedBid.id desc
-            limit 10
-            """)
+    // MySQL이 member부터 훑지 않도록 밀봉 이력 인덱스 순서로 최근 10건을 먼저 읽는다.
+    @Query(value = """
+            SELECT STRAIGHT_JOIN
+                   sealed_bid.id,
+                   member.id,
+                   member.nickname,
+                   sealed_bid.price,
+                   sealed_bid.submitted_at
+            FROM sealed_bid
+            JOIN member ON member.id = sealed_bid.bidder_id
+            WHERE sealed_bid.auction_id = :auctionId
+            ORDER BY sealed_bid.submitted_at DESC, sealed_bid.id DESC
+            LIMIT 10
+            """, nativeQuery = true)
     List<BidHistoryRow> findHistoryByAuctionId(@Param("auctionId") long auctionId);
 
     // 마이페이지 입찰 내역용. BidRepository.summarizeMyBidsByMemberId와 같은 모양으로,
@@ -72,14 +73,4 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
             group by sealedBid.auction.id
             """)
     List<AuctionBidSummary> summarizeSealedByAuctionIds(@Param("auctionIds") List<Long> auctionIds);
-
-    @Query("""
-            select sealedBid
-            from SealedBid sealedBid
-            join fetch sealedBid.bidder
-            where sealedBid.auction.id = :auctionId
-            order by sealedBid.price desc, sealedBid.submittedAt asc, sealedBid.id asc
-            limit 1
-            """)
-    Optional<SealedBid> findWinnerByAuctionId(@Param("auctionId") long auctionId);
 }

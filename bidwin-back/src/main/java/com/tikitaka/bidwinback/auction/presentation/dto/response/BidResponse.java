@@ -2,9 +2,20 @@ package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
 import com.tikitaka.bidwinback.auction.application.BidResult;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
+@Schema(
+        description = "공개·비공개 입찰 결과. 비공개 입찰 응답에는 가격이 포함되지 않습니다.",
+        oneOf = {BidResponse.Open.class, BidResponse.Sealed.class},
+        discriminatorProperty = "status",
+        discriminatorMapping = {
+                @DiscriminatorMapping(value = "UP", schema = BidResponse.Open.class),
+                @DiscriminatorMapping(value = "SEALED", schema = BidResponse.Sealed.class)
+        }
+)
 public sealed interface BidResponse {
 
     public static BidResponse from(BidResult result) {

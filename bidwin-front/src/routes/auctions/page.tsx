@@ -7,15 +7,22 @@ import { useServerClock } from '../../hooks/useServerClock'
 import { useToast } from '../../hooks/useToast'
 import { requestAuctionCategories, requestAuctionList } from '../../lib/api/auctions'
 import type { AuctionCategoryOption, AuctionListResponse } from '../../lib/api/auctions'
-import AuctionCard from './components/AuctionCard'
+import AuctionCard, { AuctionCardSkeleton } from './components/AuctionCard'
 import AuctionToolbar from './components/AuctionToolbar'
 import FilterModal from './components/FilterModal'
 import FilterPanel from './components/FilterPanel'
 import FilterSheet from './components/FilterSheet'
 import Pagination from './components/Pagination'
-import { FIRST_PAGE, LIST_TEXT, PAGE_SIZE, SEARCH_QUERY_PARAM } from './constants'
+import {
+  CATEGORY_QUERY_PARAM,
+  FIRST_PAGE,
+  LIST_TEXT,
+  PAGE_SIZE,
+  SEARCH_QUERY_PARAM,
+} from './constants'
 import {
   DEFAULT_FILTER_SELECTION,
+  FILTER_GROUP_ID,
   countSelectedOptions,
   createFilterGroups,
   toAuctionListFilters,
@@ -27,14 +34,19 @@ import type { AuctionTypeFilter } from './types'
 
 const CONTENT_HEIGHT_CLASS = 'h-[calc(100dvh-4rem)]'
 const FILTER_PANEL_WIDTH_CLASS = 'w-[190px]'
+const SKELETON_KEYS = Array.from({ length: PAGE_SIZE }, (_, index) => index)
 
 function AuctionListPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const keyword = searchParams.get(SEARCH_QUERY_PARAM) ?? ''
+  const initialCategory = searchParams.get(CATEGORY_QUERY_PARAM)
   const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [isFilterEnabled, setIsFilterEnabled] = useState(true)
-  const [selection, setSelection] = useState<FilterSelection>(DEFAULT_FILTER_SELECTION)
+  const [selection, setSelection] = useState<FilterSelection>(() => ({
+    ...DEFAULT_FILTER_SELECTION,
+    ...(initialCategory ? { [FILTER_GROUP_ID.category]: [initialCategory] } : {}),
+  }))
   const [openGroupId, setOpenGroupId] = useState<string | null>(null)
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
   const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)
@@ -45,18 +57,16 @@ function AuctionListPage() {
     () => toAuctionListFilters(selection, isFilterEnabled),
     [isFilterEnabled, selection],
   )
-  const categoryKey = appliedFilters.categories.join(',')
-  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${categoryKey}\u0000${sort}`
+  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${sort}`
   const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
   const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const [bookmarks, setBookmarks] = useState<ReadonlySet<number>>(() => new Set())
   const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const serverOffsetMs = useServerClock(response?.serverTime)
+  const { serverOffsetMs } = useServerClock(response?.serverTime)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -92,7 +102,7 @@ function AuctionListPage() {
       keyword,
       auctionType,
       status: appliedFilters.status,
-      categories: appliedFilters.categories,
+      category: appliedFilters.category,
       sort,
       page,
       size: PAGE_SIZE,
@@ -112,7 +122,7 @@ function AuctionListPage() {
       active = false
       controller.abort()
     }
-  }, [appliedFilters.categories, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
+  }, [appliedFilters.category, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {
@@ -143,14 +153,6 @@ function AuctionListPage() {
     listRef.current?.scrollTo({ top: 0 })
   }
 
-  function toggleBookmark(auctionId: number) {
-    setBookmarks((current) => {
-      const next = new Set(current)
-      if (!next.delete(auctionId)) next.add(auctionId)
-      return next
-    })
-  }
-
   function toggleFilters(next: boolean) {
     setIsFilterEnabled(next)
     listRef.current?.scrollTo({ top: 0 })
@@ -165,6 +167,12 @@ function AuctionListPage() {
   function resetFilters() {
     setSelection(DEFAULT_FILTER_SELECTION)
     setIsFilterEnabled(true)
+    setOpenGroupId(null)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete(CATEGORY_QUERY_PARAM)
+      return next
+    }, { replace: true })
     listRef.current?.scrollTo({ top: 0 })
   }
 
@@ -175,7 +183,6 @@ function AuctionListPage() {
     setSearchParams({})
   }
 
-  const totalCount = response?.totalCount ?? 0
   const items = response?.items ?? []
   const filterPanel = (
     <FilterPanel
@@ -190,12 +197,18 @@ function AuctionListPage() {
 
   return (
     <main className={`mx-auto flex ${CONTENT_HEIGHT_CLASS} max-w-[1200px] flex-col px-lg py-base`}>
-      <div className="flex min-h-0 flex-1 gap-lg">
-        {isPanelOpen && (
-          <aside className={`hidden ${FILTER_PANEL_WIDTH_CLASS} shrink-0 lg:block`}>
+      <div className="flex min-h-0 flex-1">
+        <aside
+          aria-hidden={!isPanelOpen}
+          inert={!isPanelOpen}
+          className={`hidden shrink-0 overflow-hidden transition-[width,margin-right,opacity] duration-300 ease-out lg:block ${
+            isPanelOpen ? 'mr-lg w-[190px] opacity-100' : 'pointer-events-none mr-0 w-0 opacity-0'
+          }`}
+        >
+          <div className={`h-full ${FILTER_PANEL_WIDTH_CLASS}`}>
             {filterPanel}
-          </aside>
-        )}
+          </div>
+        </aside>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="shrink-0">
@@ -209,17 +222,23 @@ function AuctionListPage() {
               sort={sort}
               onChangeSort={setSort}
             />
-            <h1 className="py-sm text-lg font-bold text-ink">
-              {keyword ? LIST_TEXT.searchResultPrefix(keyword) : LIST_TEXT.resultCountPrefix}{' '}
-              <span className="text-primary">{totalCount.toLocaleString('ko-KR')}</span>
-              {LIST_TEXT.resultCountSuffix}
-            </h1>
+            {keyword && (
+              <h1 className="py-sm text-lg font-bold text-ink">
+                {LIST_TEXT.searchResultTitle(keyword)}
+              </h1>
+            )}
           </div>
 
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto pb-base">
+          <div
+            ref={listRef}
+            className={`min-h-0 flex-1 overflow-y-auto pb-base ${keyword ? '' : 'pt-sm'}`}
+          >
             {isLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted">
-                경매를 불러오는 중…
+              <div role="status" aria-label="경매를 불러오는 중">
+                <span className="sr-only">경매를 불러오는 중…</span>
+                <div className="grid grid-cols-1 gap-sm md:grid-cols-4">
+                  {SKELETON_KEYS.map((key) => <AuctionCardSkeleton key={key} />)}
+                </div>
               </div>
             ) : error ? (
               <div className="flex h-full flex-col items-center justify-center gap-sm text-center">
@@ -236,8 +255,6 @@ function AuctionListPage() {
                     key={auction.auctionId}
                     auction={auction}
                     serverOffsetMs={serverOffsetMs}
-                    isBookmarked={bookmarks.has(auction.auctionId)}
-                    onToggleBookmark={toggleBookmark}
                   />
                 ))}
               </div>
@@ -277,6 +294,7 @@ function AuctionListPage() {
           initialGroupId={openGroupId}
           selection={selection}
           onApply={applyFilters}
+          onReset={resetFilters}
           onClose={() => setOpenGroupId(null)}
         />
       )}

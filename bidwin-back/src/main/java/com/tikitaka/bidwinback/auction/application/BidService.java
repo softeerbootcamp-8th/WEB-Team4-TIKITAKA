@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.application;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
 import com.tikitaka.bidwinback.auction.application.live.BidPriceCachePreempted;
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
@@ -39,6 +40,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.CONCURRENT_BID_
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INVALID_BID_UNIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.NOT_UP_AUCTION;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_BID_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SEALED_BID_ALREADY_SUBMITTED;
 
@@ -66,7 +68,7 @@ public class BidService {
             long price,
             BidType bidType
     ) {
-        validateBidUnit(price);
+        validateBidPrice(price);
 
         // Redis에서 즉시 원자적으로 승패를 가른다(비교+갱신을 한 번에). SEALED는 이 캐시 대상이 아니다.
         Long previousPrice = bidType == BidType.OPEN
@@ -85,10 +87,20 @@ public class BidService {
 
         // bidType은 클라이언트가 인지한 입찰 단계일 뿐이며, 실제 단계는 DB 시각을 사용하는
         // 조건부 UPDATE가 판정한다. 단계가 바뀌어도 다른 입찰 유형으로 자동 전환하지 않는다.
-        int updatedRows = switch (bidType) {
-            case OPEN -> updateCurrentPrice(memberId, auctionId, price);
-            case SEALED -> tryUpdateAuctionForSealedBid(memberId, auctionId, price);
-        };
+        int updatedRows;
+        boolean stateChanged;
+        if (bidType == BidType.OPEN) {
+            updatedRows = updateCurrentPrice(memberId, auctionId, price);
+            stateChanged = true;
+        } else {
+            SealedBidAuctionUpdate update = tryUpdateAuctionForSealedBid(
+                    memberId,
+                    auctionId,
+                    price
+            );
+            updatedRows = update.updatedRows();
+            stateChanged = update.stateChanged();
+        }
         if (updatedRows != 1) {
             // 실패 원인을 최신 상태로 다시 판별해 구체적인 도메인 오류로 변환한다. 이 메서드는
             // 항상 예외를 던져 트랜잭션을 롤백시키므로, 위에서 예약해둔 캐시 재동기화도 실행된다.
@@ -101,7 +113,7 @@ public class BidService {
 
         return switch (bidType) {
             case OPEN -> saveOpenBid(auction, bidder, price);
-            case SEALED -> saveSealedBid(auction, bidder, price);
+            case SEALED -> saveSealedBid(auction, bidder, price, stateChanged);
         };
     }
 
@@ -141,11 +153,16 @@ public class BidService {
                 .build());
 
         eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
-        eventPublisher.publishEvent(new AuctionBidCreated(auction.getId(), bid.getId()));
+        eventPublisher.publishEvent(AuctionBidCreated.from(bid));
         return BidResult.from(bid);
     }
 
-    private BidResult saveSealedBid(Auction auction, Member bidder, long price) {
+    private BidResult saveSealedBid(
+            Auction auction,
+            Member bidder,
+            long price,
+            boolean stateChanged
+    ) {
         SealedBid sealedBid;
         try {
             sealedBid = sealedBidRepository.saveAndFlush(
@@ -159,13 +176,17 @@ public class BidService {
             throw new BidException(SEALED_BID_ALREADY_SUBMITTED);
         }
 
-        // 최초 밀봉입찰의 OPEN -> BID_ONGOING 전환만 revision을 올린다.
-        // 이후 이벤트는 같은 revision이라 연결에서 제거되어 비공개 입찰 횟수를 드러내지 않는다.
-        eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
+        // 후속 밀봉입찰은 공개 상태가 그대로라 같은 revision의 snapshot을 다시 만들 필요가 없다.
+        if (stateChanged) {
+            eventPublisher.publishEvent(new AuctionStateChanged(auction.getId()));
+        }
         return BidResult.from(sealedBid);
     }
 
-    private void validateBidUnit(long price) {
+    private void validateBidPrice(long price) {
+        if (!AuctionPricePolicy.isAllowed(price)) {
+            throw new BidException(PRICE_LIMIT_EXCEEDED);
+        }
         if (price <= 0 || price % BID_UNIT != 0) {
             throw new BidException(INVALID_BID_UNIT);
         }
@@ -184,17 +205,39 @@ public class BidService {
         }
     }
 
-    private int tryUpdateAuctionForSealedBid(Long memberId, Long auctionId, long price) {
+    private SealedBidAuctionUpdate tryUpdateAuctionForSealedBid(
+            Long memberId,
+            Long auctionId,
+            long price
+    ) {
         try {
-            return auctionRepository.tryUpdateAuctionForSealedBid(
+            int firstSealedBid = auctionRepository.tryUpdateAuctionForSealedBid(
                     auctionId,
                     memberId,
                     price,
-                    BID_UNIT
+                    BID_UNIT,
+                    OPEN.name(),
+                    1
             );
+            if (firstSealedBid == 1) {
+                return new SealedBidAuctionUpdate(1, true);
+            }
+
+            int subsequentSealedBid = auctionRepository.tryUpdateAuctionForSealedBid(
+                    auctionId,
+                    memberId,
+                    price,
+                    BID_UNIT,
+                    BID_ONGOING.name(),
+                    0
+            );
+            return new SealedBidAuctionUpdate(subsequentSealedBid, false);
         } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {
             throw new BidException(CONCURRENT_BID_CONFLICT);
         }
+    }
+
+    private record SealedBidAuctionUpdate(int updatedRows, boolean stateChanged) {
     }
 
     // 즉시구매 흐름은 회원 행을 먼저 잠근 뒤 경매 행을 잠그는 반대 순서라 드물게 순환 대기가

@@ -1,16 +1,17 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Check, ShieldCheck } from 'lucide-react'
 import AuthFormError from '../../components/auth/AuthFormError'
 import AuthSplitLayout from '../../components/auth/AuthSplitLayout'
 import { LINK_INTERACTION_CLASSES } from '../../components/auth/auth-styles'
 import Button from '../../components/ui/Button'
 import TextInput from '../../components/ui/TextInput'
+import { useEmailVerificationRedirect } from '../../hooks/useEmailVerificationRedirect'
 import { useToast } from '../../hooks/useToast'
 import {
+  AUTH_ERROR_CODE,
   requestEmailAvailability,
-  requestEmailVerification,
   requestNicknameAvailability,
   requestSignUp,
 } from '../../lib/api/auth'
@@ -26,6 +27,8 @@ import {
   validateNickname,
 } from '../../lib/auth/validation'
 import { formatPhoneNumber } from '../../lib/format'
+import AgreementConsent from './AgreementConsent'
+import { INITIAL_AGREEMENT_STATE, isEveryAgreementAccepted } from './agreements'
 import PassVerificationModal from './PassVerificationModal'
 import type { VerifiedIdentity } from './PassVerificationModal'
 
@@ -54,21 +57,22 @@ const TEXT = {
   submitting: '가입 처리 중…',
   loginPrompt: '이미 계정이 있으신가요?',
   login: '로그인',
-  imagePlaceholder: '이미지 영역 2',
   signUpSuccess: '회원가입이 완료됐어요. 이메일 인증을 진행해주세요.',
   passVerifiedToast: '본인인증이 완료됐어요.',
 }
 
 const ROUTE = {
   login: '/login',
-  emailVerification: '/email-verification',
 }
+
+const SHOWCASE_VARIANT = 'signup'
 
 const ERROR_MESSAGE = {
   emptyField: '이메일, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.',
   emailAvailabilityRequired: '이메일 중복 확인을 완료해주세요.',
   nicknameAvailabilityRequired: '닉네임 중복 확인을 완료해주세요.',
   identityRequired: 'PASS 본인인증을 완료해주세요.',
+  agreementRequired: '이용약관과 개인정보 처리방침에 모두 동의해주세요.',
 }
 
 const FORM_ERROR_ID = 'signup-form-error'
@@ -129,11 +133,12 @@ function SignupPage() {
   const nicknameAvailabilityRequestId = useRef(0)
   /* PASS 인증으로 받은 이름·전화번호. 성공 이후에는 다시 인증할 수 없다. */
   const [identity, setIdentity] = useState<VerifiedIdentity | null>(null)
+  const [agreements, setAgreements] = useState(INITIAL_AGREEMENT_STATE)
   const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { showToast } = useToast()
-  const navigate = useNavigate()
+  const redirectToEmailVerification = useEmailVerificationRedirect()
 
   const isIdentityVerified = identity !== null
   const trimmedEmail = email.trim()
@@ -183,6 +188,12 @@ function SignupPage() {
     setEmailAvailability({ status: 'checking', value: trimmedEmail, message: null })
     const result = await requestEmailAvailability(trimmedEmail)
     if (requestId !== emailAvailabilityRequestId.current) return
+
+    /* 가입만 해두고 이메일 인증이 남은 계정이면 다시 가입시키는 대신 인증 화면으로 보낸다. */
+    if (!result.ok && result.code === AUTH_ERROR_CODE.emailVerificationPending) {
+      await redirectToEmailVerification(trimmedEmail)
+      return
+    }
 
     if (!result.ok || !result.data.available) {
       setEmailAvailability({
@@ -272,6 +283,10 @@ function SignupPage() {
       setError(ERROR_MESSAGE.identityRequired)
       return
     }
+    if (!isEveryAgreementAccepted(agreements)) {
+      setError(ERROR_MESSAGE.agreementRequired)
+      return
+    }
     setError(null)
 
     setIsSubmitting(true)
@@ -284,25 +299,20 @@ function SignupPage() {
     })
 
     if (!signUpResult.ok) {
+      if (signUpResult.code === AUTH_ERROR_CODE.emailVerificationPending) {
+        await redirectToEmailVerification(trimmedEmail)
+        return
+      }
+
       setIsSubmitting(false)
       /* 중복 이메일·닉네임 등 백엔드 검증 실패는 서버 메시지를 그대로 같은 자리에 보여준다. */
       setError(signUpResult.message)
       return
     }
 
-    const emailVerificationResult = await requestEmailVerification(signUpResult.data.email)
-    setIsSubmitting(false)
-
     showToast(TEXT.signUpSuccess)
     /* 신규 회원은 PENDING 상태이므로 이메일 인증 안내 화면으로 이어준다. */
-    navigate(ROUTE.emailVerification, {
-      state: {
-        email: signUpResult.data.email,
-        initialSendError: emailVerificationResult.ok
-          ? undefined
-          : emailVerificationResult.message,
-      },
-    })
+    await redirectToEmailVerification(signUpResult.data.email)
   }
 
   const hasError = error !== null
@@ -312,7 +322,7 @@ function SignupPage() {
   }
 
   return (
-    <AuthSplitLayout imagePlaceholder={TEXT.imagePlaceholder}>
+    <AuthSplitLayout variant={SHOWCASE_VARIANT}>
       <form
         noValidate
         onSubmit={handleSubmit}
@@ -465,6 +475,15 @@ function SignupPage() {
               </p>
             )}
           </div>
+
+          <AgreementConsent
+            value={agreements}
+            onChange={(next) => {
+              setAgreements(next)
+              setError(null)
+            }}
+            disabled={isSubmitting}
+          />
         </div>
 
         {/* 오류 메시지는 로그인 화면과 같은 형식으로 입력 필드와 가입 버튼 사이에 표시한다. */}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BidHistoryItem, BidHistoryResponse } from '../lib/api/auctions'
 import { apiUrl } from '../lib/api/client'
+import { useServerClock } from './useServerClock'
 
 export interface AuctionLiveState {
   auctionId: number
@@ -13,11 +14,15 @@ export interface AuctionLiveState {
 
 interface AuctionEventHandlers {
   onState?: (state: AuctionLiveState) => void
-  onBidCreated?: (bid: BidHistoryItem) => void
+  onBidCreated?: (bid: BidCreatedEvent) => void
   onBidHistorySnapshot?: (history: BidHistoryResponse) => void
-  onHeartbeat?: (serverTime: number) => void
 }
 
+interface BidCreatedEvent extends BidHistoryItem {
+  auctionId: number
+}
+
+const AUCTION_STATE_SNAPSHOT_EVENT = 'auction-state-snapshot'
 type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'disconnected'
 
 const DETAIL_STALE_AFTER_MS = 45_000
@@ -39,15 +44,24 @@ export function useAuctionEvents(
 ): { status: ConnectionStatus; reconnect: () => void } {
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
+  /* 하트비트로 전역 서버 시계를 보정한다. SSE를 여는 화면이면 화면마다 챙기지 않아도 보정된다. */
+  const { synchronize } = useServerClock()
   const uniqueIds = [...new Set(auctionIds)].sort((a, b) => a - b)
   const idsKey = uniqueIds.join(',')
   const [status, setStatus] = useState<ConnectionStatus>('idle')
   const [reconnectToken, setReconnectToken] = useState(0)
-  const reconnect = useCallback(() => setReconnectToken((value) => value + 1), [])
+  const reconnect = useCallback(() => {
+    if (!navigator.onLine) return
+    setReconnectToken((value) => value + 1)
+  }, [])
 
   useEffect(() => {
     if (idsKey.length === 0) {
       setStatus('idle')
+      return
+    }
+    if (mode === 'detail' && !navigator.onLine) {
+      setStatus('disconnected')
       return
     }
 
@@ -57,21 +71,36 @@ export function useAuctionEvents(
       : `/api/v1/auctions/events?${ids.map((id) => `auctionIds=${id}`).join('&')}`
     const source = new EventSource(apiUrl(path))
     let lastActivityAt = Date.now()
+    const latestRevisionByAuctionId = new Map<number, number>()
     setStatus('connecting')
 
     const markActivity = () => {
       lastActivityAt = Date.now()
     }
 
+    const applyState = (state: AuctionLiveState) => {
+      if (!ids.includes(state.auctionId) || !Number.isSafeInteger(state.revision)) return
+      const latestRevision = latestRevisionByAuctionId.get(state.auctionId)
+      if (latestRevision !== undefined && state.revision <= latestRevision) return
+      latestRevisionByAuctionId.set(state.auctionId, state.revision)
+      handlersRef.current.onState?.(state)
+    }
     const handleState = (event: Event) => {
       markActivity()
       const state = parseEvent<AuctionLiveState>(event)
-      if (state && ids.includes(state.auctionId)) handlersRef.current.onState?.(state)
+      if (state) applyState(state)
+    }
+    const handleStateSnapshot = (event: Event) => {
+      markActivity()
+      const states = parseEvent<AuctionLiveState[]>(event)
+      if (Array.isArray(states)) states.forEach(applyState)
     }
     const handleBid = (event: Event) => {
       markActivity()
-      const bid = parseEvent<BidHistoryItem>(event)
-      if (bid?.entryId) handlersRef.current.onBidCreated?.(bid)
+      const bid = parseEvent<BidCreatedEvent>(event)
+        if (bid?.entryId && ids.includes(bid.auctionId)) {
+            handlersRef.current.onBidCreated?.(bid)
+        }
     }
     const handleHistory = (event: Event) => {
       markActivity()
@@ -84,7 +113,7 @@ export function useAuctionEvents(
       markActivity()
       const serverTime = parseEvent<number>(event)
       if (typeof serverTime === 'number' && Number.isFinite(serverTime)) {
-        handlersRef.current.onHeartbeat?.(serverTime)
+        synchronize(serverTime)
       }
     }
 
@@ -98,9 +127,15 @@ export function useAuctionEvents(
         : 'reconnecting',
     )
     source.addEventListener('auction-state', handleState)
+    source.addEventListener(AUCTION_STATE_SNAPSHOT_EVENT, handleStateSnapshot)
     source.addEventListener('bid-created', handleBid)
     source.addEventListener('bid-history-snapshot', handleHistory)
     source.addEventListener('heartbeat', handleHeartbeat)
+    const handleOffline = () => {
+      source.close()
+      setStatus('disconnected')
+    }
+    if (mode === 'detail') window.addEventListener('offline', handleOffline)
     const staleCheckId = mode === 'detail'
       ? window.setInterval(() => {
           if (Date.now() - lastActivityAt < DETAIL_STALE_AFTER_MS) return
@@ -110,10 +145,11 @@ export function useAuctionEvents(
       : undefined
 
     return () => {
+      if (mode === 'detail') window.removeEventListener('offline', handleOffline)
       if (staleCheckId !== undefined) window.clearInterval(staleCheckId)
       source.close()
     }
-  }, [idsKey, mode, reconnectToken])
+  }, [idsKey, mode, reconnectToken, synchronize])
 
   return { status, reconnect }
 }

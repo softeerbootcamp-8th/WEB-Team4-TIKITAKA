@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.application.live.TradeStatusChanged;
+import com.tikitaka.bidwinback.auction.application.live.TradeLiveState;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
@@ -88,7 +89,9 @@ class TradeConfirmationServiceTest {
                 BUYER_ID,
                 FINAL_PRICE
         );
-        verify(eventPublisher).publishEvent(new TradeStatusChanged(TRADE_ID));
+        verify(eventPublisher).publishEvent(new TradeStatusChanged(
+                new TradeLiveState(TRADE_ID, AUCTION_ID, TradeStatus.CONFIRMED)
+        ));
     }
 
     @Test
@@ -111,7 +114,9 @@ class TradeConfirmationServiceTest {
                 SELLER_ID,
                 FINAL_PRICE
         );
-        verify(eventPublisher).publishEvent(new TradeStatusChanged(TRADE_ID));
+        verify(eventPublisher).publishEvent(new TradeStatusChanged(
+                new TradeLiveState(TRADE_ID, AUCTION_ID, TradeStatus.COMPLETED)
+        ));
     }
 
     @Test

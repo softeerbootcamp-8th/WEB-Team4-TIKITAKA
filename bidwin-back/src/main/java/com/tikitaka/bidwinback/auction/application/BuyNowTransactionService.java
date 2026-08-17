@@ -2,6 +2,7 @@ package com.tikitaka.bidwinback.auction.application;
 
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionStateChanged;
+import com.tikitaka.bidwinback.auction.domain.AuctionPricePolicy;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionDeposit;
 import com.tikitaka.bidwinback.auction.domain.entity.AuctionTrade;
@@ -40,6 +41,7 @@ import static com.tikitaka.bidwinback.global.exception.ErrorCode.IDEMPOTENCY_KEY
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.INSUFFICIENT_DEPOSIT;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_ACTIVE;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.MEMBER_NOT_FOUND;
+import static com.tikitaka.bidwinback.global.exception.ErrorCode.PRICE_LIMIT_EXCEEDED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.SELF_PURCHASE_NOT_ALLOWED;
 import static com.tikitaka.bidwinback.global.exception.ErrorCode.UP_BUY_NOW_CLOSED_NEAR_DEADLINE;
 
@@ -57,6 +59,9 @@ public class BuyNowTransactionService {
 
     @Transactional
     public BuyNowResult buy(BuyNowCommand command) {
+        if (!AuctionPricePolicy.isAllowed(command.finalPrice())) {
+            throw new BidException(PRICE_LIMIT_EXCEEDED);
+        }
 
         // 멱등 키 저장
         requestRepository.insertOrKeep(
@@ -128,10 +133,7 @@ public class BuyNowTransactionService {
         request.complete(trade, command.finalPrice());
         eventPublisher.publishEvent(new AuctionStateChanged(command.auctionId()));
         if (auction instanceof UpAuction) {
-            eventPublisher.publishEvent(new AuctionBidCreated(
-                    command.auctionId(),
-                    purchaseBid.getId()
-            ));
+            eventPublisher.publishEvent(AuctionBidCreated.from(purchaseBid));
         }
 
         return BuyNowResult.from(trade);
@@ -154,6 +156,7 @@ public class BuyNowTransactionService {
             return auctionRepository.completeForBuyNow(
                     command.auctionId(),
                     command.memberId(),
+                    command.finalPrice(),
                     command.purchasedAt()
             );
         } catch (PessimisticLockingFailureException | QueryTimeoutException exception) {

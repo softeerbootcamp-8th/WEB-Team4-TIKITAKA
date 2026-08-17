@@ -7,6 +7,7 @@ import Button from '../../../components/ui/Button'
 import Card from '../../../components/ui/Card'
 import Pagination from '../../auctions/components/Pagination'
 import { useCountdown } from '../../../hooks/useCountdown'
+import { useServerClock } from '../../../hooks/useServerClock'
 import {
   requestMyBidRecords,
   requestMyDepositRecords,
@@ -33,6 +34,7 @@ import type { HistoryTabKey } from '../constants'
 const PAGE_SIZE = 10
 const FIRST_PAGE = 1
 const THUMBNAIL_CLASS = 'h-20 w-20'
+const HISTORY_SKELETON_KEYS = Array.from({ length: 6 }, (_, index) => index)
 
 const RECORD_TABS = [
   { key: HISTORY_TAB.bidding, label: '입찰 내역', icon: Gavel },
@@ -295,10 +297,16 @@ function MyRecordsPage() {
       <div className="mt-xl grid grid-cols-1 gap-xl lg:grid-cols-[280px_1fr]">
         <aside className="flex flex-col gap-base">
           <div className="grid grid-cols-2 gap-sm">
-            <SummaryStat label="입찰 중" value={summary ? `${summary.bidding}건` : '—'} />
-            <SummaryStat label="낙찰" value={summary ? `${summary.won}건` : '—'} />
-            <SummaryStat label="판매 중" value={summary ? `${summary.sellingOnSale}건` : '—'} />
-            <SummaryStat label="보유 보증금" value={summary ? formatWon(summary.heldDeposit) : '—'} />
+            {summary ? (
+              <>
+                <SummaryStat label="입찰 중" value={`${summary.bidding}건`} />
+                <SummaryStat label="낙찰" value={`${summary.won}건`} />
+                <SummaryStat label="판매 중" value={`${summary.sellingOnSale}건`} />
+                <SummaryStat label="보유 보증금" value={formatWon(summary.heldDeposit)} />
+              </>
+            ) : (
+              [0, 1, 2, 3].map((key) => <SummaryStatSkeleton key={key} />)
+            )}
           </div>
 
           <nav className="flex flex-col gap-1 rounded-xl border border-hairline-soft bg-canvas p-sm">
@@ -354,7 +362,7 @@ function MyRecordsPage() {
 
           <div className="mt-base grid grid-cols-1 gap-base md:grid-cols-2">
             {isLoading ? (
-              <EmptyState message="내역을 불러오는 중…" />
+              <HistorySkeleton />
             ) : error ? (
               <div className="flex flex-col items-center gap-sm py-xl md:col-span-2">
                 <p className="text-sm text-down">{error}</p>
@@ -409,12 +417,41 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   )
 }
 
+function SummaryStatSkeleton() {
+  return (
+    <Card aria-hidden className="flex animate-pulse flex-col gap-sm p-base">
+      <div className="h-3 w-12 rounded-pill bg-surface-strong" />
+      <div className="h-6 w-20 max-w-full rounded-pill bg-surface-strong" />
+    </Card>
+  )
+}
+
+function HistorySkeleton() {
+  return (
+    <div role="status" aria-label="내역을 불러오는 중" className="contents">
+      <span className="sr-only">내역을 불러오는 중…</span>
+      {HISTORY_SKELETON_KEYS.map((key) => (
+        <Card key={key} aria-hidden className="flex h-28 animate-pulse gap-base p-base">
+          <div className="h-20 w-20 shrink-0 rounded-lg bg-surface-strong" />
+          <div className="flex flex-1 flex-col gap-sm py-xs">
+            <div className="h-5 w-4/5 rounded-pill bg-surface-strong" />
+            <div className="h-4 w-1/2 rounded-pill bg-surface-strong" />
+            <div className="mt-auto h-5 w-2/3 rounded-pill bg-surface-strong" />
+          </div>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
 function EmptyState({ message }: { message: string }) {
   return <p className="py-xl text-center text-sm text-muted md:col-span-2">{message}</p>
 }
 
 function BiddingCard({ record }: { record: MyBidRecord }) {
-  const { remaining, isUrgent } = useCountdown(record.deadline)
+  /* 이 화면은 SSE를 열지 않지만, 다른 화면의 하트비트로 보정된 전역 시계를 함께 쓴다. */
+  const { serverOffsetMs } = useServerClock()
+  const { remaining, isUrgent } = useCountdown(record.deadline - serverOffsetMs)
   return (
     <RecordLink auctionId={record.auctionId} thumbnailUrl={record.thumbnailUrl} title={record.title}>
       <p className="mt-1 text-sm text-muted">내 입찰가 {formatWon(record.myBidAmount)}</p>

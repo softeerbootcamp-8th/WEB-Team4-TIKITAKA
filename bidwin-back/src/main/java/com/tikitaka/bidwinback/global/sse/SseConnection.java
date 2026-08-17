@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.global.sse;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -14,6 +16,7 @@ import java.util.function.Consumer;
 /** 한 클라이언트의 전송 순서와 대기 메시지를 관리한다. */
 final class SseConnection {
 
+    private static final Logger log = LoggerFactory.getLogger(SseConnection.class);
     private static final ThreadFactory WRITER_THREADS =
             Thread.ofVirtual().name("sse-writer-", 0).factory();
 
@@ -112,22 +115,13 @@ final class SseConnection {
             // I/O 실패는 컨테이너가 오류 완료하므로 색인만 정리한다.
             terminate();
         } catch (RuntimeException exception) {
-            completeWithError(exception);
+            log.error("SSE message send failed", exception);
+            // completeWithError는 MVC가 일반 오류 본문을 SSE 스트림에 쓰게 하므로
+            // 이미 열린 스트림만 종료해 클라이언트가 재연결하도록 한다.
+            close();
         } finally {
             pendingMessages.clear();
             latestVersions.clear();
-        }
-    }
-
-    private void completeWithError(RuntimeException exception) {
-        if (!terminate()) {
-            return;
-        }
-        try {
-            // 직렬화 등 애플리케이션 오류는 컨테이너 I/O 콜백을 기대할 수 없다.
-            emitter.completeWithError(exception);
-        } catch (RuntimeException ignored) {
-            // 색인과 writer는 terminate에서 이미 정리됐다.
         }
     }
 

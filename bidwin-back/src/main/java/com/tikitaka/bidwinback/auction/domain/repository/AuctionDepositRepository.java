@@ -39,6 +39,24 @@ public interface AuctionDepositRepository extends JpaRepository<AuctionDeposit, 
             DepositStatus status
     );
 
+    // 마감 배치가 선점한 경매에서 낙찰자를 제외한 HELD 보증금을 조회한다.
+    @Query("""
+            select deposit
+            from AuctionDeposit deposit
+            where deposit.auction.id in :auctionIds
+              and deposit.status = :status
+              and exists (
+                  select trade.id
+                  from AuctionTrade trade
+                  where trade.auction.id = deposit.auction.id
+                    and trade.buyer.id <> deposit.member.id
+              )
+            """)
+    List<AuctionDeposit> findLosingDeposits(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("status") DepositStatus status
+    );
+
     // HELD이고 예약 금액이 기대치와 같을 때만 다음 상태로 전이해, 이중 정산과 예약금 변동을 원자적으로 막는다.
     // Native UPDATE는 @LastModifiedDate가 적용되지 않아 last_modified_at을 직접 갱신한다.
     @Modifying

@@ -10,12 +10,17 @@ import com.tikitaka.bidwinback.auth.presentation.dto.request.NicknameAvailabilit
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordChangeRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.PasswordResetRequest;
 import com.tikitaka.bidwinback.auth.presentation.dto.request.SignUpRequest;
+import com.tikitaka.bidwinback.auth.presentation.dto.response.EmailVerificationSendResponse;
 import com.tikitaka.bidwinback.auth.presentation.dto.response.SignUpResponse;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.exception.AuthException;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import com.tikitaka.bidwinback.global.config.OpenApiConfig;
 import com.tikitaka.bidwinback.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
@@ -34,11 +39,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth")
+@Tag(name = "인증", description = "회원가입, 로그인, 이메일 인증과 비밀번호 재설정")
 public class AuthController {
 
     private final AuthService authService;
     private final SessionRepository<?> sessionRepository;
 
+    @Operation(summary = "이메일 사용 가능 여부 확인", description = "회원가입 전에 이메일의 중복 여부를 확인합니다.")
     @PostMapping("/signups/email/verify")
     public ResponseEntity<ApiResponse<AvailabilityResponse>> verifyEmail(
             @Valid @RequestBody EmailAvailabilityRequest request
@@ -47,6 +54,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @Operation(summary = "닉네임 사용 가능 여부 확인", description = "회원가입 전에 닉네임의 중복 여부를 확인합니다.")
     @PostMapping("/signups/nickname/verify")
     public ResponseEntity<ApiResponse<AvailabilityResponse>> verifyNickname(
             @Valid @RequestBody NicknameAvailabilityRequest request
@@ -55,6 +63,12 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @Operation(summary = "회원가입", description = "이메일 인증이 완료된 사용자 정보를 등록합니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "201",
+            description = "회원가입 완료",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/signups")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
             @Valid @RequestBody SignUpRequest request
@@ -64,14 +78,20 @@ public class AuthController {
                 .body(ApiResponse.success(response));
     }
 
+    @Operation(
+            summary = "회원가입 인증 메일 발송",
+            description = "입력한 이메일로 회원가입 인증 링크를 발송합니다. "
+                    + "재전송 제한에 걸리면 발송하지 않고 남은 대기 시간만 응답합니다."
+    )
     @PostMapping("/signups/email/send")
-    public ResponseEntity<ApiResponse<Void>> sendVerificationEmail(
+    public ResponseEntity<ApiResponse<EmailVerificationSendResponse>> sendVerificationEmail(
             @Valid @RequestBody EmailVerificationSendRequest request
     ) {
-        authService.sendVerificationEmail(request);
-        return ResponseEntity.ok(ApiResponse.successWithoutData());
+        EmailVerificationSendResponse response = authService.sendVerificationEmail(request);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    @Operation(summary = "회원가입 이메일 인증", description = "메일로 전달된 토큰을 검증해 이메일 인증을 완료합니다.")
     @PostMapping("/signups/email/confirm")
     public ResponseEntity<ApiResponse<Void>> confirmEmail(
             @Valid @RequestBody EmailVerificationRequest request
@@ -80,6 +100,10 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
+    @Operation(
+            summary = "로그인",
+            description = "이메일과 비밀번호를 검증하고 `JSESSIONID` 세션 쿠키를 발급합니다."
+    )
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<Void>> login(
             @Valid @RequestBody LoginRequest request,
@@ -139,12 +163,23 @@ public class AuthController {
         }
     }
 
+    @Operation(
+            summary = "로그인 세션 확인",
+            description = "현재 세션이 유효하면 200 OK를 반환합니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
+    )
     @GetMapping("/session")
     public ResponseEntity<ApiResponse<Void>> session() {
         // 이 경로는 인증 필터를 통과해야 하므로 200 자체가 유효한 로그인 상태를 뜻한다.
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
+    @Operation(summary = "비밀번호 재설정 메일 요청", description = "가입된 이메일이면 비밀번호 재설정 링크 발송을 접수합니다.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "202",
+            description = "재설정 메일 발송 접수",
+            useReturnTypeSchema = true
+    )
     @PostMapping("/password-resets")
     public ResponseEntity<ApiResponse<Void>> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequest request
@@ -154,6 +189,7 @@ public class AuthController {
                 .body(ApiResponse.successWithoutData());
     }
 
+    @Operation(summary = "비밀번호 재설정", description = "유효한 재설정 토큰으로 새 비밀번호를 저장합니다.")
     @PostMapping("/password-resets/confirm")
     public ResponseEntity<ApiResponse<Void>> resetPassword(
             @Valid @RequestBody PasswordChangeRequest request
@@ -162,6 +198,11 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.successWithoutData());
     }
 
+    @Operation(
+            summary = "로그아웃",
+            description = "현재 인증된 세션을 폐기합니다.",
+            security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
+    )
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest servletRequest) {
         HttpSession session = servletRequest.getSession(false);
