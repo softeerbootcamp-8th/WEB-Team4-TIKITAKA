@@ -92,19 +92,19 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("bidUnit") long bidUnit
     );
 
-    // 밀봉 구간에는 공개 현재가를 바꾸지 않고 일반 입찰 최고가보다 높은 입찰을 모두 허용한다.
-    // revision은 첫 밀봉입찰의 공개 상태 전환 때만 올린다. 이후 밀봉입찰마다 올리면
-    // revision만으로 비공개 입찰 횟수와 시점을 추측할 수 있다.
+    // OPEN과 BID_ONGOING을 나눠 호출해 첫 밀봉입찰에서만 revision을 올렸는지 호출자가 안다.
+    // sealed_bid_count는 별도 컬럼에 누적해 공개 전 추천순 bid_count로 입찰 수가 새지 않게 한다.
     @Modifying
     @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "3000"))
     @Query(value = """
             UPDATE auction
-            SET revision = revision + CASE WHEN status = 'OPEN' THEN 1 ELSE 0 END,
+            SET sealed_bid_count = sealed_bid_count + 1,
+                revision = revision + :revisionIncrement,
                 status = 'BID_ONGOING',
                 last_modified_at = SYSDATE(6)
             WHERE id = :auctionId
               AND auction_type = 'UP'
-              AND status IN ('OPEN', 'BID_ONGOING')
+              AND status = :expectedStatus
               AND completed_at IS NULL
               AND ended_at > SYSDATE(6)
               AND ended_at <= DATE_ADD(SYSDATE(6), INTERVAL 5 MINUTE)
@@ -115,7 +115,9 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("auctionId") Long auctionId,
             @Param("bidderId") Long bidderId,
             @Param("price") long price,
-            @Param("bidUnit") long bidUnit
+            @Param("bidUnit") long bidUnit,
+            @Param("expectedStatus") String expectedStatus,
+            @Param("revisionIncrement") int revisionIncrement
     );
 
     // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.

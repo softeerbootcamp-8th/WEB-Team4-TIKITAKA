@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
 import com.tikitaka.bidwinback.global.exception.BusinessException;
@@ -45,8 +45,8 @@ import java.util.List;
 @Tag(name = "경매 실시간", description = "경매 상태와 입찰 내역 SSE 구독")
 public class AuctionSseController {
 
-    private final AuctionLiveStateService stateService;
-    private final BidHistoryService bidHistoryService;
+    private final AuctionLiveStateCache stateCache;
+    private final AuctionBidHistoryCache bidHistoryCache;
     private final SseHub sseHub;
 
     @Operation(
@@ -69,7 +69,7 @@ public class AuctionSseController {
     ) {
         SseEmitter emitter = sseHub.subscribe(
                 List.of(AuctionSseMessages.channel(auctionId)),
-                () -> initialAuctionMessages(auctionId)
+                () -> initialSingleAuctionState(auctionId)
         );
         return streamResponse(emitter);
     }
@@ -100,9 +100,7 @@ public class AuctionSseController {
         List<Long> distinctIds = auctionIds.stream().distinct().toList();
         SseEmitter emitter = sseHub.subscribe(
                 distinctIds.stream().map(AuctionSseMessages::channel).toList(),
-                () -> stateService.getStates(distinctIds).stream()
-                        .map(AuctionSseMessages::state)
-                        .toList()
+                () -> initialMultiAuctionState(distinctIds)
         );
         return streamResponse(emitter);
     }
@@ -139,15 +137,21 @@ public class AuctionSseController {
                 .body(emitter);
     }
 
-    private List<SseMessage<?>> initialAuctionMessages(long auctionId) {
-        AuctionLiveState state = stateService.getState(auctionId);
+    private List<SseMessage<?>> initialMultiAuctionState(List<Long> distinctIds){
+        return List.of(AuctionSseMessages.auctionList(
+                stateCache.getStates(distinctIds)
+        ));
+    }
+
+    private List<SseMessage<?>> initialSingleAuctionState(long auctionId) {
+        AuctionLiveState state = stateCache.getState(auctionId);
         List<SseMessage<?>> messages = new ArrayList<>();
         messages.add(AuctionSseMessages.state(state));
         if (state.auctionType() == AuctionType.UP) {
             messages.add(AuctionSseMessages.bidHistorySnapshot(
                     auctionId,
                     state.revision(),
-                    bidHistoryService.getBidHistory(auctionId)
+                    bidHistoryCache.getHistory(state)
             ));
         }
         return messages;

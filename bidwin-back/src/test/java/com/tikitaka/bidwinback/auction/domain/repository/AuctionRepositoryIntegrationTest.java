@@ -89,7 +89,9 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 bidder.getId(),
                 START_PRICE + BID_UNIT,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         );
 
         // then
@@ -109,7 +111,9 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 firstBidder.getId(),
                 START_PRICE + BID_UNIT,
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
         );
 
         // when
@@ -117,12 +121,45 @@ class AuctionRepositoryIntegrationTest {
                 auction.getId(),
                 secondBidder.getId(),
                 START_PRICE + (BID_UNIT * 2),
-                BID_UNIT
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
         );
 
         // then
         assertThat(updated).isEqualTo(1);
         assertThat(revisionOf(auction.getId())).isEqualTo(1L);
+    }
+
+    @Test
+    void 승인된_밀봉입찰은_공개입찰과_별도인_밀봉입찰수를_누적한다() {
+        // given
+        Member seller = persistMember("sealed-count-seller");
+        Member firstBidder = persistMember("sealed-count-first");
+        Member secondBidder = persistMember("sealed-count-second");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+
+        // when
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                firstBidder.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
+        );
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                secondBidder.getId(),
+                START_PRICE + (BID_UNIT * 2),
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
+        );
+
+        // then
+        assertThat(sealedBidCountOf(auction.getId())).isEqualTo(2L);
     }
 
     @Test
@@ -174,6 +211,18 @@ class AuctionRepositoryIntegrationTest {
                 .setParameter("auctionId", auctionId)
                 .getSingleResult();
         return revision.longValue();
+    }
+
+    private long sealedBidCountOf(Long auctionId) {
+        entityManager.clear();
+        Number bidCount = (Number) entityManager.createNativeQuery("""
+                        SELECT sealed_bid_count
+                        FROM auction
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return bidCount.longValue();
     }
 
     private UpAuction persistAuction(Member seller) {

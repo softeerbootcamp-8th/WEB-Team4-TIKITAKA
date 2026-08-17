@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryCache;
 import com.tikitaka.bidwinback.auction.application.live.AuctionLiveState;
-import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateService;
+import com.tikitaka.bidwinback.auction.application.live.AuctionLiveStateCache;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.AuctionSseMessages;
@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,9 +34,9 @@ import static org.mockito.Mockito.when;
 class AuctionSseControllerTest {
 
     @Mock
-    private AuctionLiveStateService stateService;
+    private AuctionLiveStateCache stateCache;
     @Mock
-    private BidHistoryService bidHistoryService;
+    private AuctionBidHistoryCache bidHistoryCache;
     @Mock
     private SseHub sseHub;
     @Mock
@@ -45,7 +46,7 @@ class AuctionSseControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AuctionSseController(stateService, bidHistoryService, sseHub);
+        controller = new AuctionSseController(stateCache, bidHistoryCache, sseHub);
     }
 
     @Test
@@ -73,8 +74,8 @@ class AuctionSseControllerTest {
         // given
         AuctionLiveState state = state(1L);
         BidHistoryResponse history = new BidHistoryResponse(3L, List.of());
-        when(stateService.getState(1L)).thenReturn(state);
-        when(bidHistoryService.getBidHistory(1L)).thenReturn(history);
+        when(stateCache.getState(1L)).thenReturn(state);
+        when(bidHistoryCache.getHistory(state)).thenReturn(history);
         when(sseHub.subscribe(
                 eq(List.of(AuctionSseMessages.channel(1L))),
                 any()
@@ -94,16 +95,46 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getState(1L);
-        verify(bidHistoryService).getBidHistory(1L);
+        verify(stateCache).getState(1L);
+        verify(bidHistoryCache).getHistory(state);
     }
 
     @Test
-    void 목록_SSE는_화면이_요청한_ID들의_최신_snapshot_공급자를_등록한다() {
+    void 하향경매_상세_SSE는_입찰내역_cache를_조회하지_않는다() {
+        // given
+        AuctionLiveState state = new AuctionLiveState(
+                1L,
+                1L,
+                AuctionType.DOWN,
+                AuctionStatus.OPEN,
+                120_000L,
+                0L
+        );
+        when(stateCache.getState(1L)).thenReturn(state);
+        when(sseHub.subscribe(
+                eq(List.of(AuctionSseMessages.channel(1L))),
+                any()
+        )).thenAnswer(invocation -> {
+            Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
+                    invocation.getArgument(1);
+            assertThat(initialMessages.get())
+                    .isEqualTo(List.of(AuctionSseMessages.state(state)));
+            return emitter;
+        });
+
+        // when
+        controller.subscribeAuction(1L);
+
+        // then
+        verify(bidHistoryCache, never()).getHistory(any());
+    }
+
+    @Test
+    void 목록_SSE는_요청한_ID들의_최신_snapshot을_하나의_초기_이벤트로_등록한다() {
         // given
         List<Long> auctionIds = List.of(1L, 2L);
         List<AuctionLiveState> states = List.of(state(1L), state(2L));
-        when(stateService.getStates(auctionIds)).thenReturn(states);
+        when(stateCache.getStates(auctionIds)).thenReturn(states);
         List<SseChannel> channels = auctionIds.stream()
                 .map(AuctionSseMessages::channel)
                 .toList();
@@ -112,8 +143,7 @@ class AuctionSseControllerTest {
                     Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
                             invocation.getArgument(1);
                     assertThat(initialMessages.get()).isEqualTo(List.of(
-                            AuctionSseMessages.state(states.get(0)),
-                            AuctionSseMessages.state(states.get(1))
+                            AuctionSseMessages.auctionList(states)
                     ));
                     return emitter;
                 });
@@ -123,7 +153,7 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getStates(auctionIds);
+        verify(stateCache).getStates(auctionIds);
     }
 
     @Test
@@ -132,7 +162,7 @@ class AuctionSseControllerTest {
         List<Long> requested = List.of(1L, 1L, 2L, 2L, 1L);
         List<Long> distinct = List.of(1L, 2L);
         List<AuctionLiveState> states = List.of(state(1L), state(2L));
-        when(stateService.getStates(distinct)).thenReturn(states);
+        when(stateCache.getStates(distinct)).thenReturn(states);
         List<SseChannel> channels = distinct.stream()
                 .map(AuctionSseMessages::channel)
                 .toList();
@@ -141,8 +171,7 @@ class AuctionSseControllerTest {
                     Supplier<? extends Collection<? extends SseMessage<?>>> initialMessages =
                             invocation.getArgument(1);
                     assertThat(initialMessages.get()).isEqualTo(List.of(
-                            AuctionSseMessages.state(states.get(0)),
-                            AuctionSseMessages.state(states.get(1))
+                            AuctionSseMessages.auctionList(states)
                     ));
                     return emitter;
                 });
@@ -152,7 +181,7 @@ class AuctionSseControllerTest {
 
         // then
         assertThat(response.getBody()).isSameAs(emitter);
-        verify(stateService).getStates(distinct);
+        verify(stateCache).getStates(distinct);
     }
 
     @Test
