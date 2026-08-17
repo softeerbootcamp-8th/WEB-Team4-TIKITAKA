@@ -5,17 +5,13 @@ import RollingPrice from '../../../components/ui/RollingPrice'
 import { useCountdown } from '../../../hooks/useCountdown'
 import { useDownAuctionClock } from '../../../hooks/useDownAuctionClock'
 import { useRecentChange } from '../../../hooks/useRecentChange'
+import { AUCTION_CATEGORY_LABELS } from '../../../lib/auctionCategory'
 import { formatClock } from '../../../lib/format'
 import { CLOSE_HIGHLIGHT_MS, closePopStyle, closeSweepStyle } from '../../../lib/motion'
 import { CARD_TEXT } from '../constants'
 import type { AuctionSummary } from '../types'
 
 const TYPE_LABEL = { UP: '상향 경매', DOWN: '하향 경매' } as const
-const CATEGORY_LABEL = {
-  HOUSEHOLD: '생활용품',
-  FOOD: '먹거리',
-  FURNITURE: '가구',
-} as const
 const PERCENT_BASE = 100
 const THUMBNAIL_CLASS = 'aspect-square w-28 shrink-0 overflow-hidden rounded-lg md:w-full'
 const CARD_SURFACE_CLASS = 'rounded-xl border border-hairline-soft bg-canvas'
@@ -121,7 +117,7 @@ function AuctionCardView({
         <div className="min-w-0">
           <p className="line-clamp-1 text-xs font-semibold text-ink">{auction.sellerName}</p>
           <p className="line-clamp-1 text-[11px] text-primary">
-            {CATEGORY_LABEL[auction.category]}
+            {AUCTION_CATEGORY_LABELS[auction.category]}
           </p>
         </div>
 

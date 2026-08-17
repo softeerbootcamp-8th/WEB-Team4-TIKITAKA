@@ -29,8 +29,15 @@ public record AuctionCreateRequest(
         @NotBlank(message = "상품 설명은 필수입니다.")
         String description,
 
-        // HOUSEHOLD/FOOD/FURNITURE 여부는 AuctionCategory.from()에서 검증한다.
-        @Schema(description = "상품 카테고리", example = "FURNITURE", allowableValues = {"HOUSEHOLD", "FOOD", "FURNITURE"})
+        // 지원하는 카테고리 여부는 AuctionCategory.from()에서 검증한다.
+        @Schema(
+                description = "상품 카테고리",
+                example = "FURNITURE",
+                allowableValues = {
+                        "HOUSEHOLD", "FOOD", "FURNITURE", "ELECTRONICS", "FASHION",
+                        "SPORTS", "HOBBY", "BOOK", "OTHER"
+                }
+        )
         @NotBlank(message = "카테고리는 필수입니다.")
         String category,
 

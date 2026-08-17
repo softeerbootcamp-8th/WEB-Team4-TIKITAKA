@@ -128,7 +128,11 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                 "활성 생활 경매",
                 AuctionCategory.HOUSEHOLD
         );
-        UpAuction activeFood = persistUp(seller, "활성 식품 경매", AuctionCategory.FOOD);
+        UpAuction activeElectronics = persistUp(
+                seller,
+                "활성 디지털 경매",
+                AuctionCategory.ELECTRONICS
+        );
         UpAuction completedBefore = persistUp(
                 seller,
                 "조기 종료 생활 경매",
@@ -146,7 +150,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         );
 
         setAuctionTimeline(activeHousehold, AS_OF.minusHours(5), AS_OF.minusDays(1));
-        setAuctionTimeline(activeFood, AS_OF.minusHours(4), AS_OF.minusDays(1));
+        setAuctionTimeline(activeElectronics, AS_OF.minusHours(4), AS_OF.minusDays(1));
         setAuctionTimeline(completedBefore, AS_OF.minusHours(3), AS_OF.minusDays(1));
         setAuctionTimeline(endedBefore, AS_OF.minusHours(2), AS_OF.minusDays(1));
         setAuctionTimeline(completedAfter, AS_OF.minusHours(1), AS_OF.minusDays(1));

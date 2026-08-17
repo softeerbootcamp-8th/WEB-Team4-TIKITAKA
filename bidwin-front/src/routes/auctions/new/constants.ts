@@ -4,6 +4,7 @@
  */
 
 import { MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
+import { AUCTION_CATEGORY_OPTIONS } from '../../../lib/auctionCategory'
 
 export const TITLE_MAX_LENGTH = 30
 export const CONTACT_MAX_LENGTH = 100
@@ -19,12 +20,8 @@ export const MIN_PRICE = 1000
  * 등록만 되고 아무도 살 수 없는 가격(정확히 1000억원)을 막는다. */
 export const MAX_PRICE = MAX_PRICE_EXCLUSIVE - 1_000
 
-/* 백엔드 AuctionCategory enum과 1:1 대응(HOUSEHOLD/FOOD/FURNITURE 세 가지뿐이라 고정값으로 둔다). */
-export const CATEGORY_OPTIONS = [
-  { value: 'HOUSEHOLD', label: '생활용품' },
-  { value: 'FOOD', label: '먹거리' },
-  { value: 'FURNITURE', label: '가구' },
-] as const
+/* 백엔드 AuctionCategory enum과 1:1 대응한다. */
+export const CATEGORY_OPTIONS = AUCTION_CATEGORY_OPTIONS
 
 export const AUCTION_TYPE_OPTIONS = [
   { value: 'DOWN', label: '가격 인하 (급처 타임어택)' },
