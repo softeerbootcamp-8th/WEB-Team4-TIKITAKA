@@ -112,10 +112,11 @@ public enum ErrorCode {
             "MEMBER_409_2",
             "이미 사용 중인 닉네임입니다."
     ),
+    // 회원가입과 로그인 양쪽에서 쓰이므로 두 상황에 모두 맞는 문구를 유지한다.
     EMAIL_VERIFICATION_PENDING(
             HttpStatus.CONFLICT,
             "MEMBER_409_3",
-            "이미 가입 신청된 이메일입니다. 이메일 인증을 완료해주세요."
+            "이메일 인증이 완료되지 않은 계정입니다. 이메일 인증을 완료해주세요."
     ),
     MEMBER_NOT_FOUND(
             HttpStatus.NOT_FOUND,

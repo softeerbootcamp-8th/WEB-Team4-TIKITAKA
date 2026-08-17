@@ -105,7 +105,14 @@ public class AuthService {
                 encodedPassword
         );
 
-        if (!passwordMatches || member.getStatus() != MemberStatus.ACTIVE) {
+        if (!passwordMatches) {
+            throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        // 비밀번호까지 맞은 요청에만 상태를 알려준다. 화면은 이 코드를 보고 이메일 인증으로 안내한다.
+        if (member.getStatus() == MemberStatus.PENDING) {
+            throw new AuthException(ErrorCode.EMAIL_VERIFICATION_PENDING);
+        }
+        if (member.getStatus() != MemberStatus.ACTIVE) {
             throw new AuthException(ErrorCode.INVALID_CREDENTIALS);
         }
 

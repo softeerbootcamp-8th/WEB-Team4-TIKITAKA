@@ -374,6 +374,46 @@ class AuthServiceTest {
     }
 
     @Test
+    void 이메일_인증_전인_회원은_인증이_필요하다는_응답을_받는다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+        when(member.getStatus()).thenReturn(MemberStatus.PENDING);
+        when(passwordHasher.matches(request.password(), "encoded-password")).thenReturn(true);
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.EMAIL_VERIFICATION_PENDING, exception.getErrorCode());
+    }
+
+    @Test
+    void 비밀번호가_틀리면_회원_상태를_확인하지_않고_인증에_실패한다() {
+        // given
+        LoginRequest request = new LoginRequest("member@example.com", "wrong-password!");
+        Member member = mock(Member.class);
+        when(memberRepository.findByEmail(request.email())).thenReturn(Optional.of(member));
+        when(member.getPassword()).thenReturn("encoded-password");
+
+        // when
+        AuthException exception = assertThrows(
+                AuthException.class,
+                () -> authService.login(request)
+        );
+
+        // then
+        assertEquals(ErrorCode.INVALID_CREDENTIALS, exception.getErrorCode());
+        // 비밀번호를 모르는 요청에는 이메일 인증 대기 여부도 알려주지 않는다.
+        verify(member, never()).getStatus();
+    }
+
+    @Test
     void 활성_상태가_아닌_회원은_로그인할_수_없다() {
         // given
         LoginRequest request = new LoginRequest("member@example.com", "password!");
