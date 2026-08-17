@@ -54,35 +54,11 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform {
-        excludeTags 'load'
-    }
+    useJUnitPlatform()
     // 테스트는 main()을 거치지 않아 TimeZone.setDefault가 적용되지 않으므로, CI 러너의
     // 기본 시간대와 무관하게 시각 관련 검증이 흔들리지 않도록 여기서 서울로 고정한다.
     systemProperty 'user.timezone', 'Asia/Seoul'
     finalizedBy tasks.named('jacocoTestReport')
-}
-
-tasks.register('auctionClosingLoadTest', Test) {
-    group = 'verification'
-    description = 'Runs the isolated auction closing load and failure-injection scenario.'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform {
-        includeTags 'load'
-    }
-    filter {
-        includeTestsMatching(
-                'com.tikitaka.bidwinback.auction.load.AuctionClosingLoadScenario'
-        )
-    }
-    systemProperty 'user.timezone', 'Asia/Seoul'
-    testLogging {
-        events 'passed', 'failed'
-        showStandardStreams = true
-        exceptionFormat = 'full'
-    }
-    outputs.upToDateWhen { false }
 }
 
 tasks.named('bootJar') {
