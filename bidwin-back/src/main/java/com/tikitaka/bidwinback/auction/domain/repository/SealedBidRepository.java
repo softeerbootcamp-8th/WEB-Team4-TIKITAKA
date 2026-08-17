@@ -11,7 +11,6 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
 
@@ -74,14 +73,4 @@ public interface SealedBidRepository extends JpaRepository<SealedBid, Long> {
             group by sealedBid.auction.id
             """)
     List<AuctionBidSummary> summarizeSealedByAuctionIds(@Param("auctionIds") List<Long> auctionIds);
-
-    @Query("""
-            select sealedBid
-            from SealedBid sealedBid
-            join fetch sealedBid.bidder
-            where sealedBid.auction.id = :auctionId
-            order by sealedBid.price desc, sealedBid.submittedAt asc, sealedBid.id asc
-            limit 1
-            """)
-    Optional<SealedBid> findWinnerByAuctionId(@Param("auctionId") long auctionId);
 }

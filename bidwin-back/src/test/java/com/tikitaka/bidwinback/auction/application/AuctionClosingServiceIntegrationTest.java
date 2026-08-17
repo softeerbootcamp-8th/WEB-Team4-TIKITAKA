@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
+import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.EntityManager;
@@ -13,12 +14,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,8 +34,18 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 @SpringBootTest(properties = "app.storage.s3.bucket=test-bucket")
 class AuctionClosingServiceIntegrationTest {
 
+    private static final long BID_UNIT = 1_000L;
+    private static final long START_PRICE = 100_000L;
+    private static final int BATCH_SIZE = 200;
+
     @Autowired
     private AuctionClosingService auctionClosingService;
+
+    @Autowired
+    private AuctionRepository auctionRepository;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -44,6 +57,7 @@ class AuctionClosingServiceIntegrationTest {
     void tearDown() {
         executeInTransaction(entityManager -> {
             for (Long auctionId : auctionIds) {
+                delete(entityManager, "DELETE FROM auction_trade WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM up_auction WHERE auction_id = :id", auctionId);
                 delete(entityManager, "DELETE FROM auction WHERE id = :id", auctionId);
             }
@@ -73,14 +87,13 @@ class AuctionClosingServiceIntegrationTest {
 
             // when
             long startedAt = System.nanoTime();
-            boolean skipped = auctionClosingService.closeIfAvailable(auctionId);
+            auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(
                     System.nanoTime() - startedAt
             );
 
-            // then
+
             assertAll(
-                    () -> assertThat(skipped).isFalse(),
                     () -> assertThat(elapsedMillis).isLessThan(1_000L),
                     () -> assertThat(findStatus(auctionId)).isEqualTo(AuctionStatus.OPEN)
             );
@@ -88,10 +101,9 @@ class AuctionClosingServiceIntegrationTest {
             // when
             release.countDown();
             lockHolder.get(5, TimeUnit.SECONDS);
-            boolean closed = auctionClosingService.closeIfAvailable(auctionId);
+            auctionClosingService.closeBatch(AuctionStatus.OPEN, BATCH_SIZE);
 
             // then
-            assertThat(closed).isTrue();
             assertThat(findStatus(auctionId)).isEqualTo(AuctionStatus.UNSOLD);
         } finally {
             release.countDown();
@@ -100,47 +112,115 @@ class AuctionClosingServiceIntegrationTest {
         }
     }
 
+    @Test
+    void 두_배치가_동시에_돌아도_거래는_한_건만_생성된다() throws Exception {
+        // given
+        Long auctionId = createEndedAuctionWithBid();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            // when
+            Future<Integer> first = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+            });
+            Future<Integer> second = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return auctionClosingService.closeBatch(AuctionStatus.BID_ONGOING, BATCH_SIZE);
+            });
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+
+            // then
+            assertAll(
+                    () -> assertThat(findStatus(auctionId)).isEqualTo(AuctionStatus.COMPLETED),
+                    () -> assertThat(findTradeCount(auctionId)).isEqualTo(1L)
+            );
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private Long createEndedOpenAuction() {
         Long auctionId = executeInTransaction(entityManager -> {
-            String suffix = UUID.randomUUID().toString()
-                    .replace("-", "")
-                    .substring(0, 8);
-            Member seller = Member.builder()
-                    .email("seller-" + suffix + "@example.com")
-                    .password("encoded-password")
-                    .name("통합테스트")
-                    .phoneNumber("01012345678")
-                    .nickname("판매" + suffix)
-                    .status(MemberStatus.ACTIVE)
-                    .build();
-            entityManager.persist(seller);
+            Member seller = persistMember(entityManager, "seller");
+            Long persistedId = persistAuction(entityManager, seller);
+            memberIds.add(seller.getId());
+            return persistedId;
+        });
+        endNow(auctionId);
+        auctionIds.add(auctionId);
+        return auctionId;
+    }
 
-            UpAuction auction = UpAuction.builder()
-                    .seller(seller)
-                    .title("락 경합 마감 테스트")
-                    .description("잠긴 경매를 건너뛰고 재시도하는지 검증")
-                    .status(AuctionStatus.OPEN)
-                    .category(AuctionCategory.HOUSEHOLD)
-                    .startPrice(100_000L)
-                    .endedAt(LocalDateTime.now().plusDays(1))
-                    .tradeType(TradeType.DELIVERY)
-                    .contact("01012345678")
-                    .buyNowPrice(300_000L)
-                    .build();
-            entityManager.persist(auction);
-            entityManager.flush();
+    private Long createEndedAuctionWithBid() {
+        long[] ids = executeInTransaction(entityManager -> {
+            Member seller = persistMember(entityManager, "seller");
+            Member bidder = persistMember(entityManager, "bidder");
+            Long persistedId = persistAuction(entityManager, seller);
+            memberIds.add(seller.getId());
+            memberIds.add(bidder.getId());
+            return new long[]{persistedId, bidder.getId()};
+        });
+        auctionIds.add(ids[0]);
+        transactionTemplate.executeWithoutResult(status ->
+                auctionRepository.updateCurrentPriceForBid(
+                        ids[0],
+                        ids[1],
+                        START_PRICE + BID_UNIT,
+                        BID_UNIT
+                )
+        );
+        endNow(ids[0]);
+        return ids[0];
+    }
+
+    private Long persistAuction(EntityManager entityManager, Member seller) {
+        UpAuction auction = UpAuction.builder()
+                .seller(seller)
+                .title("락 경합 마감 테스트")
+                .description("잠긴 경매를 건너뛰고 재시도하는지 검증")
+                .status(AuctionStatus.OPEN)
+                .category(AuctionCategory.HOUSEHOLD)
+                .startPrice(START_PRICE)
+                .endedAt(LocalDateTime.now().plusDays(1))
+                .tradeType(TradeType.DELIVERY)
+                .contact("01012345678")
+                .buyNowPrice(300_000L)
+                .build();
+        entityManager.persist(auction);
+        entityManager.flush();
+        return auction.getId();
+    }
+
+    private void endNow(Long auctionId) {
+        executeInTransaction(entityManager -> {
             entityManager.createNativeQuery("""
                             UPDATE auction
                             SET ended_at = SYSDATE(6) - INTERVAL 1 SECOND
                             WHERE id = :auctionId
                             """)
-                    .setParameter("auctionId", auction.getId())
+                    .setParameter("auctionId", auctionId)
                     .executeUpdate();
-            memberIds.add(seller.getId());
-            return auction.getId();
+            return null;
         });
-        auctionIds.add(auctionId);
-        return auctionId;
+    }
+
+    private Member persistMember(EntityManager entityManager, String role) {
+        String suffix = UUID.randomUUID().toString()
+                .replace("-", "")
+                .substring(0, 8);
+        Member member = Member.builder()
+                .email(role + "-" + suffix + "@example.com")
+                .password("encoded-password")
+                .name("통합테스트")
+                .phoneNumber("01012345678")
+                .nickname("n" + suffix)
+                .status(MemberStatus.ACTIVE)
+                .build();
+        entityManager.persist(member);
+        return member;
     }
 
     private void holdAuctionLock(
@@ -178,6 +258,17 @@ class AuctionClosingServiceIntegrationTest {
                         .setParameter("auctionId", auctionId)
                         .getSingleResult()
         ));
+    }
+
+    private long findTradeCount(Long auctionId) {
+        return executeInTransaction(entityManager -> ((Number) entityManager.createNativeQuery("""
+                                SELECT COUNT(*)
+                                FROM auction_trade
+                                WHERE auction_id = :auctionId
+                                """)
+                        .setParameter("auctionId", auctionId)
+                        .getSingleResult()
+        ).longValue());
     }
 
     private void delete(EntityManager entityManager, String sql, Long id) {

@@ -2,7 +2,7 @@ package com.tikitaka.bidwinback.auction.domain.repository;
 
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
-import jakarta.persistence.LockModeType;
+import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionClosingCandidate;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -20,28 +19,44 @@ import java.util.Optional;
 
 public interface AuctionRepository extends JpaRepository<Auction, Long> {
 
-    // 매초 실행되는 조회가 이미 종료된 경매 전체를 훑지 않도록 상태와 DB 시각으로 후보만 찾는다.
     @Query(value = """
-            SELECT id
-            FROM auction
-            WHERE status IN ('OPEN', 'BID_ONGOING')
-              AND ended_at <= SYSDATE(6)
-            ORDER BY ended_at, id
-            """, nativeQuery = true)
-    List<Long> findClosingCandidateIds();
-
-    // 후보 조회 뒤 상태가 바뀔 수 있으므로 현재 조건을 다시 검사하며 한 행만 선점한다.
-    // 다른 트랜잭션이 입찰·즉시구매·마감을 진행 중이면 기다리지 않고 다음 주기에 재시도한다.
-    @Query(value = """
-            SELECT id
-            FROM auction
-            WHERE id = :auctionId
-              AND status IN ('OPEN', 'BID_ONGOING')
-              AND ended_at <= SYSDATE(6)
+            SELECT auction.id AS auctionId,
+                   auction.revision AS revision
+            FROM auction FORCE INDEX (idx_auction_status_ended_at)
+            WHERE auction.status = :status
+              AND auction.ended_at <= NOW(6)
+            ORDER BY auction.ended_at, auction.id
+            LIMIT :batchSize
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    Optional<Long> findClosingCandidateIdForUpdateSkipLocked(
-            @Param("auctionId") long auctionId
+    List<AuctionClosingCandidate> findClosingCandidatesForUpdateSkipLocked(
+            @Param("status") String status,
+            @Param("batchSize") int batchSize
+    );
+
+    // 선점한 배치를 낙찰·유찰로 한 번에 마감한다. 거래가 앞서 적재되므로 그 유무가 곧 낙찰 여부다.
+    // 낙찰과 유찰을 따로 돌리면 뒤 문장이 이미 마감된 행까지 id 목록만큼 다시 훑는다.
+    // 유찰분의 current_price는 COALESCE로 원래 값을 그대로 대입한다. 값이 같으면 MySQL이 변경으로
+    // 치지 않아 가격 인덱스를 건드리지 않는다.
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            UPDATE auction FORCE INDEX (PRIMARY)
+            LEFT JOIN auction_trade ON auction_trade.auction_id = auction.id
+            SET auction.status = CASE WHEN auction_trade.auction_id IS NULL
+                                      THEN 'UNSOLD'
+                                      ELSE 'COMPLETED'
+                                 END,
+                auction.current_price =
+                        COALESCE(auction_trade.final_price, auction.current_price),
+                auction.completed_at = :settledAt,
+                auction.revision = auction.revision + 1,
+                auction.last_modified_at = :settledAt
+            WHERE auction.id IN (:auctionIds)
+              AND auction.status IN ('OPEN', 'BID_ONGOING')
+            """, nativeQuery = true)
+    int closeAll(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("settledAt") LocalDateTime settledAt
     );
 
     // 입찰가 캐시(Redis)가 실패한 선점을 되돌릴 때, 커밋된 DB 현재가로 재동기화하기 위해 쓴다.
@@ -65,6 +80,7 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
     @Query(value = """
             UPDATE auction
             SET current_price = :price,
+                current_bidder_id = :bidderId,
                 bid_count = bid_count + 1,
                 status = 'BID_ONGOING',
                 revision = revision + 1,
@@ -101,6 +117,16 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             SET sealed_bid_count = sealed_bid_count + 1,
                 revision = revision + :revisionIncrement,
                 status = 'BID_ONGOING',
+                sealed_top_bidder_id = CASE
+                        WHEN sealed_top_price IS NULL OR :price > sealed_top_price
+                        THEN :bidderId
+                        ELSE sealed_top_bidder_id
+                    END,
+                sealed_top_price = CASE
+                        WHEN sealed_top_price IS NULL OR :price > sealed_top_price
+                        THEN :price
+                        ELSE sealed_top_price
+                    END,
                 last_modified_at = SYSDATE(6)
             WHERE id = :auctionId
               AND auction_type = 'UP'
@@ -119,16 +145,6 @@ public interface AuctionRepository extends JpaRepository<Auction, Long> {
             @Param("expectedStatus") String expectedStatus,
             @Param("revisionIncrement") int revisionIncrement
     );
-
-    // 정산 시 진행 중인 입찰과 중복 정산을 동일 경매 행 기준으로 직렬화한다.
-    // 정산에서 사용하지 않는 판매자까지 잠그지 않도록 fetch join은 하지 않는다.
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select auction
-            from Auction auction
-            where auction.id = :auctionId
-            """)
-    Optional<Auction> findByIdForUpdate(@Param("auctionId") long auctionId);
 
     @Query("""
             select auction

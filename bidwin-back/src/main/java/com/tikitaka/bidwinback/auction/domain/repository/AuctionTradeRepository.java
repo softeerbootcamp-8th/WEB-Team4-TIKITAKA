@@ -9,14 +9,65 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface AuctionTradeRepository extends JpaRepository<AuctionTrade, Long> {
+
+    // HQL이 아닌 native로 두는 이유는 buyer가 Member 연관이라 HQL이면 member join이 강제되기 때문이다.
+    // 그 join은 낙찰자 조회를 행마다 더 낼 뿐 아니라, REPEATABLE READ에서 INSERT ... SELECT가 읽은
+    // member 행에 공유 잠금을 남긴다. 같은 회원의 입찰과 보증금이 그 행을 배타 잠금하므로
+    // 마감과 입찰이 겹칠 때 경합이 된다. 거래는 낙찰자 식별자만 필요하므로 join을 걷어낸다.
+    // 낙찰자가 없는 경매는 buyer_id가 NULL이라 빠지므로 선점한 배치를 통째로 넘겨도 된다.
+    // 거래가 이미 있는 경매도 제외한다. 앞선 배치가 거래만 남기고 끊겨도 유니크 제약으로 죽지 않고,
+    // 뒤따르는 closeAll이 그 거래를 그대로 써서 마감한다.
+    // 아래 두 CASE는 같은 조건으로 각각 낙찰자와 낙찰가를 고르므로 함께 고쳐야 한다.
+    @Modifying
+    @Query(value = """
+            INSERT INTO auction_trade
+                (auction_id, buyer_id, status, final_price,
+                 purchased_at, created_at, last_modified_at)
+            SELECT winner.auction_id,
+                   winner.buyer_id,
+                   :status,
+                   winner.final_price,
+                   :settledAt,
+                   :settledAt,
+                   :settledAt
+            FROM (
+                SELECT auction.id AS auction_id,
+                       CASE WHEN auction.current_bidder_id IS NOT NULL
+                                 AND (auction.sealed_top_bidder_id IS NULL
+                                      OR COALESCE(auction.current_price, auction.start_price)
+                                         >= auction.sealed_top_price)
+                            THEN auction.current_bidder_id
+                            ELSE auction.sealed_top_bidder_id
+                       END AS buyer_id,
+                       CASE WHEN auction.current_bidder_id IS NOT NULL
+                                 AND (auction.sealed_top_bidder_id IS NULL
+                                      OR COALESCE(auction.current_price, auction.start_price)
+                                         >= auction.sealed_top_price)
+                            THEN COALESCE(auction.current_price, auction.start_price)
+                            ELSE auction.sealed_top_price
+                       END AS final_price
+                FROM auction
+                WHERE auction.id IN (:auctionIds)
+            ) AS winner
+            LEFT JOIN auction_trade settled ON settled.auction_id = winner.auction_id
+            WHERE winner.buyer_id IS NOT NULL
+              AND settled.auction_id IS NULL
+            """, nativeQuery = true)
+    int insertWinnerTradesAll(
+            @Param("auctionIds") List<Long> auctionIds,
+            @Param("status") String status,
+            @Param("settledAt") LocalDateTime settledAt
+    );
 
     // 마이페이지 낙찰/구매 내역용. 두 탭이 같은 AuctionTrade를 상태 필터만 다르게 조회한다.
     @EntityGraph(attributePaths = "auction")

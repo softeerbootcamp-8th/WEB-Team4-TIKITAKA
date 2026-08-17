@@ -163,6 +163,131 @@ class AuctionRepositoryIntegrationTest {
     }
 
     @Test
+    void 조건부_현재가_갱신은_최고가_입찰자도_함께_기록한다() {
+        // given
+        Member seller = persistMember("winner-seller");
+        Member firstBidder = persistMember("winner-first");
+        Member secondBidder = persistMember("winner-second");
+        UpAuction auction = persistAuction(seller);
+
+        // when
+        auctionRepository.updateCurrentPriceForBid(
+                auction.getId(),
+                firstBidder.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT
+        );
+        auctionRepository.updateCurrentPriceForBid(
+                auction.getId(),
+                secondBidder.getId(),
+                START_PRICE + (BID_UNIT * 2),
+                BID_UNIT
+        );
+
+        // then
+        assertThat(columnOf(auction.getId(), "current_bidder_id"))
+                .isEqualTo(secondBidder.getId());
+        assertThat(columnOf(auction.getId(), "current_price"))
+                .isEqualTo(START_PRICE + (BID_UNIT * 2));
+    }
+
+    @Test
+    void 현재가_갱신에_실패한_입찰은_최고가_입찰자를_바꾸지_않는다() {
+        // given
+        Member seller = persistMember("norev-winner-seller");
+        Member winner = persistMember("norev-winner");
+        Member loser = persistMember("norev-loser");
+        UpAuction auction = persistAuction(seller);
+        auctionRepository.updateCurrentPriceForBid(
+                auction.getId(),
+                winner.getId(),
+                START_PRICE + (BID_UNIT * 5),
+                BID_UNIT
+        );
+
+
+        int updated = auctionRepository.updateCurrentPriceForBid(
+                auction.getId(),
+                loser.getId(),
+                START_PRICE + BID_UNIT,
+                BID_UNIT
+        );
+
+        // then
+        assertThat(updated).isZero();
+        assertThat(columnOf(auction.getId(), "current_bidder_id")).isEqualTo(winner.getId());
+    }
+
+    @Test
+    void 밀봉입찰은_최고가와_그_입찰자만_남긴다() {
+        // given
+        Member seller = persistMember("sealed-top-seller");
+        Member highBidder = persistMember("sealed-top-high");
+        Member lowBidder = persistMember("sealed-top-low");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                highBidder.getId(),
+                START_PRICE + (BID_UNIT * 10),
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
+        );
+
+
+        int updated = auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                lowBidder.getId(),
+                START_PRICE + (BID_UNIT * 3),
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
+        );
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        assertThat(columnOf(auction.getId(), "sealed_top_bidder_id"))
+                .isEqualTo(highBidder.getId());
+        assertThat(columnOf(auction.getId(), "sealed_top_price"))
+                .isEqualTo(START_PRICE + (BID_UNIT * 10));
+        assertThat(columnOf(auction.getId(), "current_price")).isEqualTo(START_PRICE);
+    }
+
+    @Test
+    void 밀봉_동가는_먼저_제출한_입찰자를_유지한다() {
+        // given
+        Member seller = persistMember("sealed-tie-seller");
+        Member firstBidder = persistMember("sealed-tie-first");
+        Member secondBidder = persistMember("sealed-tie-second");
+        UpAuction auction = persistAuction(seller);
+        moveToSealedWindow(auction.getId());
+        long sealedPrice = START_PRICE + (BID_UNIT * 4);
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                firstBidder.getId(),
+                sealedPrice,
+                BID_UNIT,
+                AuctionStatus.OPEN.name(),
+                1
+        );
+
+        // when
+        auctionRepository.tryUpdateAuctionForSealedBid(
+                auction.getId(),
+                secondBidder.getId(),
+                sealedPrice,
+                BID_UNIT,
+                AuctionStatus.BID_ONGOING.name(),
+                0
+        );
+
+        // then
+        assertThat(columnOf(auction.getId(), "sealed_top_bidder_id"))
+                .isEqualTo(firstBidder.getId());
+    }
+
+    @Test
     void 판매_물품은_최신_3건까지만_조회한다() {
         // given
         String suffix = UUID.randomUUID().toString().substring(0, 8);
@@ -201,6 +326,16 @@ class AuctionRepositoryIntegrationTest {
                 .extracting(Auction::getId)
                 .isSortedAccordingTo((left, right) -> Long.compare(right, left));
     }
+    private Long columnOf(Long auctionId, String column) {
+        entityManager.clear();
+        Number value = (Number) entityManager.createNativeQuery(
+                        "SELECT " + column + " FROM auction WHERE id = :auctionId"
+                )
+                .setParameter("auctionId", auctionId)
+                .getSingleResult();
+        return value == null ? null : value.longValue();
+    }
+
     private long revisionOf(Long auctionId) {
         entityManager.clear();
         Number revision = (Number) entityManager.createNativeQuery("""
