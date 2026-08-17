@@ -30,6 +30,22 @@
   }
 }
 
+/*
+ * price-drop-pop과 같은 "가격이 떨어졌다" 표현이지만 투명도를 건드리지 않는다.
+ * 인증 화면 소개 카드처럼 짧은 주기로 반복되는 자리에서는 값이 잠깐 사라지는 게 거슬린다.
+ */
+@keyframes price-step-down {
+  0% {
+    transform: translateY(-8px);
+  }
+  60% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 @keyframes drop-row-flash {
   0% {
     background-color: var(--color-down-tint);
