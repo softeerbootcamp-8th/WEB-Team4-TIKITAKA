@@ -41,7 +41,7 @@ public class AuctionClosingService {
 
         auctionTradeRepository.insertWinnerTradesAll(
                 claimedAuctionIds,
-                TradeStatus.WAITING_CONFIRM,
+                TradeStatus.WAITING_CONFIRM.name(),
                 settledAt
         );
         int closed = auctionRepository.completeAll(claimedAuctionIds, settledAt);
