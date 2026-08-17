@@ -1,9 +1,11 @@
 import { getJson, postJson } from './client'
 import type { ApiResult } from './client'
+import type { AuctionCategory } from '../auctionCategory'
+
+export type { AuctionCategory }
 
 export type AuctionType = 'UP' | 'DOWN'
 export type AuctionStatus = 'OPEN' | 'BID_ONGOING' | 'WINNER_DETERMINING' | 'COMPLETED' | 'UNSOLD'
-export type AuctionCategory = 'HOUSEHOLD' | 'FOOD' | 'FURNITURE'
 export type AuctionListStatusFilter = 'ACTIVE' | 'ENDED'
 export type TradeType = 'DELIVERY' | 'DIRECT'
 export type BidType = 'OPEN' | 'SEALED'

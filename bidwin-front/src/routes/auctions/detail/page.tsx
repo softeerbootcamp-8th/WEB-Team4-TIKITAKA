@@ -50,13 +50,8 @@ import type { ApiFailure } from '../../../lib/api/client'
 import { computeCurrentDownPrice, computeDropHistory } from '../../../lib/auctionPricing'
 import { notifyDepositChanged } from '../../../lib/depositEvents'
 import { MAX_BID_PRICE, MAX_PRICE_EXCLUSIVE } from '../../../lib/auctionPrice'
+import { AUCTION_CATEGORY_LABELS } from '../../../lib/auctionCategory'
 import { formatClock, formatTimeOfDay, formatWon } from '../../../lib/format'
-
-const CATEGORY_LABEL = {
-  HOUSEHOLD: '생활용품',
-  FOOD: '먹거리',
-  FURNITURE: '가구',
-} as const
 
 const STATUS_LABEL: Record<AuctionStatus, string> = {
   OPEN: '진행 중',
@@ -517,7 +512,7 @@ function AuctionHeader({
 
   return (
     <div className="flex flex-col gap-sm">
-      <span className="text-xs text-muted">{CATEGORY_LABEL[auction.category]}</span>
+      <span className="text-xs text-muted">{AUCTION_CATEGORY_LABELS[auction.category]}</span>
 
       <div>
         <div className="flex flex-wrap items-center gap-xs">

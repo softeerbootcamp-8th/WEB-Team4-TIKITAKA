@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.Image;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeType;
 import com.tikitaka.bidwinback.auction.domain.exception.AuctionException;
@@ -24,6 +25,8 @@ import com.tikitaka.bidwinback.upload.domain.entity.PendingAuctionImage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -336,6 +339,27 @@ class AuctionCreateServiceTest {
 
         assertThat(exception.getErrorCode()).isEqualTo(CATEGORY_NOT_FOUND);
         verify(auctionRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ELECTRONICS", "FASHION", "SPORTS", "HOBBY", "BOOK", "OTHER"})
+    void 신규_카테고리로_경매를_등록할_수_있다(String category) {
+        stubSellerAndClock();
+        stubSaveAssignsId();
+        List<PendingAuctionImage> pendingImages = ownedPendingImages();
+        when(pendingAuctionImageStore.findByMemberIdAndDraftIdAndUploadIdInForUpdate(
+                MEMBER_ID, DRAFT_ID, UPLOAD_IDS
+        )).thenReturn(pendingImages);
+        stubMatchingMetadata(pendingImages);
+        when(imageObjectKeyGenerator.generatePermanent(anyLong(), any(UUID.class), any()))
+                .thenAnswer(invocation -> "auction-images/100/" + invocation.getArgument(1));
+
+        auctionCreateService.create(MEMBER_ID, withCategory(upRequest(null), category));
+
+        ArgumentCaptor<Auction> auctionCaptor = ArgumentCaptor.forClass(Auction.class);
+        verify(auctionRepository).save(auctionCaptor.capture());
+        assertThat(auctionCaptor.getValue().getCategory())
+                .isEqualTo(AuctionCategory.valueOf(category));
     }
 
     @Test

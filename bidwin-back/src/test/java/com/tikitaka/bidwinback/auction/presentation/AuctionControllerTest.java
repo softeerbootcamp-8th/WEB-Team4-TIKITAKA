@@ -149,7 +149,7 @@ class AuctionControllerTest {
         // when
         ResultActions result = mockMvc.perform(get("/api/v1/auctions")
                 .param("status", "ACTIVE")
-                .param("category", "HOUSEHOLD"));
+                .param("category", "ELECTRONICS"));
 
         // then
         result.andExpect(status().isOk());
@@ -158,7 +158,7 @@ class AuctionControllerTest {
                 AuctionSort.RECOMMENDED,
                 null,
                 AuctionListStatusFilter.ACTIVE,
-                AuctionCategory.HOUSEHOLD,
+                AuctionCategory.ELECTRONICS,
                 1,
                 16,
                 null
