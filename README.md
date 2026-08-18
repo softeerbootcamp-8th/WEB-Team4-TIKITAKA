@@ -201,7 +201,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 | **🔄 상태 전이도** | 회원 · 경매 · 거래 도메인의 상태 전이 다이어그램 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/상태-전이도) |
 | **📑 상태 전이표** | 전이 조건과 부수 효과(보증금 처리 등)를 표로 고정 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/상태-전이표) |
 | **✅ 행위표** | 경매 상태별로 허용되는 사용자 행위 매트릭스 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/행위표) |
-| **🎨 디자인 시트** | 컬러 · 타이포그래피 · 컴포넌트 스타일 정의서 | [바로가기]() |
+| **🎨 디자인 시트** | 컬러 · 타이포그래피 · 컴포넌트 스타일 정의서 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%EB%94%94%EC%9E%90%EC%9D%B8-%EC%8B%9C%ED%8A%B8) |
 | **🖼️ 와이어프레임** | 전체 화면 구성과 플로우 설계 | [바로가기](https://www.figma.com/design/j9T8YCyN5ILPBUmoHurPlc/Bidwin?node-id=0-1&t=nJuW1NwHBt89iUkY-1) |
 | **📅 일정 관리 (GitHub Project)** | 스프린트 관리 및 Task 분배 | [바로가기](https://github.com/orgs/softeerbootcamp-8th/projects/8) |
 | **📝 전체 문서 관리 (Notion)** | 매일 스크럼, 아이디어 회의, 주간 회고록 | [바로가기](https://softeer04.notion.site/HMG-Softeer-4-TIKITAKA-39f6b34e4aac80bcb442fdccba74ab57?source=copy_link) |
