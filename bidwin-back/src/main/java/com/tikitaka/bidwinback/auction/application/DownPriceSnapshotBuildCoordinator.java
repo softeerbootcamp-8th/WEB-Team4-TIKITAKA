@@ -1,5 +1,7 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.tikitaka.bidwinback.auction.infrastructure.RedisSnapshotStore;
 import com.tikitaka.bidwinback.auction.infrastructure.RedisSnapshotUnavailableException;
 import lombok.extern.slf4j.Slf4j;
@@ -15,8 +17,15 @@ import java.util.concurrent.Executor;
 @Component
 public class DownPriceSnapshotBuildCoordinator {
 
+    private static final int MAX_LOCALLY_REUSED_GENERATIONS = 32;
+
     private final ConcurrentHashMap<DownPriceSnapshotBuildKey, CompletableFuture<DownPriceSnapshot>>
             inFlight = new ConcurrentHashMap<>();
+    private final Cache<DownPriceSnapshotBuildKey, DownPriceSnapshot> completedSnapshots =
+            Caffeine.newBuilder()
+                    .maximumSize(MAX_LOCALLY_REUSED_GENERATIONS)
+                    .expireAfterWrite(DownPriceSnapshotBuildKey.GENERATION_INTERVAL)
+                    .build();
 
     private final DownPriceSnapshotCaptureService captureService;
     private final RedisSnapshotStore redisStore;
@@ -36,12 +45,24 @@ public class DownPriceSnapshotBuildCoordinator {
     }
 
     public CompletableFuture<DownPriceSnapshot> getOrBuild(DownPriceSnapshotBuildKey key) {
+        DownPriceSnapshot completed = completedSnapshots.getIfPresent(key);
+        if (completed != null) {
+            return CompletableFuture.completedFuture(completed);
+        }
+
         CompletableFuture<DownPriceSnapshot> created = new CompletableFuture<>();
         CompletableFuture<DownPriceSnapshot> existing = inFlight.putIfAbsent(key, created);
         if (existing != null) {
             metrics.waiterStarted();
             existing.whenComplete((ignored, exception) -> metrics.waiterFinished());
             return existing;
+        }
+
+        completed = completedSnapshots.getIfPresent(key);
+        if (completed != null) {
+            inFlight.remove(key, created);
+            created.complete(completed);
+            return created;
         }
 
         metrics.buildStarted();
@@ -73,9 +94,11 @@ public class DownPriceSnapshotBuildCoordinator {
                         exception
                 );
             }
+            completedSnapshots.put(key, snapshot);
             success = true;
             future.complete(snapshot);
         } catch (Throwable exception) {
+            inFlight.remove(key, future);
             future.completeExceptionally(exception);
         } finally {
             inFlight.remove(key, future);
