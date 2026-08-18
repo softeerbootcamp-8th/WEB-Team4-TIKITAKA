@@ -40,10 +40,14 @@ public class FilterEscapedExceptionController implements ErrorController {
         Object exception = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
 
         if (exception instanceof DataAccessException dataAccessException) {
+            String requestUri = (String) request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
+            if (requestUri == null) {
+                requestUri = request.getRequestURI();
+            }
             log.atError()
                     .addKeyValue("event", "authentication_session_commit_failed")
                     .addKeyValue("method", request.getMethod())
-                    .addKeyValue("path", request.getRequestURI())
+                    .addKeyValue("path", requestUri)
                     .addKeyValue("failureType", dataAccessException.getClass().getSimpleName())
                     .log("인증 세션 변경 사항을 저장하지 못했습니다.");
             return ResponseEntity.status(ErrorCode.AUTHENTICATION_UNAVAILABLE.getStatus())
