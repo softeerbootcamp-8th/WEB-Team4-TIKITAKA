@@ -170,7 +170,120 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ![BidWin ERD](docs/images/erd.png)
 
+### 4.3 패키지 구조
+
+하나의 저장소에서 백엔드와 프론트엔드, 모니터링 설정을 함께 관리합니다.
+
+```text
+WEB-Team4-TIKITAKA
+├── bidwin-back/        # Spring Boot API 서버 (Java 21)
+├── bidwin-front/       # React 19 + Vite SPA (TypeScript)
+├── deploy/             # 운영 모니터링 스택 설정 (Prometheus · Loki · Alloy · Grafana)
+├── docs/images/        # 아키텍처 · ERD 다이어그램
+├── .github/workflows/  # CI — 빌드·테스트 · PR 린트 · 라벨 동기화
+└── compose.local.yaml  # 로컬 개발 환경 (MySQL · Redis · 모니터링)
+```
+
+백엔드는 **도메인별로 수직 분할**한 뒤, 각 도메인 안을 `presentation` → `application` → `domain` ← `infrastructure` **4계층으로 수평 분할**했습니다. 리포지토리와 외부 연동은 `domain`·`application`이 인터페이스로만 선언하고 구현은 `infrastructure`가 맡아, 도메인 규칙이 QueryDSL·Redis·S3 같은 기술 선택을 모르는 상태로 남습니다.
+
+<details>
+<summary><b>📦 백엔드 패키지 구조 (클릭하여 펼치기)</b></summary>
+
+<br>
+
+```text
+bidwin-back/src/main/java/com/tikitaka/bidwinback
+│
+├── auction/                    # 경매 · 입찰 · 거래 — 서비스의 핵심 도메인
+│   ├── presentation/           # 경매 등록·조회 · 입찰 · 즉시 구매 · 거래 확정 · SSE 구독 API + dto/
+│   ├── application/            # 입찰 판정 · 즉시 구매 · 마감과 낙찰자 선정 · 보증금 정산 · 목록 조회
+│   │   └── live/               # 실시간 상태 스냅샷 · 도메인 이벤트 정의
+│   ├── domain/                 # 엔티티 · 가격 정책 · 리포지토리 계약
+│   │   ├── entity/             # 경매 · 상향/하향 경매 · 입찰 · 밀봉 입찰 · 거래 · 보증금 · 이미지
+│   │   ├── enums/              # 경매 · 거래 · 입찰 · 보증금 상태와 분류
+│   │   ├── exception/          # 도메인별 예외
+│   │   └── repository/         # 리포지토리 인터페이스 + 조회 전용 dto/
+│   └── infrastructure/         # QueryDSL 목록 조회 · 마감 스케줄러 · 조회 지표
+│       └── sse/                # 도메인 이벤트 → SSE 브로드캐스트
+│
+├── auth/                       # 인증 — 회원가입 · 로그인 · 메일 인증 · 비밀번호 재설정
+│   ├── presentation/           # 인증 API + dto/
+│   ├── application/            # 세션 인증 · 비밀번호 해싱 · 토큰 발급
+│   │   ├── emailverification/  # 가입 메일 인증 토큰
+│   │   └── passwordreset/      # 비밀번호 재설정 토큰
+│   ├── domain/                 # 인증 토큰 엔티티 · 리포지토리 계약
+│   └── infrastructure/         # PBKDF2 해시 · SHA-256 토큰 · Gmail SMTP
+│
+├── member/                     # 회원 · 프로필 · 보증금 포인트
+│   ├── presentation/
+│   ├── application/
+│   └── domain/
+│
+├── mypage/                     # 내 입찰 · 판매 · 거래 · 보증금 이력 조회
+│   ├── presentation/
+│   ├── application/
+│   └── domain/
+│
+├── upload/                     # S3 presigned 업로드 · 미회수 이미지 정리
+│   ├── presentation/
+│   ├── application/
+│   ├── domain/
+│   └── infrastructure/
+│
+└── global/                     # 도메인 공통 기반
+    ├── auth/                   # 세션 인증 필터 · @Login 아규먼트 리졸버
+    ├── sse/                    # SSE 연결 허브 · Redis Pub/Sub 이벤트 버스 · 하트비트
+    ├── storage/                # S3 · CloudFront 추상화
+    ├── common/                 # 공통 응답 봉투 · 페이지 응답 · 시각 감사 엔티티
+    ├── config/                 # Session · Async · Scheduling · Mail · S3 · OpenAPI 설정
+    ├── exception/              # 에러 코드 · 전역 예외 핸들러
+    └── health/                 # 헬스 체크
+```
+
+</details>
+
+<details>
+<summary><b>📦 프론트엔드 디렉터리 구조 (클릭하여 펼치기)</b></summary>
+
+<br>
+
+```text
+bidwin-front/src
+│
+├── app/                     # 라우터 · 루트 레이아웃 · 404
+├── routes/                  # 페이지 단위 — 디렉터리 경로가 곧 URL
+│   ├── auctions/            # 경매 목록 · 검색 · 필터 · 정렬
+│   │   ├── components/      # 목록 카드 · 툴바 · 필터 패널
+│   │   ├── detail/          # 경매 상세 — 실시간 가격 · 입찰
+│   │   └── new/             # 경매 등록 · 이미지 업로더
+│   ├── trades/detail/       # 거래 상세 — 실시간 상태 전이
+│   ├── mypage/              # 프로필 · 보증금 · 내 물품
+│   │   ├── components/      # 프로필 카드 · 보증금 충전 · 내 물품 섹션
+│   │   ├── history/         # 입찰 · 판매 · 거래 · 보증금 이력
+│   │   └── password/        # 비밀번호 변경
+│   ├── login/               # 로그인
+│   ├── signup/              # 회원가입 · 약관 동의
+│   ├── email-verification/  # 메일 인증 랜딩
+│   └── password-reset/      # 비밀번호 재설정 요청
+│       └── confirm/         # 재설정 링크 확인
+├── components/              # 라우트 간 공유 UI
+│   ├── ui/                  # 버튼 · 모달 · 셀렉트 · 롤링 가격 등
+│   ├── auth/                # 인증 화면 공통 레이아웃
+│   ├── layout/              # 상단 내비게이션
+│   └── feedback/            # 토스트
+├── hooks/                   # SSE 구독 · 서버 시계 보정 · 카운트다운 훅
+├── lib/                     # API 클라이언트 · 화면 공통 도메인 로직
+│   ├── api/                 # 공통 응답 봉투 해제 + 엔드포인트 모듈
+│   ├── auth/                # 인증 컨텍스트 · 입력 검증 규칙
+│   └── clock/               # 서버 시계 컨텍스트
+├── assets/                  # 로고 · 히어로 이미지
+└── styles/                  # Tailwind v4 토큰 · 베이스 스타일
+```
+
+</details>
+
 ---
+
 ## 5. 기술적 성과
 ### 김근성
 - [[김근성] 실행계획·인덱스·데이터 분포로 경매 마감 SQL 병목 추적 (5,001만 행 → 1만 행)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%8B%A4%ED%96%89%EA%B3%84%ED%9A%8D%C2%B7%EC%9D%B8%EB%8D%B1%EC%8A%A4%C2%B7%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%B6%84%ED%8F%AC%EB%A1%9C-%EA%B2%BD%EB%A7%A4-%EB%A7%88%EA%B0%90-SQL-%EB%B3%91%EB%AA%A9-%EC%B6%94%EC%A0%81-(5,001%EB%A7%8C-%ED%96%89-%E2%86%92-1%EB%A7%8C-%ED%96%89))
