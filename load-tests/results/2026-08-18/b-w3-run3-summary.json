@@ -1,0 +1,152 @@
+{
+    "root_group": {
+        "checks": {
+            "auction list returns 200": {
+                "name": "auction list returns 200",
+                "path": "::auction list returns 200",
+                "id": "a771b9d0724c5c54d0beb77790a19af3",
+                "passes": 12001,
+                "fails": 0
+            },
+            "auction API reports success": {
+                "path": "::auction API reports success",
+                "id": "53a7f8d36315cfec1bb389a8ba828536",
+                "passes": 12001,
+                "fails": 0,
+                "name": "auction API reports success"
+            }
+        },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {}
+    },
+    "metrics": {
+        "data_sent": {
+            "count": 1536128,
+            "rate": 51187.73814601932
+        },
+        "http_req_tls_handshaking": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0
+        },
+        "vus_max": {
+            "value": 100,
+            "min": 100,
+            "max": 100
+        },
+        "http_req_receiving": {
+            "avg": 0.036979585034579904,
+            "min": 0.007,
+            "med": 0.037,
+            "max": 0.553,
+            "p(90)": 0.057,
+            "p(95)": 0.065,
+            "p(99)": 0.087
+        },
+        "vus": {
+            "value": 5,
+            "min": 3,
+            "max": 5
+        },
+        "http_req_duration": {
+            "med": 9.567,
+            "max": 18.799,
+            "p(90)": 11.083,
+            "p(95)": 11.687,
+            "p(99)": 13.379,
+            "avg": 9.723888259311735,
+            "min": 7.371
+        },
+        "http_req_waiting": {
+            "p(90)": 11.024,
+            "p(95)": 11.624,
+            "p(99)": 13.314,
+            "avg": 9.676314807099475,
+            "min": 7.353,
+            "med": 9.516,
+            "max": 18.746
+        },
+        "http_reqs": {
+            "count": 12001,
+            "rate": 399.90420426577595
+        },
+        "http_req_duration{expected_response:true}": {
+            "min": 7.371,
+            "med": 9.567,
+            "max": 18.799,
+            "p(90)": 11.083,
+            "p(95)": 11.687,
+            "p(99)": 13.379,
+            "avg": 9.723888259311735
+        },
+        "http_req_blocked": {
+            "med": 0.003,
+            "max": 2.947,
+            "p(90)": 0.005,
+            "p(95)": 0.005,
+            "p(99)": 0.146,
+            "avg": 0.005890425797850419,
+            "min": 0
+        },
+        "iteration_duration": {
+            "med": 9.6905,
+            "max": 18.923542,
+            "p(90)": 11.219583,
+            "p(95)": 11.831334,
+            "p(99)": 13.55125,
+            "avg": 9.840799326639441,
+            "min": 7.410583
+        },
+        "iterations": {
+            "count": 12001,
+            "rate": 399.90420426577595
+        },
+        "auction_list_response_time": {
+            "avg": 9.723888259311735,
+            "min": 7.371,
+            "med": 9.567,
+            "max": 18.799,
+            "p(90)": 11.083,
+            "p(95)": 11.687,
+            "p(99)": 13.379
+        },
+        "http_req_sending": {
+            "avg": 0.010593867177735486,
+            "min": 0.002,
+            "med": 0.01,
+            "max": 0.789,
+            "p(90)": 0.015,
+            "p(95)": 0.017,
+            "p(99)": 0.035
+        },
+        "checks": {
+            "passes": 24002,
+            "fails": 0,
+            "value": 1
+        },
+        "data_received": {
+            "rate": 2302311.816847673,
+            "count": 69091657
+        },
+        "http_req_connecting": {
+            "min": 0,
+            "med": 0,
+            "max": 2.903,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0.12,
+            "avg": 0.002429464211315723
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 12001,
+            "value": 0
+        }
+    }
+}

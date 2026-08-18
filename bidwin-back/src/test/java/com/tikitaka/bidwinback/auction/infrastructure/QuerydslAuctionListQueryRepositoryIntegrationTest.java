@@ -1,7 +1,9 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
+import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
+import com.tikitaka.bidwinback.auction.application.AuctionListService;
 import com.tikitaka.bidwinback.auction.application.AuctionPricePageQuery;
+import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -20,6 +22,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCo
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
+import com.tikitaka.bidwinback.auction.presentation.dto.response.AuctionListResponse;
 import com.tikitaka.bidwinback.member.domain.entity.Member;
 import com.tikitaka.bidwinback.member.domain.enums.MemberStatus;
 import jakarta.persistence.EntityManager;
@@ -41,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "app.storage.s3.bucket=test-bucket",
+        "app.auction.closing-interval=1d",
         "spring.jpa.properties.hibernate.generate_statistics=true"
 })
 @Transactional
@@ -58,6 +62,9 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
 
     @Autowired
     private AuctionPricePageQuery auctionPricePageQuery;
+
+    @Autowired
+    private AuctionListService auctionListService;
 
     @Autowired
     private EntityManager entityManager;
@@ -1187,6 +1194,137 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         assertThat(rows).extracting(AuctionListRow::auctionId)
                 .containsExactly(auction.getId());
         assertThat(statistics.getEntityLoadCount()).isZero();
+    }
+
+    @Test
+    void LATEST_ACTIVE_ALL_목록_API는_5개의_SQL을_실행한다() {
+        Member seller = persistMember("query-count-seller");
+        UpAuction upAuction = persistUp(
+                seller,
+                "쿼리 수 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        DownAuction downAuction = persistDown(
+                seller,
+                "쿼리 수 하향 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(upAuction, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setAuctionTimeline(downAuction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        entityManager.flush();
+        entityManager.clear();
+        Statistics statistics = entityManagerFactory
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.clear();
+
+        AuctionListResponse response = auctionListService.getList(new AuctionListQuery(
+                null,
+                AuctionSort.LATEST,
+                null,
+                AuctionListStatusFilter.ACTIVE,
+                null,
+                1,
+                16,
+                AS_OF
+        ));
+
+        assertThat(response.items())
+                .extracting(item -> item.auctionId())
+                .containsExactly(downAuction.getId(), upAuction.getId());
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5L);
+    }
+
+    @Test
+    void DEADLINE_ENDED_ALL_목록_API는_5개의_SQL을_실행한다() {
+        Member seller = persistMember("ended-query-count-seller");
+        UpAuction completedUp = persistUp(
+                seller,
+                "종료 쿼리 수 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        DownAuction expiredDown = persistDown(
+                seller,
+                "종료 쿼리 수 하향 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(completedUp, AS_OF.minusHours(3), AS_OF.minusHours(3));
+        setAuctionTimeline(expiredDown, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setEndedAt(completedUp, AS_OF.minusHours(1));
+        setEndedAt(expiredDown, AS_OF.minusMinutes(30));
+        setCompletedAt(completedUp, AS_OF.minusMinutes(50));
+        entityManager.flush();
+        entityManager.clear();
+        Statistics statistics = entityManagerFactory
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.clear();
+
+        AuctionListResponse response = auctionListService.getList(new AuctionListQuery(
+                null,
+                AuctionSort.DEADLINE,
+                null,
+                AuctionListStatusFilter.ENDED,
+                null,
+                1,
+                16,
+                AS_OF
+        ));
+
+        assertThat(response.items())
+                .extracting(item -> item.auctionId())
+                .containsExactly(completedUp.getId(), expiredDown.getId());
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5L);
+    }
+
+    @Test
+    void RECOMMENDED_ACTIVE_ALL_목록_API는_5개의_SQL을_실행한다() {
+        Member seller = persistMember("recommended-query-count-seller");
+        UpAuction upAuction = persistUp(
+                seller,
+                "추천순 쿼리 수 상향 경매",
+                AuctionCategory.HOUSEHOLD
+        );
+        DownAuction downAuction = persistDown(
+                seller,
+                "추천순 쿼리 수 하향 경매",
+                AuctionCategory.HOUSEHOLD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(upAuction, AS_OF.minusHours(2), AS_OF.minusHours(2));
+        setAuctionTimeline(downAuction, AS_OF.minusHours(1), AS_OF.minusHours(1));
+        setEndedAt(upAuction, AS_OF.plusYears(1));
+        setEndedAt(downAuction, AS_OF.plusYears(1));
+        entityManager.flush();
+        entityManager.clear();
+        Statistics statistics = entityManagerFactory
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.clear();
+
+        AuctionListResponse response = auctionListService.getList(new AuctionListQuery(
+                null,
+                AuctionSort.RECOMMENDED,
+                null,
+                AuctionListStatusFilter.ACTIVE,
+                null,
+                1,
+                16,
+                AS_OF
+        ));
+
+        assertThat(response.items())
+                .extracting(item -> item.auctionId())
+                .containsExactly(downAuction.getId(), upAuction.getId());
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(5L);
     }
 
     private void assertPriceSnapshotsMatchOrBaseline(

@@ -63,23 +63,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 ) * {5}
             )
             """;
-    private static final Comparator<AuctionColumnSortCandidate> LATEST_ORDER =
-            Comparator.comparing(AuctionColumnSortCandidate::sortAt)
-                    .reversed()
-                    .thenComparing(
-                            Comparator.comparingLong(AuctionColumnSortCandidate::auctionId)
-                                    .reversed()
-                    );
-    private static final Comparator<AuctionColumnSortCandidate> DEADLINE_ORDER =
-            Comparator.comparing(AuctionColumnSortCandidate::sortAt)
-                    .thenComparingLong(AuctionColumnSortCandidate::auctionId);
-    private static final Comparator<AuctionRecommendedCandidate> RECOMMENDED_ORDER =
-            Comparator.comparingLong(AuctionRecommendedCandidate::bidCount)
-                    .reversed()
-                    .thenComparing(
-                            Comparator.comparingLong(AuctionRecommendedCandidate::auctionId)
-                                    .reversed()
-                    );
     private static final Comparator<DownAuctionPriceCandidateDetails> DOWN_START_PRICE_ORDER =
             Comparator.comparingLong(DownAuctionPriceCandidateDetails::startPrice)
                     .reversed()
@@ -91,13 +74,16 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     private final JPAQueryFactory queryFactory;
     private final BidRepository bidRepository;
+    private final QuerydslSqlAuctionListCandidateQuery sqlCandidateQuery;
 
     public QuerydslAuctionListQueryRepository(
             EntityManager entityManager,
-            BidRepository bidRepository
+            BidRepository bidRepository,
+            QuerydslSqlAuctionListCandidateQuery sqlCandidateQuery
     ) {
         this.queryFactory = new JPAQueryFactory(entityManager);
         this.bidRepository = bidRepository;
+        this.sqlCandidateQuery = sqlCandidateQuery;
     }
 
     @Override
@@ -498,69 +484,12 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long offset,
             int limit
     ) {
-        ColumnSortSpec sortSpec = columnSortSpec(condition.sort());
-        List<AuctionColumnSortCandidate> candidates = condition.auctionType() == null
-                ? mergeAcrossAuctionTypes(
-                        condition,
-                        offset,
-                        limit,
-                        (typedCondition, branchLimit) -> findColumnSortCandidates(
-                                typedCondition,
-                                0,
-                                branchLimit,
-                                sortSpec
-                        ),
-                        sortSpec.comparator()
-                )
-                : findColumnSortCandidates(condition, offset, limit, sortSpec);
+        List<AuctionColumnSortCandidate> candidates = sqlCandidateQuery
+                .findColumnSortCandidates(condition, offset, limit);
         List<Long> auctionIds = candidates.stream()
                 .map(AuctionColumnSortCandidate::auctionId)
                 .toList();
         return findMetricsInPageOrder(auctionIds, condition.asOf());
-    }
-
-    private List<AuctionColumnSortCandidate> findColumnSortCandidates(
-            AuctionListSearchCondition condition,
-            long offset,
-            long limit,
-            ColumnSortSpec sortSpec
-    ) {
-        // 정렬 인덱스에서 페이지 후보만 먼저 고르고, 집계 쿼리는 선택된 ID에만 수행한다.
-        return mergeAcrossStatusBranches(
-                condition,
-                offset,
-                limit,
-                (statusPredicate, branchLimit) -> findColumnSortCandidatesInBranch(
-                        condition,
-                        statusPredicate,
-                        branchLimit,
-                        sortSpec
-                ),
-                sortSpec.comparator()
-        );
-    }
-
-    private List<AuctionColumnSortCandidate> findColumnSortCandidatesInBranch(
-            AuctionListSearchCondition condition,
-            Predicate statusPredicate,
-            long branchLimit,
-            ColumnSortSpec sortSpec
-    ) {
-        return queryFactory
-                .select(new QAuctionColumnSortCandidate(
-                        auction.id,
-                        sortSpec.sortExpression()
-                ))
-                .from(auction)
-                .where(searchPredicate(condition, statusPredicate))
-                .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
-                .limit(branchLimit)
-                // completed_at 분기별로 정렬에 맞는 복합 인덱스를 사용한다.
-                .setHint(
-                        HibernateHints.HINT_QUERY_DATABASE,
-                        sortSpec.indexHint()
-                )
-                .fetch();
     }
 
     private <T> List<T> mergeAcrossStatusBranches(
@@ -580,7 +509,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             Comparator<T> comparator
     ) {
         // 상태 조건의 OR을 인덱스로 처리할 수 있도록 서로 겹치지 않는 분기로 나눈다.
-        // QueryDSL JPA가 UNION ALL을 지원하지 않으므로 각 분기의 후보만 읽고 병합한다.
+        // QueryDSL JPA 7.5 fluent API에는 UNION ALL 조합 API가 없으므로 각 분기의 후보만 읽고 병합한다.
         long branchLimit = Math.addExact(offset, limit);
         return statusBranchPredicates(condition).stream()
                 .flatMap(predicate -> branchQuery.apply(predicate, branchLimit).stream())
@@ -588,37 +517,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .skip(offset)
                 .limit(limit)
                 .toList();
-    }
-
-    private <T> List<T> mergeAcrossAuctionTypes(
-            AuctionListSearchCondition condition,
-            long offset,
-            long limit,
-            BiFunction<AuctionListSearchCondition, Long, List<T>> typeQuery,
-            Comparator<T> comparator
-    ) {
-        long branchLimit = Math.addExact(offset, limit);
-        return List.of(AuctionType.UP, AuctionType.DOWN).stream()
-                .map(auctionType -> conditionWithType(condition, auctionType))
-                .flatMap(typedCondition -> typeQuery.apply(typedCondition, branchLimit).stream())
-                .sorted(comparator)
-                .skip(offset)
-                .limit(limit)
-                .toList();
-    }
-
-    private AuctionListSearchCondition conditionWithType(
-            AuctionListSearchCondition condition,
-            AuctionType auctionType
-    ) {
-        return new AuctionListSearchCondition(
-                auctionType,
-                condition.sort(),
-                condition.keyword(),
-                condition.status(),
-                condition.category(),
-                condition.asOf()
-        );
     }
 
     private List<AuctionListMetrics> findMetricsInPageOrder(
@@ -677,19 +575,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long offset,
             int limit
     ) {
-        List<AuctionRecommendedCandidate> candidates = condition.auctionType() == null
-                ? mergeAcrossAuctionTypes(
-                        condition,
-                        offset,
-                        limit,
-                        (typedCondition, branchLimit) -> findRecommendedCandidates(
-                                typedCondition,
-                                0,
-                                branchLimit
-                        ),
-                        RECOMMENDED_ORDER
-                )
-                : findRecommendedCandidates(condition, offset, limit);
+        List<AuctionRecommendedCandidate> candidates = sqlCandidateQuery
+                .findRecommendedCandidates(condition, offset, limit);
         List<Long> auctionIds = candidates.stream()
                 .map(AuctionRecommendedCandidate::auctionId)
                 .toList();
@@ -700,57 +587,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         Map<Long, AuctionListMetrics> metricsByAuctionId =
                 findRecommendedMetricsByAuctionId(auctionIds, condition.asOf());
         return metricsInOrder(auctionIds, metricsByAuctionId);
-    }
-
-    private List<AuctionRecommendedCandidate> findRecommendedCandidates(
-            AuctionListSearchCondition condition,
-            long offset,
-            long limit
-    ) {
-        List<Predicate> statusPredicates = statusBranchPredicates(condition);
-        if (statusPredicates.size() == 1) {
-            return findRecommendedCandidatesInBranch(
-                    condition,
-                    statusPredicates.getFirst(),
-                    offset,
-                    limit
-            );
-        }
-        return mergeAcrossStatusBranches(
-                condition,
-                offset,
-                limit,
-                (statusPredicate, branchLimit) -> findRecommendedCandidatesInBranch(
-                        condition,
-                        statusPredicate,
-                        0,
-                        branchLimit
-                ),
-                RECOMMENDED_ORDER
-        );
-    }
-
-    private List<AuctionRecommendedCandidate> findRecommendedCandidatesInBranch(
-            AuctionListSearchCondition condition,
-            Predicate statusPredicate,
-            long offset,
-            long limit
-    ) {
-        return queryFactory
-                .select(new QAuctionRecommendedCandidate(
-                        auction.id,
-                        auction.bidCount
-                ))
-                .from(auction)
-                .where(searchPredicate(condition, statusPredicate))
-                .orderBy(auction.bidCount.desc(), auction.id.desc())
-                .offset(offset)
-                .limit(limit)
-                .setHint(
-                        HibernateHints.HINT_QUERY_DATABASE,
-                        "idx_auction_recommended"
-                )
-                .fetch();
     }
 
     private Map<Long, AuctionListMetrics> findRecommendedMetricsByAuctionId(
@@ -942,27 +778,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         return category != null ? auction.category.eq(category) : null;
     }
 
-    private ColumnSortSpec columnSortSpec(AuctionSort sort) {
-        return switch (sort) {
-            case DEADLINE -> new ColumnSortSpec(
-                    auction.endedAt,
-                    auction.endedAt.asc(),
-                    auction.id.asc(),
-                    DEADLINE_ORDER,
-                    "idx_auction_snapshot_deadline"
-            );
-            case LATEST -> new ColumnSortSpec(
-                    auction.createdAt,
-                    auction.createdAt.desc(),
-                    auction.id.desc(),
-                    LATEST_ORDER,
-                    "idx_auction_snapshot_latest"
-            );
-            case RECOMMENDED, PRICE_LOW, PRICE_HIGH ->
-                    throw new IllegalArgumentException("컬럼 정렬이 아닙니다: " + sort);
-        };
-    }
-
     private AuctionListMetricExpressions metricExpressions() {
         NumberExpression<Long> bidCount = bid.id.count();
         NumberExpression<Long> upCurrentPrice = bid.price.max().coalesce(auction.startPrice);
@@ -1055,16 +870,6 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             NumberExpression<Long> currentPrice,
             NumberExpression<Long> bidCount,
             Expression<?>[] groupByKeys
-    ) {
-    }
-
-    // DB의 분기별 정렬과 애플리케이션의 병합 정렬은 같은 키와 방향을 사용해야 한다.
-    private record ColumnSortSpec(
-            Expression<LocalDateTime> sortExpression,
-            OrderSpecifier<?> sortOrder,
-            OrderSpecifier<?> idOrder,
-            Comparator<AuctionColumnSortCandidate> comparator,
-            String indexHint
     ) {
     }
 

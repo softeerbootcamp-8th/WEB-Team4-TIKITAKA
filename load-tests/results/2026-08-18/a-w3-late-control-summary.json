@@ -1,0 +1,156 @@
+{
+    "metrics": {
+        "http_req_connecting": {
+            "p(99)": 0.149,
+            "avg": 0.003554903604358756,
+            "min": 0,
+            "med": 0,
+            "max": 1.697,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_receiving": {
+            "p(90)": 0.058,
+            "p(95)": 0.068,
+            "p(99)": 0.1,
+            "avg": 0.0381402347024303,
+            "min": 0.007,
+            "med": 0.035,
+            "max": 3.172
+        },
+        "dropped_iterations": {
+            "count": 70,
+            "rate": 2.3018241232746512
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 134.06766278290033,
+            "min": 9.379,
+            "med": 89.646,
+            "max": 908.995,
+            "p(90)": 344.3053,
+            "p(95)": 404.02755,
+            "p(99)": 434.62971
+        },
+        "auction_list_response_time": {
+            "p(90)": 344.3053,
+            "p(95)": 404.02755,
+            "p(99)": 434.62971,
+            "avg": 134.06766278290033,
+            "min": 9.379,
+            "med": 89.646,
+            "max": 908.995
+        },
+        "vus_max": {
+            "value": 170,
+            "min": 100,
+            "max": 170
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 11930,
+            "value": 0
+        },
+        "data_sent": {
+            "count": 1527040,
+            "rate": 50213.96441721891
+        },
+        "vus": {
+            "max": 167,
+            "value": 167,
+            "min": 4
+        },
+        "iterations": {
+            "count": 11930,
+            "rate": 392.2965970095227
+        },
+        "http_req_tls_handshaking": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0
+        },
+        "iteration_duration": {
+            "max": 909.105291,
+            "p(90)": 344.4454795,
+            "p(95)": 404.1861628,
+            "p(99)": 434.96835842999997,
+            "avg": 134.17945381684817,
+            "min": 9.418291,
+            "med": 89.7631665
+        },
+        "checks": {
+            "passes": 23860,
+            "fails": 0,
+            "value": 1
+        },
+        "http_reqs": {
+            "count": 11930,
+            "rate": 392.2965970095227
+        },
+        "http_req_duration": {
+            "min": 9.379,
+            "med": 89.646,
+            "max": 908.995,
+            "p(90)": 344.3053,
+            "p(95)": 404.02755,
+            "p(99)": 434.62971,
+            "avg": 134.06766278290033
+        },
+        "http_req_sending": {
+            "p(95)": 0.019,
+            "p(99)": 0.036,
+            "avg": 0.010476781223805834,
+            "min": 0.002,
+            "med": 0.009,
+            "max": 1.862,
+            "p(90)": 0.015
+        },
+        "http_req_waiting": {
+            "p(90)": 344.2316,
+            "p(95)": 403.97685,
+            "p(99)": 434.58114,
+            "avg": 134.0190457669741,
+            "min": 9.359,
+            "med": 89.585,
+            "max": 908.907
+        },
+        "data_received": {
+            "count": 68682910,
+            "rate": 2258513.987067168
+        },
+        "http_req_blocked": {
+            "min": 0,
+            "med": 0.003,
+            "max": 1.749,
+            "p(90)": 0.005,
+            "p(95)": 0.006,
+            "p(99)": 0.178,
+            "avg": 0.007046269907795537
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "auction list returns 200": {
+                    "path": "::auction list returns 200",
+                    "id": "a771b9d0724c5c54d0beb77790a19af3",
+                    "passes": 11930,
+                    "fails": 0,
+                    "name": "auction list returns 200"
+                },
+                "auction API reports success": {
+                    "name": "auction API reports success",
+                    "path": "::auction API reports success",
+                    "id": "53a7f8d36315cfec1bb389a8ba828536",
+                    "passes": 11930,
+                    "fails": 0
+                }
+            }
+    }
+}

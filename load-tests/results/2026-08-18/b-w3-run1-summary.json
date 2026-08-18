@@ -1,0 +1,152 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "auction list returns 200": {
+                    "path": "::auction list returns 200",
+                    "id": "a771b9d0724c5c54d0beb77790a19af3",
+                    "passes": 12001,
+                    "fails": 0,
+                    "name": "auction list returns 200"
+                },
+                "auction API reports success": {
+                    "name": "auction API reports success",
+                    "path": "::auction API reports success",
+                    "id": "53a7f8d36315cfec1bb389a8ba828536",
+                    "passes": 12001,
+                    "fails": 0
+                }
+            }
+    },
+    "metrics": {
+        "http_req_duration{expected_response:true}": {
+            "med": 9.47,
+            "max": 42.622,
+            "p(90)": 11,
+            "p(95)": 11.674,
+            "p(99)": 14.53,
+            "avg": 9.756320556620283,
+            "min": 7.591
+        },
+        "iterations": {
+            "count": 12001,
+            "rate": 399.9061365215104
+        },
+        "http_req_receiving": {
+            "p(95)": 0.061,
+            "p(99)": 0.087,
+            "avg": 0.03337763519706637,
+            "min": 0.007,
+            "med": 0.032,
+            "max": 1.284,
+            "p(90)": 0.053
+        },
+        "data_sent": {
+            "count": 1536128,
+            "rate": 51187.98547475333
+        },
+        "http_req_connecting": {
+            "max": 0.226,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0.102,
+            "avg": 0.0018640113323889686,
+            "min": 0,
+            "med": 0
+        },
+        "vus": {
+            "value": 4,
+            "min": 3,
+            "max": 6
+        },
+        "vus_max": {
+            "min": 100,
+            "max": 100,
+            "value": 100
+        },
+        "data_received": {
+            "count": 69091657,
+            "rate": 2302322.941149852
+        },
+        "http_req_duration": {
+            "p(95)": 11.674,
+            "p(99)": 14.53,
+            "avg": 9.756320556620283,
+            "min": 7.591,
+            "med": 9.47,
+            "max": 42.622,
+            "p(90)": 11
+        },
+        "http_req_blocked": {
+            "max": 2.315,
+            "p(90)": 0.004,
+            "p(95)": 0.005,
+            "p(99)": 0.124,
+            "avg": 0.005065327889342595,
+            "min": 0,
+            "med": 0.003
+        },
+        "iteration_duration": {
+            "avg": 9.859237321056561,
+            "min": 7.63025,
+            "med": 9.571333,
+            "max": 42.862542,
+            "p(90)": 11.120417,
+            "p(95)": 11.806167,
+            "p(99)": 14.660917
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 12001,
+            "value": 0
+        },
+        "auction_list_response_time": {
+            "avg": 9.756320556620283,
+            "min": 7.591,
+            "med": 9.47,
+            "max": 42.622,
+            "p(90)": 11,
+            "p(95)": 11.674,
+            "p(99)": 14.53
+        },
+        "http_reqs": {
+            "count": 12001,
+            "rate": 399.9061365215104
+        },
+        "http_req_sending": {
+            "avg": 0.00937630197483569,
+            "min": 0.002,
+            "med": 0.009,
+            "max": 1.406,
+            "p(90)": 0.014,
+            "p(95)": 0.016,
+            "p(99)": 0.026
+        },
+        "http_req_waiting": {
+            "avg": 9.713566619448395,
+            "min": 7.572,
+            "med": 9.426,
+            "max": 42.576,
+            "p(90)": 10.95,
+            "p(95)": 11.626,
+            "p(99)": 14.467
+        },
+        "http_req_tls_handshaking": {
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0
+        },
+        "checks": {
+            "passes": 24002,
+            "fails": 0,
+            "value": 1
+        }
+    }
+}
