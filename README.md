@@ -189,6 +189,12 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 - [[허찬욱] 목록 조회 트랜잭션 제거 검토 — 측정 후 미채택](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-%EC%A1%B0%ED%9A%8C-%ED%8A%B8%EB%9E%9C%EC%9E%AD%EC%85%98-%EC%A0%9C%EA%B1%B0-%EA%B2%80%ED%86%A0-%E2%80%94-%EC%B8%A1%EC%A0%95-%ED%9B%84-%EB%AF%B8%EC%B1%84%ED%83%9D)
 - [[허찬욱] 목록 COUNT 병목 개선 — 캐시 반려](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-COUNT-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-%EC%BA%90%EC%8B%9C-%EB%B0%98%EB%A0%A4)
 
+
+### 노승억
+- [[노승억] 입찰 처리량은 왜 240 RPS에서 멈추는가](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EC%9E%85%EC%B0%B0-%EC%B2%98%EB%A6%AC%EB%9F%89%EC%9D%80-%EC%99%9C-240-RPS%EC%97%90%EC%84%9C-%EB%A9%88%EC%B6%94%EB%8A%94%EA%B0%80)
+- [[노승억] Redis 원자적 필터, 무엇이 풀리고 무엇이 안 풀렸나](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D--Redis-%EC%9B%90%EC%9E%90%EC%A0%81-%ED%95%84%ED%84%B0,-%EB%AC%B4%EC%97%87%EC%9D%B4-%ED%92%80%EB%A6%AC%EA%B3%A0-%EB%AC%B4%EC%97%87%EC%9D%B4-%EC%95%88-%ED%92%80%EB%A0%B8%EB%82%98)
+- [[노승억] 입찰의 성공 실패 판정을 Redis로 이관하게 된다면 응답속도는 얼마나 개선이 될까?](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EC%9E%85%EC%B0%B0%EC%9D%98-%EC%84%B1%EA%B3%B5-%EC%8B%A4%ED%8C%A8-%ED%8C%90%EC%A0%95%EC%9D%84-Redis%EB%A1%9C-%EC%9D%B4%EA%B4%80%ED%95%98%EA%B2%8C-%EB%90%9C%EB%8B%A4%EB%A9%B4-%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84%EB%8A%94-%EC%96%BC%EB%A7%88%EB%82%98-%EA%B0%9C%EC%84%A0%EC%9D%B4-%EB%90%A0%EA%B9%8C%3F)
+
 ---
 
 ## 6. 기술 스택
