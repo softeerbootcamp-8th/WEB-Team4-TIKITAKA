@@ -1,0 +1,41 @@
+groups:
+  - name: down-price-snapshot
+    rules:
+      - alert: DownPriceSnapshotGenerationStale
+        expr: max(snapshot_generation_age_seconds) > 60
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 하향 가격 스냅샷 세대가 60초 넘게 갱신되지 않았습니다.
+
+      - alert: DownPriceSnapshotRedisCircuitOpen
+        expr: max(snapshot_redis_circuit) == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 하향 가격 스냅샷 Redis circuit가 열린 상태로 지속됩니다.
+
+      - alert: DownPriceSnapshotBuildFailures
+        expr: max(snapshot_build_consecutive_failures) >= 3
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: 하향 가격 DB 스냅샷 생성이 3회 이상 연속 실패했습니다.
+
+      - alert: DownPriceSnapshotWaitersHigh
+        expr: sum(snapshot_build_waiters) >= 100
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: 하향 가격 스냅샷 생성을 기다리는 요청이 급증했습니다.
+
+      - alert: DownPriceSnapshotRedisEvictions
+        expr: sum(increase(snapshot_redis_evictions_total[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis eviction이 발생해 스냅샷 세대가 유실될 수 있습니다.
