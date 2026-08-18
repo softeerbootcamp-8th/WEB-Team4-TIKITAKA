@@ -341,7 +341,7 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
       <td align="center"><b>노승억</b><br><sub>BE</sub></td>
       <td>
         <ul>
-          <li><b>상향 입찰 동시성 병목 규명 및 Redis 원자적 필터 구현</b></li>
+          <li><b>상향 입찰 동시성 병목 규명 및 Redis 적용·확장 검증</b></li>
     <li><b>동시 거래 경로의 교착 대응</b></li>
     <li><b>세션 저장소 Redis 전환</b></li>
     <li><b>프로젝트 기반 및 인프라 초기 구축</b></li>
