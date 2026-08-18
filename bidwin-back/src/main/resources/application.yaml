@@ -1,6 +1,9 @@
 spring:
   application:
     name: bidwin-back
+  mvc:
+    # 요청 본문/파라미터에는 비밀번호와 인증 토큰이 포함될 수 있으므로 프레임워크 로그에서 제외한다.
+    log-request-details: false
   task:
     scheduling:
       pool:
@@ -12,6 +15,7 @@ spring:
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
+        debug: false
         smtp:
           auth: true
           starttls:
@@ -79,6 +83,25 @@ management:
     web:
       exposure:
         include: []
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.tikitaka.bidwinback: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: WARN
+    org.springframework.session: WARN
+    org.springframework.jdbc.core: WARN
+    org.hibernate: WARN
+    # 장애 분석 중에도 SQL 바인딩 값에 토큰이나 개인정보가 출력되지 않게 고정한다.
+    org.hibernate.SQL: OFF
+    org.hibernate.orm.jdbc.bind: OFF
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        service: ${spring.application.name}
+        environment: ${APP_ENVIRONMENT:unknown}
 
 app:
   auction:

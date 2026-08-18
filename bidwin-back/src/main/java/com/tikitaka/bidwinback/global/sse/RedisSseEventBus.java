@@ -49,7 +49,10 @@ public class RedisSseEventBus implements MessageListener, SubscriptionListener {
             }
         } catch (RuntimeException exception) {
             // 손상된 메시지를 버리면 연결이 영구히 낡을 수 있어 snapshot부터 다시 받게 한다.
-            log.warn("Redis SSE 메시지를 처리하지 못해 로컬 연결을 종료합니다.", exception);
+            log.atWarn()
+                    .addKeyValue("event", "redis_sse_message_processing_failed")
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("Redis SSE 메시지를 처리하지 못해 로컬 연결을 종료합니다.");
             sseHub.closeConnections();
         }
     }
@@ -61,7 +64,11 @@ public class RedisSseEventBus implements MessageListener, SubscriptionListener {
     }
 
     void subscriptionFailed(Throwable cause) {
-        log.warn("Redis SSE 구독이 끊겨 로컬 연결을 종료합니다: {}", cause.getMessage());
+        log.atWarn()
+                .addKeyValue("event", "redis_sse_subscription_failed")
+                .addKeyValue("topic", TOPIC)
+                .addKeyValue("failureType", cause.getClass().getSimpleName())
+                .log("Redis SSE 구독이 끊겨 로컬 연결을 종료합니다.");
         sseHub.closeConnections();
     }
 

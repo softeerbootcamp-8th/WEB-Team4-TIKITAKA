@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.http.HttpMethod;
@@ -24,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
+@Slf4j
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     // 유휴 만료(spring.session.timeout)만으로는 계속 사용되는 탈취 세션을 종료할 수 없어
@@ -122,11 +124,23 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             session.invalidate();
         } catch (IllegalStateException ignored) {
             // 로그아웃과 동시에 처리 중인 요청은 인증되지 않은 요청
-        } catch (SerializationException ignored) {
+        } catch (SerializationException exception) {
             // Redis에 저장된 세션 데이터가 현재 AuthMember 구조와 맞지 않아 읽을 수 없다.
             // 재시도해도 복구되지 않으므로 세션이 없는 것과 동일하게 처리한다.
+            log.atWarn()
+                    .addKeyValue("event", "authentication_session_deserialization_failed")
+                    .addKeyValue("method", request.getMethod())
+                    .addKeyValue("path", request.getRequestURI())
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("인증 세션을 역직렬화하지 못했습니다.");
         } catch (DataAccessException exception) {
             // 세션 조회 자체가 불가능한 상태(Redis 장애)이므로 401로 오인하게 하지 않는다.
+            log.atError()
+                    .addKeyValue("event", "authentication_session_read_failed")
+                    .addKeyValue("method", request.getMethod())
+                    .addKeyValue("path", request.getRequestURI())
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("인증 세션을 조회하지 못했습니다.");
             throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
 
@@ -141,6 +155,11 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             );
         } catch (DataAccessException exception) {
             // 검증에 실패한 것이 아니라 검증이 불가능한 상태이므로 401로 오인하게 하지 않는다.
+            log.atError()
+                    .addKeyValue("event", "authentication_member_validation_failed")
+                    .addKeyValue("memberId", authMember.memberId())
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("회원 인증 상태를 조회하지 못했습니다.");
             throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
     }

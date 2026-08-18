@@ -38,7 +38,11 @@ public class AuctionClosingBatchProcessor {
             try {
                 closed = auctionClosingService.closeBatch(status, batchSize);
             } catch (RuntimeException exception) {
-                log.error("경매 마감 배치 실패, 개별 재처리로 전환: status={}", status, exception);
+                log.atWarn()
+                        .setCause(exception)
+                        .addKeyValue("event", "auction_closing_batch_failed_fallback_to_individual")
+                        .addKeyValue("status", status)
+                        .log("경매 마감 배치 실패, 개별 재처리로 전환");
                 closeIndividually(status, MAX_BATCHES_PER_RUN - batch);
                 return;
             }
@@ -57,7 +61,11 @@ public class AuctionClosingBatchProcessor {
                     candidateLimit
             );
         } catch (RuntimeException exception) {
-            log.error("경매 마감 개별 재처리 준비 실패: status={}", status, exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "auction_closing_individual_retry_preparation_failed")
+                    .addKeyValue("status", status)
+                    .log("경매 마감 개별 재처리 준비 실패");
             return;
         }
 
@@ -65,12 +73,12 @@ public class AuctionClosingBatchProcessor {
             try {
                 auctionClosingService.closeOne(status, auctionId);
             } catch (RuntimeException exception) {
-                log.error(
-                        "경매 마감 개별 처리 실패: status={}, auctionId={}",
-                        status,
-                        auctionId,
-                        exception
-                );
+                log.atWarn()
+                        .setCause(exception)
+                        .addKeyValue("event", "auction_closing_individual_failed")
+                        .addKeyValue("status", status)
+                        .addKeyValue("auctionId", auctionId)
+                        .log("경매 마감 개별 처리 실패");
             }
         }
     }

@@ -22,6 +22,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/mypage")
 @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE_SECURITY_SCHEME)
@@ -89,6 +91,11 @@ public class MyPageAccountUpdateController {
                 session.invalidate();
             } catch (IllegalStateException | DataAccessException ignored) {
             }
+            log.atError()
+                    .addKeyValue("event", "password_session_refresh_failed")
+                    .addKeyValue("memberId", authMember.memberId())
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("비밀번호 변경 후 세션 인증 정보를 갱신하지 못했습니다.");
             throw new AuthException(ErrorCode.UNAUTHENTICATED);
         }
 
