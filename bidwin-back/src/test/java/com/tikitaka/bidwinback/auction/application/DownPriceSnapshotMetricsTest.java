@@ -1,7 +1,9 @@
 package com.tikitaka.bidwinback.auction.application;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -11,6 +13,19 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class DownPriceSnapshotMetricsTest {
+
+    @Test
+    void Spring_컨텍스트에서_MeterRegistry_생성자를_사용한다() {
+        try (AnnotationConfigApplicationContext context =
+                     new AnnotationConfigApplicationContext()) {
+            context.registerBean(MeterRegistry.class, SimpleMeterRegistry::new);
+            context.register(DownPriceSnapshotMetrics.class);
+
+            context.refresh();
+
+            assertThat(context.getBean(DownPriceSnapshotMetrics.class)).isNotNull();
+        }
+    }
 
     @Test
     void 생성된_세대가_없어도_애플리케이션_시작부터_나이가_증가한다() {

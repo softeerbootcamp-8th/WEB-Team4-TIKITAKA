@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.application;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -29,6 +30,7 @@ public class DownPriceSnapshotMetrics {
     private final AtomicLong latestGenerationEpochMillis;
     private final AtomicLong lastRedisEvictions = new AtomicLong(-1L);
 
+    @Autowired
     public DownPriceSnapshotMetrics(MeterRegistry meterRegistry) {
         this(meterRegistry, Clock.systemUTC());
     }
