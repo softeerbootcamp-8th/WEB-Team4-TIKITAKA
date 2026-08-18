@@ -14,6 +14,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+
+import static java.util.stream.Collectors.toMap;
 
 @Slf4j
 @Service
@@ -45,13 +48,18 @@ public class PendingProfileImageCleanupService {
         List<String> expiredKeys = expiredImages.stream()
                 .map(PendingProfileImage::getObjectKey)
                 .toList();
+        Map<String, Long> memberIdByObjectKey = expiredImages.stream()
+                .collect(toMap(
+                        PendingProfileImage::getObjectKey,
+                        PendingProfileImage::getMemberId
+                ));
         ObjectDeletionResult result = objectStorage.deleteAll(expiredKeys);
 
-        result.failures().forEach(failure -> log.warn(
-                "미사용 프로필 이미지 삭제 실패: objectKey={}, code={}",
-                failure.objectKey(),
-                failure.code()
-        ));
+        result.failures().forEach(failure -> log.atWarn()
+                .addKeyValue("event", "pending_profile_image_cleanup_delete_failed")
+                .addKeyValue("memberId", memberIdByObjectKey.get(failure.objectKey()))
+                .addKeyValue("failureCode", failure.code())
+                .log("미사용 프로필 이미지 삭제 실패"));
 
         if (!result.deletedKeys().isEmpty()) {
             pendingProfileImageStore.deleteByObjectKeyIn(result.deletedKeys());

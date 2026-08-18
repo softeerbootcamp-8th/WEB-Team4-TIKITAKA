@@ -35,7 +35,10 @@ public class SseHeartbeatScheduler {
                     serverTime
             ));
         } catch (RuntimeException exception) {
-            log.warn("SSE heartbeat를 전송하지 못했습니다.", exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "sse_heartbeat_send_failed")
+                    .log("SSE heartbeat를 전송하지 못했습니다.");
         }
     }
 }

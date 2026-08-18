@@ -98,9 +98,10 @@ final class SseConnection {
     }
 
     private void writeLoop() {
+        SseMessage<?> message = null;
         try {
             while (!closed.get()) {
-                SseMessage<?> message = pendingMessages.take();
+                message = pendingMessages.take();
                 if (!acceptLatestVersion(message)) {
                     continue;
                 }
@@ -115,7 +116,13 @@ final class SseConnection {
             // I/O 실패는 컨테이너가 오류 완료하므로 색인만 정리한다.
             terminate();
         } catch (RuntimeException exception) {
-            log.error("SSE message send failed", exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "sse_message_send_failed")
+                    .addKeyValue("channelNamespace", message == null ? null : message.channel().namespace())
+                    .addKeyValue("channelKey", message == null ? null : message.channel().key())
+                    .addKeyValue("eventName", message == null ? null : message.eventName())
+                    .log("SSE message send failed");
             // completeWithError는 MVC가 일반 오류 본문을 SSE 스트림에 쓰게 하므로
             // 이미 열린 스트림만 종료해 클라이언트가 재연결하도록 한다.
             close();
