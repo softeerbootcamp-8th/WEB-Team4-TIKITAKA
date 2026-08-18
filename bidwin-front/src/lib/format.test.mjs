@@ -6,6 +6,7 @@ import {
   formatPartialPhoneNumber,
   formatPhoneNumber,
   formatRemainingDuration,
+  formatTimeOfDay,
   formatWon,
 } from './format.ts'
 
@@ -193,8 +194,14 @@ test('마감 시각은 월·일·시·분을 두 자리로 채워 보여준다',
   assert.equal(text, '2026.08.05 09:07 마감')
 })
 
+/* 서버가 보내는 UTC 시각을 브라우저 표준시와 무관하게 한국 시간으로 읽어야 한다. */
 test('하향 경매 변동 시각을 한국 시간으로 표시한다', () => {
+  // given
   const droppedAt = new Date('2026-08-18T00:00:00.000Z')
 
-  assert.equal(formatTimeOfDay(droppedAt, 'Asia/Seoul'), '09:00:00')
+  // when
+  const text = formatTimeOfDay(droppedAt, 'Asia/Seoul')
+
+  // then
+  assert.equal(text, '09:00:00')
 })

@@ -27,7 +27,8 @@ test('첫 페이지에서는 1번부터 창 크기만큼 보여준다', () => {
   assert.deepEqual(pages, [1, 2, 3, 4, 5])
 })
 
-test('가운데 페이지에서는 현재 페이지를 창 한가운데 둔다', () => {
+/* 창이 현재 페이지를 따라 한 칸씩 움직이면 번호 버튼이 매번 흔들려, 묶음 단위로 끊어 보여준다. */
+test('가운데 페이지에서는 그 페이지가 속한 묶음만 보여준다', () => {
   // given
   const currentPage = 10
 
@@ -35,8 +36,8 @@ test('가운데 페이지에서는 현재 페이지를 창 한가운데 둔다',
   const pages = getPageWindow(currentPage, 20)
 
   // then
-  assert.deepEqual(pages, [8, 9, 10, 11, 12])
-  assert.equal(pages[Math.floor(PAGE_WINDOW_SIZE / 2)], currentPage)
+  assert.deepEqual(pages, [6, 7, 8, 9, 10])
+  assert.equal(pages.length, PAGE_WINDOW_SIZE)
 })
 
 /* 마지막 쪽에서 창이 계속 따라가면 있지도 않은 페이지 번호가 생긴다. */
