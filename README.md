@@ -197,10 +197,10 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 | :--- | :--- | :---: |
 | **📊 통합 명세서** | 기능 명세서 · 요구사항 명세서 · API 명세서 · 이슈 단위 · 진행 요약 통합 시트 | [바로가기](https://docs.google.com/spreadsheets/d/1orIoqAX5NUv8rB3I7x58Ae_NT1sThZx6XoPvBz1oO6M/edit?gid=480022386#gid=480022386) |
 | **📗 스웨거 (Swagger UI)** | 배포 서버에서 제공하는 HTTP API 문서 | [바로가기](https://api.bidwin.site/swagger-ui/index.html) |
-| **🔗 이슈 관계도** | 이슈 분할과 선후 의존 관계(위상 정렬)를 정리 | [바로가기]() |
-| **🔄 상태 전이도** | 회원 · 경매 · 거래 도메인의 상태 전이 다이어그램 | [바로가기]() |
-| **📑 상태 전이표** | 전이 조건과 부수 효과(보증금 처리 등)를 표로 고정 | [바로가기]() |
-| **✅ 행위표** | 경매 상태별로 허용되는 사용자 행위 매트릭스 | [바로가기]() |
+| **🔗 이슈 관계도** | 이슈 분할과 선후 의존 관계(위상 정렬)를 정리 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/이슈-관계도) |
+| **🔄 상태 전이도** | 회원 · 경매 · 거래 도메인의 상태 전이 다이어그램 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/상태-전이도) |
+| **📑 상태 전이표** | 전이 조건과 부수 효과(보증금 처리 등)를 표로 고정 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/상태-전이표) |
+| **✅ 행위표** | 경매 상태별로 허용되는 사용자 행위 매트릭스 | [바로가기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/행위표) |
 | **🎨 디자인 시트** | 컬러 · 타이포그래피 · 컴포넌트 스타일 정의서 | [바로가기]() |
 | **🖼️ 와이어프레임** | 전체 화면 구성과 플로우 설계 | [바로가기](https://www.figma.com/design/j9T8YCyN5ILPBUmoHurPlc/Bidwin?node-id=0-1&t=nJuW1NwHBt89iUkY-1) |
 | **📅 일정 관리 (GitHub Project)** | 스프린트 관리 및 Task 분배 | [바로가기](https://github.com/orgs/softeerbootcamp-8th/projects/8) |
