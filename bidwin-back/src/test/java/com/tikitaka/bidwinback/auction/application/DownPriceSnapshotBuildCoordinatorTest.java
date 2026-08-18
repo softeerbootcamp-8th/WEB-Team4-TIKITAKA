@@ -5,7 +5,6 @@ import com.tikitaka.bidwinback.auction.infrastructure.RedisSnapshotUnavailableEx
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -17,7 +16,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,9 +24,6 @@ class DownPriceSnapshotBuildCoordinatorTest {
 
     @Mock
     private SnapshotCaptureService captureService;
-
-    @Mock
-    private LocalSnapshotStore localStore;
 
     @Mock
     private RedisSnapshotStore redisStore;
@@ -55,13 +50,11 @@ class DownPriceSnapshotBuildCoordinatorTest {
         assertThat(second).isSameAs(first);
         assertThat(first).isCompletedWithValue(snapshot);
         verify(captureService).capture(key);
-        InOrder order = inOrder(localStore, redisStore);
-        order.verify(localStore).put(snapshot);
-        order.verify(redisStore).publish(snapshot);
+        verify(redisStore).publish(snapshot);
     }
 
     @Test
-    void Redis_발행이_실패해도_DB에서_만든_로컬_스냅샷으로_완료한다() {
+    void Redis_발행이_실패해도_DB_캡처_결과로_완료한다() {
         Executor directExecutor = Runnable::run;
         DownPriceSnapshotBuildCoordinator coordinator = coordinator(directExecutor);
         SnapshotBuildKey key = SnapshotBuildKey.exact(
@@ -79,13 +72,11 @@ class DownPriceSnapshotBuildCoordinatorTest {
         CompletableFuture<DownPriceSnapshot> result = coordinator.getOrBuild(key);
 
         assertThat(result).isCompletedWithValue(snapshot);
-        verify(localStore).put(snapshot);
     }
 
     private DownPriceSnapshotBuildCoordinator coordinator(Executor executor) {
         return new DownPriceSnapshotBuildCoordinator(
                 captureService,
-                localStore,
                 redisStore,
                 new DownPriceSnapshotMetrics(new SimpleMeterRegistry()),
                 executor

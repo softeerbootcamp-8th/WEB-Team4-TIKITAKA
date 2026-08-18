@@ -51,7 +51,7 @@ public class DownPriceSnapshotScheduler {
                 return;
             }
         } catch (RedisSnapshotUnavailableException exception) {
-            log.warn("Redis 장애로 로컬 하향 가격 스냅샷을 생성합니다.", exception);
+            log.warn("Redis 장애로 DB 하향 가격 스냅샷을 생성합니다.", exception);
         }
 
         buildCoordinator.getOrBuild(key)

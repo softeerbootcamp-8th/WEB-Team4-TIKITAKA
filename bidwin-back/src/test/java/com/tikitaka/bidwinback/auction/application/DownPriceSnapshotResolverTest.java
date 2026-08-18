@@ -35,9 +35,6 @@ class DownPriceSnapshotResolverTest {
     private RedisSnapshotStore redisStore;
 
     @Mock
-    private LocalSnapshotStore localStore;
-
-    @Mock
     private DownPriceSnapshotBuildCoordinator buildCoordinator;
 
     @Mock
@@ -49,11 +46,9 @@ class DownPriceSnapshotResolverTest {
     void setUp() {
         resolver = new DownPriceSnapshotResolver(
                 redisStore,
-                localStore,
                 buildCoordinator,
                 databaseTimeQuery,
                 new DownPriceSnapshotMetrics(new SimpleMeterRegistry()),
-                Duration.ofSeconds(30),
                 Duration.ofMinutes(10)
         );
     }
@@ -123,23 +118,18 @@ class DownPriceSnapshotResolverTest {
     }
 
     @Test
-    void exact_세대는_로컬에서_먼저_조회한다() {
+    void exact_세대는_Redis에서_조회한다() {
         LocalDateTime generationAt = SERVER_TIME.minusMinutes(1);
-        DownPriceSnapshot local = snapshot(generationAt, 1L);
+        SnapshotGenerationPage page = page(generationAt, 1, 1L);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 1, generationAt);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
-        when(localStore.find(generationAt)).thenReturn(Optional.of(local));
+        when(redisStore.findExactPage(generationAt, AuctionSort.PRICE_LOW, 1, 16))
+                .thenReturn(Optional.of(page));
 
         ResolvedSnapshot resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot().generationAt()).isEqualTo(generationAt);
-        assertThat(resolved.snapshot().entries()).containsExactlyElementsOf(local.priceLow());
-        verify(redisStore, never()).findExactPage(
-                generationAt,
-                AuctionSort.PRICE_LOW,
-                1,
-                16
-        );
+        assertThat(resolved.snapshot()).isSameAs(page);
+        verify(buildCoordinator, never()).getOrBuild(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -149,7 +139,6 @@ class DownPriceSnapshotResolverTest {
         AuctionListQuery query = query(AuctionSort.PRICE_HIGH, 5, expiredGeneration);
         SnapshotGenerationPage latest = page(latestGeneration, 30, 30L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
-        when(localStore.find(expiredGeneration)).thenReturn(Optional.empty());
         when(redisStore.findExactPage(expiredGeneration, AuctionSort.PRICE_HIGH, 5, 16))
                 .thenReturn(Optional.empty());
         when(redisStore.findLatestPage(AuctionSort.PRICE_HIGH, 1, 16))
@@ -164,13 +153,12 @@ class DownPriceSnapshotResolverTest {
     }
 
     @Test
-    void Redis_장애중_exact_로컬_miss면_같은_asOf를_DB에서_한번_재생성한다() {
+    void Redis_장애중_exact_세대는_같은_asOf로_DB에서_재생성한다() {
         LocalDateTime generationAt = SERVER_TIME.minusMinutes(1);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 1, generationAt);
         SnapshotBuildKey key = SnapshotBuildKey.exact(generationAt);
         DownPriceSnapshot built = snapshot(generationAt, 1L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
-        when(localStore.find(generationAt)).thenReturn(Optional.empty());
         when(redisStore.findExactPage(generationAt, AuctionSort.PRICE_LOW, 1, 16))
                 .thenThrow(new RedisSnapshotUnavailableException("Redis 장애"));
         when(buildCoordinator.getOrBuild(key))
@@ -180,6 +168,24 @@ class DownPriceSnapshotResolverTest {
 
         assertThat(resolved.snapshot().generationAt()).isEqualTo(generationAt);
         assertThat(resolved.reset()).isFalse();
+        verify(buildCoordinator).getOrBuild(key);
+    }
+
+    @Test
+    void Redis_장애중_최신_세대는_DB에서_생성한다() {
+        AuctionListQuery query = query(AuctionSort.PRICE_LOW, 2, null);
+        SnapshotBuildKey key = SnapshotBuildKey.latestSlot(SERVER_TIME);
+        DownPriceSnapshot built = snapshot(key.generationAt(), 1L);
+        when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
+        when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 2, 16))
+                .thenThrow(new RedisSnapshotUnavailableException("Redis 장애"));
+        when(buildCoordinator.getOrBuild(key))
+                .thenReturn(CompletableFuture.completedFuture(built));
+
+        ResolvedSnapshot resolved = resolver.resolve(query).join();
+
+        assertThat(resolved.snapshot().generationAt()).isEqualTo(key.generationAt());
+        assertThat(resolved.effectivePage()).isEqualTo(2);
         verify(buildCoordinator).getOrBuild(key);
     }
 
@@ -196,7 +202,12 @@ class DownPriceSnapshotResolverTest {
 
         assertThat(resolved.reset()).isTrue();
         assertThat(resolved.effectivePage()).isEqualTo(1);
-        verify(localStore, never()).find(expiredGeneration);
+        verify(redisStore, never()).findExactPage(
+                expiredGeneration,
+                AuctionSort.PRICE_LOW,
+                3,
+                16
+        );
     }
 
     @Test
@@ -212,7 +223,12 @@ class DownPriceSnapshotResolverTest {
 
         assertThat(resolved.reset()).isTrue();
         assertThat(resolved.effectivePage()).isEqualTo(1);
-        verify(localStore, never()).find(invalidGeneration);
+        verify(redisStore, never()).findExactPage(
+                invalidGeneration,
+                AuctionSort.PRICE_LOW,
+                3,
+                16
+        );
         verify(buildCoordinator, never()).getOrBuild(SnapshotBuildKey.exact(invalidGeneration));
     }
 

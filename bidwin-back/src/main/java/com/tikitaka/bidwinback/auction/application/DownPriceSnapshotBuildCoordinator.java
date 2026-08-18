@@ -19,20 +19,17 @@ public class DownPriceSnapshotBuildCoordinator {
             inFlight = new ConcurrentHashMap<>();
 
     private final SnapshotCaptureService captureService;
-    private final LocalSnapshotStore localStore;
     private final RedisSnapshotStore redisStore;
     private final DownPriceSnapshotMetrics metrics;
     private final Executor snapshotBuildExecutor;
 
     public DownPriceSnapshotBuildCoordinator(
             SnapshotCaptureService captureService,
-            LocalSnapshotStore localStore,
             RedisSnapshotStore redisStore,
             DownPriceSnapshotMetrics metrics,
             @Qualifier("snapshotBuildExecutor") Executor snapshotBuildExecutor
     ) {
         this.captureService = captureService;
-        this.localStore = localStore;
         this.redisStore = redisStore;
         this.metrics = metrics;
         this.snapshotBuildExecutor = snapshotBuildExecutor;
@@ -67,12 +64,11 @@ public class DownPriceSnapshotBuildCoordinator {
         boolean success = false;
         try {
             DownPriceSnapshot snapshot = captureService.capture(key);
-            localStore.put(snapshot);
             try {
                 redisStore.publish(snapshot);
             } catch (RedisSnapshotUnavailableException exception) {
                 log.warn(
-                        "Redis에 하향 가격 스냅샷을 발행하지 못해 로컬 세대를 사용합니다. generationAt={}",
+                        "Redis에 하향 가격 스냅샷을 발행하지 못해 DB 캡처 결과로 응답합니다. generationAt={}",
                         snapshot.generationAt(),
                         exception
                 );

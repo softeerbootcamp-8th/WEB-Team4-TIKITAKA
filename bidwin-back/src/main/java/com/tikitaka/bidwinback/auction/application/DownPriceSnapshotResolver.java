@@ -22,29 +22,22 @@ public class DownPriceSnapshotResolver {
     static final int MAX_PAGES = 100;
 
     private final RedisSnapshotStore redisStore;
-    private final LocalSnapshotStore localStore;
     private final DownPriceSnapshotBuildCoordinator buildCoordinator;
     private final AuctionDatabaseTimeQuery databaseTimeQuery;
     private final DownPriceSnapshotMetrics metrics;
-    private final Duration refreshInterval;
     private final Duration retention;
 
     public DownPriceSnapshotResolver(
             RedisSnapshotStore redisStore,
-            LocalSnapshotStore localStore,
             DownPriceSnapshotBuildCoordinator buildCoordinator,
             AuctionDatabaseTimeQuery databaseTimeQuery,
             DownPriceSnapshotMetrics metrics,
-            @Value("${app.auction.down-price-snapshot.refresh-interval}")
-            Duration refreshInterval,
             @Value("${app.auction.down-price-snapshot.retention}") Duration retention
     ) {
         this.redisStore = redisStore;
-        this.localStore = localStore;
         this.buildCoordinator = buildCoordinator;
         this.databaseTimeQuery = databaseTimeQuery;
         this.metrics = metrics;
-        this.refreshInterval = refreshInterval;
         this.retention = retention;
     }
 
@@ -83,18 +76,6 @@ public class DownPriceSnapshotResolver {
                 || Duration.between(generationAt, serverTime).compareTo(retention) > 0) {
             return resetToLatest(query.sort(), serverTime);
         }
-
-        Optional<DownPriceSnapshot> local = localStore.find(generationAt);
-        if (local.isPresent()) {
-            metrics.recordLookup("local", "hit");
-            return CompletableFuture.completedFuture(resolved(
-                    page(local.get(), query.sort(), query.page()),
-                    serverTime,
-                    query.page(),
-                    false
-            ));
-        }
-        metrics.recordLookup("local", "miss");
 
         try {
             Optional<SnapshotGenerationPage> redisPage = redisStore.findExactPage(
@@ -158,18 +139,6 @@ public class DownPriceSnapshotResolver {
             metrics.recordLookup("redis", "miss");
         } catch (RedisSnapshotUnavailableException exception) {
             metrics.recordLookup("redis", "error");
-            Optional<DownPriceSnapshot> local = localStore.findLatest()
-                    .filter(snapshot -> isFresh(snapshot.generationAt(), serverTime));
-            if (local.isPresent()) {
-                metrics.recordLookup("local", "hit");
-                return CompletableFuture.completedFuture(resolved(
-                        page(local.get(), sort, page),
-                        serverTime,
-                        page,
-                        reset
-                ));
-            }
-            metrics.recordLookup("local", "miss");
         }
 
         return build(
@@ -224,10 +193,5 @@ public class DownPriceSnapshotResolver {
                 entries.size(),
                 entries.subList(fromIndex, toIndex)
         );
-    }
-
-    private boolean isFresh(LocalDateTime generationAt, LocalDateTime serverTime) {
-        Duration age = Duration.between(generationAt, serverTime);
-        return !age.isNegative() && age.compareTo(refreshInterval) <= 0;
     }
 }
