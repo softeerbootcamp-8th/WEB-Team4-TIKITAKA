@@ -166,6 +166,65 @@ class AuctionControllerTest {
     }
 
     @Test
+    void 검색어의_앞뒤_공백을_제거해_목록_조회조건으로_전달한다() throws Exception {
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenReturn(new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L));
+
+        mockMvc.perform(get("/api/v1/auctions")
+                        .param("sort", "latest")
+                        .param("keyword", "  의자  "))
+                .andExpect(status().isOk());
+
+        verify(auctionListService).getList(new AuctionListQuery(
+                null,
+                AuctionSort.LATEST,
+                "의자",
+                null,
+                null,
+                1,
+                16,
+                null
+        ));
+    }
+
+    @Test
+    void 한_글자_검색어면_400이고_목록을_조회하지_않는다() throws Exception {
+        mockMvc.perform(get("/api/v1/auctions")
+                        .param("keyword", "가"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("검색어는 2자 이상 30자 이하로 입력해주세요."));
+
+        verifyNoInteractions(auctionListService);
+    }
+
+    @Test
+    void 서른한_글자_검색어면_400이고_목록을_조회하지_않는다() throws Exception {
+        mockMvc.perform(get("/api/v1/auctions")
+                        .param("keyword", "가".repeat(31)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"));
+
+        verifyNoInteractions(auctionListService);
+    }
+
+    @Test
+    void 검색어와_가격순을_함께_요청하면_400이고_목록을_조회하지_않는다() throws Exception {
+        for (String sort : List.of("priceLow", "priceHigh")) {
+            mockMvc.perform(get("/api/v1/auctions")
+                            .param("sort", sort)
+                            .param("keyword", "의자"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                    .andExpect(jsonPath("$.error.message")
+                            .value("검색 중에는 가격순 정렬을 사용할 수 없습니다."));
+        }
+
+        verifyNoInteractions(auctionListService);
+    }
+
+    @Test
     void 지원하지_않는_경매_상태_필터면_400이고_목록을_조회하지_않는다() throws Exception {
         // given
         String unsupportedStatus = "PAUSED";

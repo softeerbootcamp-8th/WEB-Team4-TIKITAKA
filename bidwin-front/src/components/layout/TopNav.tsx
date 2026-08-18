@@ -121,6 +121,7 @@ function TopNav() {
         onChange={(event) => setKeyword(event.target.value)}
         placeholder="경매 검색"
         aria-label="경매 검색어"
+        minLength={2}
         maxLength={30}
         className="h-10 w-full rounded-pill border border-hairline bg-surface-soft pl-9 pr-base text-sm text-ink outline-none focus:border-primary focus:bg-canvas"
       />

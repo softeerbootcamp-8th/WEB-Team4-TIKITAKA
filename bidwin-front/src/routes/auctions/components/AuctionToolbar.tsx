@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FILTER_TEXT } from '../constants'
-import { SORT_OPTIONS } from '../query'
+import { getSortOptions } from '../query'
 import type { SortKey } from '../query'
 import type { AuctionTypeFilter } from '../types'
 
@@ -32,6 +32,7 @@ function AuctionToolbar({
   selectedFilterCount,
   auctionType,
   onChangeAuctionType,
+  hasKeyword,
   sort,
   onChangeSort,
 }: {
@@ -41,10 +42,12 @@ function AuctionToolbar({
   selectedFilterCount: number
   auctionType: AuctionTypeFilter
   onChangeAuctionType: (next: AuctionTypeFilter) => void
+  hasKeyword: boolean
   sort: SortKey
   onChangeSort: (next: SortKey) => void
 }) {
   const PanelIcon = isPanelOpen ? PanelLeftClose : PanelLeftOpen
+  const sortOptions = getSortOptions(hasKeyword)
 
   return (
     <div className="flex flex-wrap items-center gap-xs">
@@ -105,7 +108,7 @@ function AuctionToolbar({
           aria-label={SORT_LABEL}
           className="h-11 cursor-pointer appearance-none rounded-md bg-transparent py-0 pl-sm pr-7 text-sm font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          {SORT_OPTIONS.map((option) => (
+          {sortOptions.map((option) => (
             <option key={option.key} value={option.key}>
               {option.label}
             </option>

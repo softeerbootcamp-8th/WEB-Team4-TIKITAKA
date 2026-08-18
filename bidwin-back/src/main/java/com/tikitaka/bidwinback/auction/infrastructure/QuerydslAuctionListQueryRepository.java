@@ -28,6 +28,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListSearchCo
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceCursor;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.DownAuctionPriceCandidate;
+import com.tikitaka.bidwinback.global.config.AuctionSearchProperties;
 import jakarta.persistence.EntityManager;
 import org.hibernate.jpa.HibernateHints;
 import org.springframework.stereotype.Repository;
@@ -91,25 +92,25 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     private final JPAQueryFactory queryFactory;
     private final BidRepository bidRepository;
+    private final AuctionSearchProperties auctionSearchProperties;
 
     public QuerydslAuctionListQueryRepository(
             EntityManager entityManager,
-            BidRepository bidRepository
+            BidRepository bidRepository,
+            AuctionSearchProperties auctionSearchProperties
     ) {
         this.queryFactory = new JPAQueryFactory(entityManager);
         this.bidRepository = bidRepository;
+        this.auctionSearchProperties = auctionSearchProperties;
     }
 
     @Override
     public long count(AuctionListSearchCondition condition) {
-        Long count = queryFactory
+        JPAQuery<Long> query = queryFactory
                 .select(auction.count())
                 .from(auction)
-                .where(searchPredicate(condition))
-                .setHint(
-                        HibernateHints.HINT_QUERY_DATABASE,
-                        "idx_auction_count"
-                )
+                .where(searchPredicate(condition));
+        Long count = applyIndexHint(query, condition, "idx_auction_count")
                 .fetchOne();
         return count != null ? count : 0L;
     }
@@ -546,7 +547,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long branchLimit,
             ColumnSortSpec sortSpec
     ) {
-        return queryFactory
+        JPAQuery<AuctionColumnSortCandidate> query = queryFactory
                 .select(new QAuctionColumnSortCandidate(
                         auction.id,
                         sortSpec.sortExpression()
@@ -554,12 +555,9 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .from(auction)
                 .where(searchPredicate(condition, statusPredicate))
                 .orderBy(sortSpec.sortOrder(), sortSpec.idOrder())
-                .limit(branchLimit)
-                // completed_at 분기별로 정렬에 맞는 복합 인덱스를 사용한다.
-                .setHint(
-                        HibernateHints.HINT_QUERY_DATABASE,
-                        sortSpec.indexHint()
-                )
+                .limit(branchLimit);
+        // completed_at 분기별로 정렬에 맞는 복합 인덱스를 사용한다.
+        return applyIndexHint(query, condition, sortSpec.indexHint())
                 .fetch();
     }
 
@@ -736,7 +734,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
             long offset,
             long limit
     ) {
-        return queryFactory
+        JPAQuery<AuctionRecommendedCandidate> query = queryFactory
                 .select(new QAuctionRecommendedCandidate(
                         auction.id,
                         auction.bidCount
@@ -745,11 +743,8 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .where(searchPredicate(condition, statusPredicate))
                 .orderBy(auction.bidCount.desc(), auction.id.desc())
                 .offset(offset)
-                .limit(limit)
-                .setHint(
-                        HibernateHints.HINT_QUERY_DATABASE,
-                        "idx_auction_recommended"
-                )
+                .limit(limit);
+        return applyIndexHint(query, condition, "idx_auction_recommended")
                 .fetch();
     }
 
@@ -833,7 +828,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .and(statusPredicate)
                 .and(auctionTypeEq(condition.auctionType()))
                 .and(categoryEq(condition.category()))
-                .and(titleContains(auction.title, condition.keyword()));
+                .and(titleMatches(auction.title, condition));
     }
 
     private Predicate downAuctionSearchPredicate(AuctionListSearchCondition condition) {
@@ -843,7 +838,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 .and(condition.category() != null
                         ? downAuction.category.eq(condition.category())
                         : null)
-                .and(titleContains(downAuction.title, condition.keyword()));
+                .and(titleMatches(downAuction.title, condition));
     }
 
     private Predicate statusPredicate(AuctionListSearchCondition condition) {
@@ -916,7 +911,11 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                 );
     }
 
-    private BooleanExpression titleContains(StringExpression title, String keyword) {
+    private BooleanExpression titleMatches(
+            StringExpression title,
+            AuctionListSearchCondition condition
+    ) {
+        String keyword = condition.keyword();
         // 제목 검색 조건이 없으면 BooleanBuilder.and(null)에서 무시되도록 null을 반환한다.
         if (keyword == null) {
             return null;
@@ -924,7 +923,42 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         // 컬럼 collation이 utf8mb4_0900_ai_ci(대소문자 무시)라 LOWER() 없이도
         // 대소문자 구분 없이 매칭된다.
         String pattern = "%" + AuctionListKeywordEscaper.escape(keyword) + "%";
-        return title.like(pattern, AuctionListKeywordEscaper.LIKE_ESCAPE);
+        BooleanExpression exactContains = title.like(
+                pattern,
+                AuctionListKeywordEscaper.LIKE_ESCAPE
+        );
+        if (!isFullTextSearch(condition)) {
+            return exactContains;
+        }
+
+        NumberExpression<Double> fullTextScore = Expressions.numberTemplate(
+                Double.class,
+                "function('match_against_boolean', {0}, {1})",
+                title,
+                AuctionListFullTextQuery.from(keyword).value()
+        );
+        return fullTextScore.gt(0.0).and(exactContains);
+    }
+
+    private <T> JPAQuery<T> applyIndexHint(
+            JPAQuery<T> query,
+            AuctionListSearchCondition condition,
+            String indexHint
+    ) {
+        if (!isFullTextSearch(condition)) {
+            query.setHint(HibernateHints.HINT_QUERY_DATABASE, indexHint);
+        }
+        return query;
+    }
+
+    private boolean isFullTextSearch(AuctionListSearchCondition condition) {
+        if (!auctionSearchProperties.fulltextEnabled() || condition.keyword() == null) {
+            return false;
+        }
+        return switch (condition.sort()) {
+            case RECOMMENDED, DEADLINE, LATEST -> true;
+            case PRICE_LOW, PRICE_HIGH -> false;
+        };
     }
 
     private BooleanExpression auctionTypeEq(AuctionType auctionType) {

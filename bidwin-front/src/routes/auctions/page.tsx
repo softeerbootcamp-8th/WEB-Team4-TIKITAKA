@@ -28,7 +28,7 @@ import {
   toAuctionListFilters,
 } from './filters'
 import type { FilterSelection } from './filters'
-import { DEFAULT_SORT } from './query'
+import { DEFAULT_SORT, resolveSort } from './query'
 import type { SortKey } from './query'
 import type { AuctionTypeFilter } from './types'
 
@@ -52,12 +52,14 @@ function AuctionListPage() {
   const [categories, setCategories] = useState<AuctionCategoryOption[] | null>(null)
   const [auctionType, setAuctionType] = useState<AuctionTypeFilter>('ALL')
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT)
+  const hasKeyword = keyword.trim().length > 0
+  const effectiveSort = resolveSort(sort, hasKeyword)
   const filterGroups = createFilterGroups(categories)
   const appliedFilters = useMemo(
     () => toAuctionListFilters(selection, isFilterEnabled),
     [isFilterEnabled, selection],
   )
-  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${sort}`
+  const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${effectiveSort}`
   const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
   const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
@@ -103,7 +105,7 @@ function AuctionListPage() {
       auctionType,
       status: appliedFilters.status,
       category: appliedFilters.category,
-      sort,
+      sort: effectiveSort,
       page,
       size: PAGE_SIZE,
       asOf: snapshot,
@@ -122,7 +124,7 @@ function AuctionListPage() {
       active = false
       controller.abort()
     }
-  }, [appliedFilters.category, appliedFilters.status, auctionType, keyword, page, queryKey, retryToken, sort])
+  }, [appliedFilters.category, appliedFilters.status, auctionType, effectiveSort, keyword, page, queryKey, retryToken])
 
   const auctionIds = response?.items.map((auction) => auction.auctionId) ?? []
   useAuctionEvents('list', auctionIds, {
@@ -219,10 +221,11 @@ function AuctionListPage() {
               selectedFilterCount={isFilterEnabled ? countSelectedOptions(selection) : 0}
               auctionType={auctionType}
               onChangeAuctionType={setAuctionType}
-              sort={sort}
+              hasKeyword={hasKeyword}
+              sort={effectiveSort}
               onChangeSort={setSort}
             />
-            {keyword && (
+            {hasKeyword && (
               <h1 className="py-sm text-lg font-bold text-ink">
                 {LIST_TEXT.searchResultTitle(keyword)}
               </h1>

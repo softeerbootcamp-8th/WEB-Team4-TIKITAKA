@@ -85,19 +85,19 @@ public class AuctionController {
 
     @Operation(
             summary = "경매 목록 조회",
-            description = "경매 방식·검색어로 필터링한 목록을 조회합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
+            description = "경매 방식·검색어로 필터링한 목록을 조회합니다. 검색 중에는 추천순·마감임박순·최신순만 지원합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
     )
     @GetMapping
     public ResponseEntity<ApiResponse<AuctionListResponse>> getList(
             @Parameter(description = "경매 방식", example = "UP", schema = @Schema(allowableValues = {"UP", "DOWN"}))
             @RequestParam(required = false) String auctionType,
             @Parameter(
-                    description = "정렬 기준. 기본값은 recommended",
+                    description = "정렬 기준. 기본값은 recommended. 검색어와 priceLow·priceHigh는 함께 사용할 수 없음",
                     example = "recommended",
                     schema = @Schema(allowableValues = {"recommended", "deadline", "latest", "priceLow", "priceHigh"})
             )
             @RequestParam(required = false) String sort,
-            @Parameter(description = "제목 검색어", example = "의자")
+            @Parameter(description = "제목 검색어. 앞뒤 공백 제거 후 2~30자", example = "의자")
             @RequestParam(required = false) String keyword,
             @Parameter(hidden = true)
             @RequestParam(required = false) String status,
@@ -113,7 +113,7 @@ public class AuctionController {
         AuctionListQuery query = new AuctionListQuery(
                 parseAuctionType(auctionType),
                 AuctionSort.from(sort),
-                blankToNull(keyword),
+                keyword,
                 parseStatus(status),
                 parseCategory(category),
                 page,
@@ -156,10 +156,6 @@ public class AuctionController {
         } catch (IllegalArgumentException exception) {
             throw new AuctionException(ErrorCode.INVALID_INPUT_VALUE, "지원하지 않는 경매 타입입니다.");
         }
-    }
-
-    private String blankToNull(String value) {
-        return (value == null || value.isBlank()) ? null : value;
     }
 
     private LocalDateTime toLocalDateTime(long epochMilli) {
