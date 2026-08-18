@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { FIRST_PAGE, PAGE_WINDOW_SIZE, PAGINATION_TEXT } from '../constants'
+import { FIRST_PAGE, PAGINATION_TEXT } from '../constants'
 import { getPageWindow } from '../query'
 
 /*
@@ -11,19 +11,23 @@ function Pagination({
   currentPage,
   totalPages,
   onChange,
+  maxVisiblePage = totalPages,
+  canGoNext = currentPage < totalPages,
 }: {
   currentPage: number
   totalPages: number
   onChange: (page: number) => void
+  maxVisiblePage?: number
+  canGoNext?: boolean
 }) {
-  const pages = getPageWindow(currentPage, totalPages)
+  const pages = getPageWindow(currentPage, maxVisiblePage)
 
   return (
     <nav aria-label={PAGINATION_TEXT.navLabel} className="flex items-center justify-center gap-1">
       <ArrowButton
         label={PAGINATION_TEXT.prev}
         disabled={currentPage <= FIRST_PAGE}
-        onClick={() => onChange(Math.max(FIRST_PAGE, currentPage - PAGE_WINDOW_SIZE))}
+        onClick={() => onChange(Math.max(FIRST_PAGE, currentPage - 1))}
       >
         <ChevronLeft size={16} />
       </ArrowButton>
@@ -39,8 +43,8 @@ function Pagination({
 
       <ArrowButton
         label={PAGINATION_TEXT.next}
-        disabled={currentPage >= totalPages}
-        onClick={() => onChange(Math.min(totalPages, currentPage + PAGE_WINDOW_SIZE))}
+        disabled={!canGoNext}
+        onClick={() => onChange(Math.min(totalPages, currentPage + 1))}
       >
         <ChevronRight size={16} />
       </ArrowButton>

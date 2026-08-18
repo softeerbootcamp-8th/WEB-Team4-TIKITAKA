@@ -1360,7 +1360,7 @@ function PriceDropTimeline({
               className="flex items-center justify-between px-xs py-sm text-sm"
             >
               <span className="text-muted">
-                {formatTimeOfDay(new Date(entry.droppedAt - serverOffsetMs))}
+                {formatTimeOfDay(new Date(entry.droppedAt), 'Asia/Seoul')}
               </span>
               <span className="flex items-center gap-1 font-semibold text-down">
                 <TrendingDown size={14} />

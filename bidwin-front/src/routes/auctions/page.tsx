@@ -36,6 +36,13 @@ const CONTENT_HEIGHT_CLASS = 'h-[calc(100dvh-4rem)]'
 const FILTER_PANEL_WIDTH_CLASS = 'w-[190px]'
 const SKELETON_KEYS = Array.from({ length: PAGE_SIZE }, (_, index) => index)
 
+interface AuctionPagination {
+  queryKey: string
+  page: number
+  maxVisitedPage: number
+  lastPage: number | null
+}
+
 function AuctionListPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -58,8 +65,16 @@ function AuctionListPage() {
     [isFilterEnabled, selection],
   )
   const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${sort}`
-  const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
-  const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
+  const [pagination, setPagination] = useState<AuctionPagination>({
+    queryKey,
+    page: FIRST_PAGE,
+    maxVisitedPage: FIRST_PAGE,
+    lastPage: null,
+  })
+  const activePagination = pagination.queryKey === queryKey
+    ? pagination
+    : { queryKey, page: FIRST_PAGE, maxVisitedPage: FIRST_PAGE, lastPage: null }
+  const { page, maxVisitedPage, lastPage } = activePagination
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -109,12 +124,41 @@ function AuctionListPage() {
       asOf: snapshot,
     }, controller.signal).then((result) => {
       if (!active) return
-      setIsLoading(false)
       if (!result.ok) {
+        setIsLoading(false)
         setError(result.message)
         return
       }
+
+      if (result.data.items.length === 0 && result.data.page > FIRST_PAGE) {
+        const previousPage = result.data.page - 1
+        setPagination((current) => ({
+          queryKey,
+          page: previousPage,
+          maxVisitedPage: current.queryKey === queryKey
+            ? Math.min(current.maxVisitedPage, previousPage)
+            : previousPage,
+          lastPage: previousPage,
+        }))
+        return
+      }
+
+      setIsLoading(false)
       snapshotRef.current = { queryKey, serverTime: result.data.asOf }
+      setPagination((current) => {
+        const isSameQuery = current.queryKey === queryKey
+        return {
+          queryKey,
+          page: result.data.page,
+          maxVisitedPage: Math.max(
+            isSameQuery ? current.maxVisitedPage : FIRST_PAGE,
+            result.data.page,
+          ),
+          lastPage: result.data.items.length < PAGE_SIZE
+            ? result.data.page
+            : isSameQuery ? current.lastPage : null,
+        }
+      })
       setResponse(result.data)
     })
 
@@ -149,7 +193,11 @@ function AuctionListPage() {
   })
 
   function changePage(nextPage: number) {
-    setPagination({ queryKey, page: nextPage })
+    setPagination((current) => ({
+      ...(current.queryKey === queryKey ? current : activePagination),
+      queryKey,
+      page: nextPage,
+    }))
     listRef.current?.scrollTo({ top: 0 })
   }
 
@@ -184,9 +232,6 @@ function AuctionListPage() {
   }
 
   const items = response?.items ?? []
-  const displayedTotalPages = response && items.length === 0
-    ? response.page
-    : response?.totalPages
   const filterPanel = (
     <FilterPanel
       groups={filterGroups}
@@ -275,12 +320,14 @@ function AuctionListPage() {
             )}
           </div>
 
-          {response && displayedTotalPages && (
+          {response && (
             <div className="shrink-0 border-t border-hairline-soft pt-base">
               <Pagination
                 currentPage={response.page}
-                totalPages={displayedTotalPages}
+                totalPages={response.totalPages}
                 onChange={changePage}
+                maxVisiblePage={maxVisitedPage}
+                canGoNext={response.page < (lastPage ?? response.totalPages)}
               />
             </div>
           )}
