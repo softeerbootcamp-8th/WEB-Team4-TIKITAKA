@@ -387,6 +387,24 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
         return findRows(metrics);
     }
 
+    @Override
+    public List<AuctionListRow> findDownRowsByPriceSnapshots(
+            List<AuctionPriceSnapshot> snapshots,
+            LocalDateTime asOf
+    ) {
+        if (snapshots.isEmpty()) {
+            return List.of();
+        }
+        List<AuctionListMetrics> metrics = snapshots.stream()
+                .map(snapshot -> new AuctionListMetrics(
+                        snapshot.auctionId(),
+                        snapshot.displayPrice(),
+                        0L
+                ))
+                .toList();
+        return findRows(metrics);
+    }
+
     private List<AuctionListRow> findRows(List<AuctionListMetrics> metrics) {
         if (metrics.isEmpty()) {
             return List.of();
