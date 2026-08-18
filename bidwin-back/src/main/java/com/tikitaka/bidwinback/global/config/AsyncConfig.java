@@ -58,6 +58,19 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
 
+    @Bean(name = "pageAssemblyExecutor")
+    public Executor pageAssemblyExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("down-price-page-assembly-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        return executor;
+    }
+
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (exception, method, parameters) ->

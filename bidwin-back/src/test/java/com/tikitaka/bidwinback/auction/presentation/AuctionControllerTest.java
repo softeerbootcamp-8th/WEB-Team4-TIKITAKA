@@ -23,22 +23,28 @@ import com.tikitaka.bidwinback.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -141,18 +147,43 @@ class AuctionControllerTest {
     }
 
     @Test
+    void 비동기_스냅샷_생성이_실패해도_내부_정보를_숨긴_500을_응답한다() throws Exception {
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new IllegalStateException("redis://internal-cache")
+                ));
+
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/auctions")
+                        .param("auctionType", "DOWN")
+                        .param("sort", "priceLow"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(asyncResult))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("COMMON_500_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("서버 내부 오류가 발생했습니다."));
+    }
+
+    @Test
     void 목록_필터를_요청하면_상태와_카테고리를_조회_조건으로_전달한다() throws Exception {
         // given
         when(auctionListService.getList(any(AuctionListQuery.class)))
-                .thenReturn(new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L));
+                .thenReturn(CompletableFuture.completedFuture(
+                        new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L)
+                ));
 
         // when
-        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
-                .param("status", "ACTIVE")
-                .param("category", "ELECTRONICS"));
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/auctions")
+                        .param("status", "ACTIVE")
+                        .param("category", "ELECTRONICS"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
 
         // then
-        result.andExpect(status().isOk());
+        mockMvc.perform(asyncDispatch(asyncResult))
+                .andExpect(status().isOk());
         verify(auctionListService).getList(new AuctionListQuery(
                 null,
                 AuctionSort.RECOMMENDED,
@@ -160,9 +191,21 @@ class AuctionControllerTest {
                 AuctionListStatusFilter.ACTIVE,
                 AuctionCategory.ELECTRONICS,
                 1,
-                16,
                 null
         ));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {15, 17, 100})
+    void 페이지_크기가_16이_아니면_400이고_목록을_조회하지_않는다(int size) throws Exception {
+        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
+                .param("size", Integer.toString(size)));
+
+        result
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_400_1"))
+                .andExpect(jsonPath("$.error.message").value("페이지 크기는 16이어야 합니다."));
+        verifyNoInteractions(auctionListService);
     }
 
     @Test

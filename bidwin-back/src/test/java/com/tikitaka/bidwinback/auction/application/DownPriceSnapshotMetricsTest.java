@@ -76,4 +76,22 @@ class DownPriceSnapshotMetricsTest {
         assertThat(registry.get("snapshot.redis.evictions").counter().count())
                 .isEqualTo(2D);
     }
+
+    @Test
+    void 조회_source와_만료_reset을_구분해_기록한다() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        DownPriceSnapshotMetrics metrics = new DownPriceSnapshotMetrics(registry);
+
+        metrics.recordLookup("redis", "hit");
+        metrics.recordReset("expired");
+
+        assertThat(registry.get("snapshot.lookup")
+                .tags("source", "redis", "result", "hit")
+                .counter()
+                .count()).isEqualTo(1D);
+        assertThat(registry.get("snapshot.reset")
+                .tag("reason", "expired")
+                .counter()
+                .count()).isEqualTo(1D);
+    }
 }

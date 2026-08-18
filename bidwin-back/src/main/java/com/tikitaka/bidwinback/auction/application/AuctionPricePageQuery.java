@@ -31,7 +31,7 @@ public class AuctionPricePageQuery {
     ) {
         int normalizedPage = Math.min(
                 Math.max(1, page),
-                AuctionListService.MAX_LIST_PAGES
+                AuctionListPagePolicy.MAX_PAGES
         );
         int topKSize = topKSize(normalizedPage, size, candidateCountLimit);
         if (topKSize == 0) {

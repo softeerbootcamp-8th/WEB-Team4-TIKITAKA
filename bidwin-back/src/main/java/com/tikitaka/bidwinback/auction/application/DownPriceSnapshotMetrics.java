@@ -19,6 +19,7 @@ public class DownPriceSnapshotMetrics {
     private final MeterRegistry meterRegistry;
     private final Timer buildSuccess;
     private final Timer buildFailure;
+    private final Timer pageAssembly;
     private final io.micrometer.core.instrument.Counter redisEvictions;
     private final Clock clock;
     private final long applicationStartedAtMillis;
@@ -41,6 +42,8 @@ public class DownPriceSnapshotMetrics {
         latestGenerationEpochMillis = new AtomicLong(NO_GENERATION);
         buildSuccess = timer("snapshot.build.duration", "result", "success");
         buildFailure = timer("snapshot.build.duration", "result", "failure");
+        pageAssembly = Timer.builder("snapshot.page.assemble.duration")
+                .register(meterRegistry);
         redisEvictions = meterRegistry.counter("snapshot.redis.evictions");
         Gauge.builder("snapshot.build.inflight", buildsInFlight, AtomicInteger::get)
                 .register(meterRegistry);
@@ -61,6 +64,14 @@ public class DownPriceSnapshotMetrics {
                 )
                 .baseUnit("seconds")
                 .register(meterRegistry);
+    }
+
+    public void recordLookup(String source, String result) {
+        meterRegistry.counter(
+                "snapshot.lookup",
+                "source", source,
+                "result", result
+        ).increment();
     }
 
     public void buildStarted() {
@@ -98,6 +109,10 @@ public class DownPriceSnapshotMetrics {
         latestGenerationEpochMillis.accumulateAndGet(generationEpochMillis, Math::max);
     }
 
+    public void recordReset(String reason) {
+        meterRegistry.counter("snapshot.reset", "reason", reason).increment();
+    }
+
     public void setRedisCircuitOpen(boolean open) {
         redisCircuitOpen.set(open ? 1 : 0);
     }
@@ -112,6 +127,14 @@ public class DownPriceSnapshotMetrics {
         }
         long delta = serverTotal >= previous ? serverTotal - previous : serverTotal;
         redisEvictions.increment(delta);
+    }
+
+    public Timer.Sample startPageAssembly() {
+        return Timer.start(meterRegistry);
+    }
+
+    public void finishPageAssembly(Timer.Sample sample) {
+        sample.stop(pageAssembly);
     }
 
     private Timer timer(String name, String tagName, String tagValue) {

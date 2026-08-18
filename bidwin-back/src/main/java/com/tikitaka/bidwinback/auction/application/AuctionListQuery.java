@@ -19,7 +19,6 @@ public record AuctionListQuery(
         AuctionListStatusFilter status,
         AuctionCategory category,
         int page,
-        int size,
         LocalDateTime asOf
 ) {
 }
