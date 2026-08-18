@@ -36,6 +36,13 @@ const CONTENT_HEIGHT_CLASS = 'h-[calc(100dvh-4rem)]'
 const FILTER_PANEL_WIDTH_CLASS = 'w-[190px]'
 const SKELETON_KEYS = Array.from({ length: PAGE_SIZE }, (_, index) => index)
 
+interface AuctionPagination {
+  queryKey: string
+  page: number
+  maxVisitedPage: number
+  lastPage: number | null
+}
+
 function AuctionListPage() {
   const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -58,8 +65,16 @@ function AuctionListPage() {
     [isFilterEnabled, selection],
   )
   const queryKey = `${keyword}\u0000${auctionType}\u0000${appliedFilters.status ?? ''}\u0000${appliedFilters.category ?? ''}\u0000${sort}`
-  const [pagination, setPagination] = useState({ queryKey, page: FIRST_PAGE })
-  const page = pagination.queryKey === queryKey ? pagination.page : FIRST_PAGE
+  const [pagination, setPagination] = useState<AuctionPagination>({
+    queryKey,
+    page: FIRST_PAGE,
+    maxVisitedPage: FIRST_PAGE,
+    lastPage: null,
+  })
+  const activePagination = pagination.queryKey === queryKey
+    ? pagination
+    : { queryKey, page: FIRST_PAGE, maxVisitedPage: FIRST_PAGE, lastPage: null }
+  const { page, maxVisitedPage, lastPage } = activePagination
   const [response, setResponse] = useState<AuctionListResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -123,22 +138,54 @@ function AuctionListPage() {
       asOf: snapshotAsOf,
     }, controller.signal).then((result) => {
       if (!active) return
-      setIsLoading(false)
       if (!result.ok) {
+        setIsLoading(false)
         setError(result.message)
         return
       }
       snapshotGenerationRef.current = { queryKey, asOf: result.data.asOf }
       if (result.data.snapshotReset) {
-        if (page !== FIRST_PAGE) {
+        if (page !== result.data.page) {
           fulfilledResetPageRef.current = {
             queryKey,
-            page: FIRST_PAGE,
+            page: result.data.page,
             retryToken,
           }
         }
-        setPagination({ queryKey, page: FIRST_PAGE })
+        setPagination({
+          queryKey,
+          page: result.data.page,
+          maxVisitedPage: result.data.page,
+          lastPage: result.data.items.length < PAGE_SIZE ? result.data.page : null,
+        })
+      } else if (result.data.items.length === 0 && result.data.page > FIRST_PAGE) {
+        const previousPage = result.data.page - 1
+        setPagination((current) => ({
+          queryKey,
+          page: previousPage,
+          maxVisitedPage: current.queryKey === queryKey
+            ? Math.min(current.maxVisitedPage, previousPage)
+            : previousPage,
+          lastPage: previousPage,
+        }))
+        return
+      } else {
+        setPagination((current) => {
+          const isSameQuery = current.queryKey === queryKey
+          return {
+            queryKey,
+            page: result.data.page,
+            maxVisitedPage: Math.max(
+              isSameQuery ? current.maxVisitedPage : FIRST_PAGE,
+              result.data.page,
+            ),
+            lastPage: result.data.items.length < PAGE_SIZE
+              ? result.data.page
+              : isSameQuery ? current.lastPage : null,
+          }
+        })
       }
+      setIsLoading(false)
       setResponse(result.data)
     })
 
@@ -174,7 +221,11 @@ function AuctionListPage() {
 
   function changePage(nextPage: number) {
     fulfilledResetPageRef.current = null
-    setPagination({ queryKey, page: nextPage })
+    setPagination((current) => ({
+      ...(current.queryKey === queryKey ? current : activePagination),
+      queryKey,
+      page: nextPage,
+    }))
     listRef.current?.scrollTo({ top: 0 })
   }
 
@@ -297,12 +348,14 @@ function AuctionListPage() {
             )}
           </div>
 
-          {response && items.length > 0 && (
+          {response && (
             <div className="shrink-0 border-t border-hairline-soft pt-base">
               <Pagination
                 currentPage={response.page}
                 totalPages={response.totalPages}
                 onChange={changePage}
+                maxVisiblePage={maxVisitedPage}
+                canGoNext={response.page < (lastPage ?? response.totalPages)}
               />
             </div>
           )}

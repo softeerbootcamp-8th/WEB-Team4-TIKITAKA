@@ -67,5 +67,4 @@ export const PAGINATION_TEXT = {
   prev: '이전 페이지',
   next: '다음 페이지',
   pageAriaLabel: (page: number) => `${page}페이지`,
-  ellipsis: '…',
 } as const

@@ -34,7 +34,7 @@ import type { VerifiedIdentity } from './PassVerificationModal'
 
 const TEXT = {
   title: '회원가입',
-  subtitle: '급처마켓 계정을 만들고 경매에 참여해보세요.',
+  subtitle: '비드윈 계정을 만들고 경매에 참여해보세요.',
   emailLabel: '이메일',
   emailPlaceholder: '이메일 주소를 입력하세요',
   availabilityCheck: '중복 확인',

@@ -11,31 +11,26 @@ function Pagination({
   currentPage,
   totalPages,
   onChange,
+  maxVisiblePage = totalPages,
+  canGoNext = currentPage < totalPages,
 }: {
   currentPage: number
   totalPages: number
   onChange: (page: number) => void
+  maxVisiblePage?: number
+  canGoNext?: boolean
 }) {
-  const pages = getPageWindow(currentPage, totalPages)
-  const hasLeadingGap = pages[0] > FIRST_PAGE
-  const hasTrailingGap = pages[pages.length - 1] < totalPages
+  const pages = getPageWindow(currentPage, maxVisiblePage)
 
   return (
     <nav aria-label={PAGINATION_TEXT.navLabel} className="flex items-center justify-center gap-1">
       <ArrowButton
         label={PAGINATION_TEXT.prev}
         disabled={currentPage <= FIRST_PAGE}
-        onClick={() => onChange(currentPage - 1)}
+        onClick={() => onChange(Math.max(FIRST_PAGE, currentPage - 1))}
       >
         <ChevronLeft size={16} />
       </ArrowButton>
-
-      {hasLeadingGap && (
-        <>
-          <PageButton page={FIRST_PAGE} isActive={false} onClick={onChange} />
-          <span className="px-1 text-sm text-muted-soft">{PAGINATION_TEXT.ellipsis}</span>
-        </>
-      )}
 
       {pages.map((page) => (
         <PageButton
@@ -46,17 +41,10 @@ function Pagination({
         />
       ))}
 
-      {hasTrailingGap && (
-        <>
-          <span className="px-1 text-sm text-muted-soft">{PAGINATION_TEXT.ellipsis}</span>
-          <PageButton page={totalPages} isActive={false} onClick={onChange} />
-        </>
-      )}
-
       <ArrowButton
         label={PAGINATION_TEXT.next}
-        disabled={currentPage >= totalPages}
-        onClick={() => onChange(currentPage + 1)}
+        disabled={!canGoNext}
+        onClick={() => onChange(Math.min(totalPages, currentPage + 1))}
       >
         <ChevronRight size={16} />
       </ArrowButton>
