@@ -42,6 +42,8 @@ export interface AuctionListResponse {
   page: number
   totalPages: number
   totalCount: number
+  snapshotReset: boolean
+  snapshotResetReason: 'GENERATION_EXPIRED' | null
 }
 
 export interface AuctionSeller {

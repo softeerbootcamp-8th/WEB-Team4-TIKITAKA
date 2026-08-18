@@ -64,7 +64,8 @@ function AuctionListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
+  const snapshotRef = useRef<{ queryKey: string; asOf: number } | null>(null)
+  const skipNextRequestRef = useRef<{ queryKey: string; page: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const { serverOffsetMs } = useServerClock(response?.serverTime)
 
@@ -89,10 +90,18 @@ function AuctionListPage() {
   }, [showToast])
 
   useEffect(() => {
+    const skipNextRequest = skipNextRequestRef.current
+    if (skipNextRequest) {
+      skipNextRequestRef.current = null
+      if (skipNextRequest.queryKey === queryKey && skipNextRequest.page === page) {
+        return
+      }
+    }
+
     const controller = new AbortController()
     let active = true
     const snapshot = snapshotRef.current?.queryKey === queryKey
-      ? snapshotRef.current.serverTime
+      ? snapshotRef.current.asOf
       : undefined
 
     setIsLoading(true)
@@ -114,7 +123,13 @@ function AuctionListPage() {
         setError(result.message)
         return
       }
-      snapshotRef.current = { queryKey, serverTime: result.data.asOf }
+      snapshotRef.current = { queryKey, asOf: result.data.asOf }
+      if (result.data.snapshotReset) {
+        if (page !== FIRST_PAGE) {
+          skipNextRequestRef.current = { queryKey, page: FIRST_PAGE }
+        }
+        setPagination({ queryKey, page: FIRST_PAGE })
+      }
       setResponse(result.data)
     })
 
@@ -149,6 +164,7 @@ function AuctionListPage() {
   })
 
   function changePage(nextPage: number) {
+    skipNextRequestRef.current = null
     setPagination({ queryKey, page: nextPage })
     listRef.current?.scrollTo({ top: 0 })
   }
