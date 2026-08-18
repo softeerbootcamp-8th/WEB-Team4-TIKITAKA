@@ -27,18 +27,22 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -144,15 +148,20 @@ class AuctionControllerTest {
     void 목록_필터를_요청하면_상태와_카테고리를_조회_조건으로_전달한다() throws Exception {
         // given
         when(auctionListService.getList(any(AuctionListQuery.class)))
-                .thenReturn(new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L));
+                .thenReturn(CompletableFuture.completedFuture(
+                        new AuctionListResponse(List.of(), 0L, 0L, 1, 1, 0L)
+                ));
 
         // when
-        ResultActions result = mockMvc.perform(get("/api/v1/auctions")
-                .param("status", "ACTIVE")
-                .param("category", "ELECTRONICS"));
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/auctions")
+                        .param("status", "ACTIVE")
+                        .param("category", "ELECTRONICS"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
 
         // then
-        result.andExpect(status().isOk());
+        mockMvc.perform(asyncDispatch(asyncResult))
+                .andExpect(status().isOk());
         verify(auctionListService).getList(new AuctionListQuery(
                 null,
                 AuctionSort.RECOMMENDED,

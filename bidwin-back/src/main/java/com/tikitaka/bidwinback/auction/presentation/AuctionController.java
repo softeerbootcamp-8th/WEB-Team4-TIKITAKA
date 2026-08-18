@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/v1/auctions")
@@ -88,7 +89,7 @@ public class AuctionController {
             description = "경매 방식·검색어로 필터링한 목록을 조회합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
     )
     @GetMapping
-    public ResponseEntity<ApiResponse<AuctionListResponse>> getList(
+    public CompletableFuture<ResponseEntity<ApiResponse<AuctionListResponse>>> getList(
             @Parameter(description = "경매 방식", example = "UP", schema = @Schema(allowableValues = {"UP", "DOWN"}))
             @RequestParam(required = false) String auctionType,
             @Parameter(
@@ -121,8 +122,8 @@ public class AuctionController {
                 asOf != null ? toLocalDateTime(asOf) : null
         );
 
-        AuctionListResponse response = auctionListService.getList(query);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return auctionListService.getList(query)
+                .thenApply(response -> ResponseEntity.ok(ApiResponse.success(response)));
     }
 
     private AuctionListStatusFilter parseStatus(String rawStatus) {
