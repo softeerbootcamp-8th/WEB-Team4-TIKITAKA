@@ -38,23 +38,7 @@ public class AuctionPricePageQuery {
             return List.of();
         }
 
-        Comparator<AuctionPriceSnapshot> resultOrder = resultOrder(condition.sort());
-        PriorityQueue<AuctionPriceSnapshot> topK = new PriorityQueue<>(
-                Math.min(topKSize, CANDIDATE_BATCH_SIZE),
-                resultOrder.reversed()
-        );
-
-        if (condition.auctionType() != AuctionType.DOWN) {
-            auctionListQueryRepository.findUpPriceSnapshots(condition, topKSize)
-                    .forEach(snapshot -> offer(topK, snapshot, topKSize, resultOrder));
-        }
-        if (condition.auctionType() != AuctionType.UP) {
-            findDownTopK(condition, topKSize, resultOrder, topK);
-        }
-
-        List<AuctionPriceSnapshot> orderedTopK = topK.stream()
-                .sorted(resultOrder)
-                .toList();
+        List<AuctionPriceSnapshot> orderedTopK = findSnapshots(condition, topKSize);
         int fromIndex = (int) Math.min(
                 (long) (normalizedPage - 1) * size,
                 orderedTopK.size()
@@ -64,6 +48,33 @@ public class AuctionPricePageQuery {
                 orderedTopK.subList(fromIndex, toIndex),
                 condition.asOf()
         );
+    }
+
+    List<AuctionPriceSnapshot> findSnapshots(
+            AuctionListSearchCondition condition,
+            int limit
+    ) {
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        Comparator<AuctionPriceSnapshot> resultOrder = resultOrder(condition.sort());
+        PriorityQueue<AuctionPriceSnapshot> topK = new PriorityQueue<>(
+                Math.min(limit, CANDIDATE_BATCH_SIZE),
+                resultOrder.reversed()
+        );
+
+        if (condition.auctionType() != AuctionType.DOWN) {
+            auctionListQueryRepository.findUpPriceSnapshots(condition, limit)
+                    .forEach(snapshot -> offer(topK, snapshot, limit, resultOrder));
+        }
+        if (condition.auctionType() != AuctionType.UP) {
+            findDownTopK(condition, limit, resultOrder, topK);
+        }
+
+        return topK.stream()
+                .sorted(resultOrder)
+                .toList();
     }
 
     private void findDownTopK(
