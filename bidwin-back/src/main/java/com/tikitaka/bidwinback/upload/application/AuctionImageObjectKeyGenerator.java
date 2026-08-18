@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.upload.application;
 
-import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.enums.AuctionImageFileType;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;

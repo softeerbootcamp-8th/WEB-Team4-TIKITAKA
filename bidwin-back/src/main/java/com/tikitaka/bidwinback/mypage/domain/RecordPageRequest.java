@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.mypage.domain;
 
+import com.tikitaka.bidwinback.mypage.domain.enums.RecordSort;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;

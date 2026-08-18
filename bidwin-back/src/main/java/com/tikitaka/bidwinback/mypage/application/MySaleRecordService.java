@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.mypage.application;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
@@ -13,8 +13,8 @@ import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
 import com.tikitaka.bidwinback.global.common.PageResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
 import com.tikitaka.bidwinback.mypage.domain.RecordPageRequest;
-import com.tikitaka.bidwinback.mypage.domain.RecordSort;
-import com.tikitaka.bidwinback.mypage.domain.SellingStatusFilter;
+import com.tikitaka.bidwinback.mypage.domain.enums.RecordSort;
+import com.tikitaka.bidwinback.mypage.domain.enums.SellingStatusFilter;
 import com.tikitaka.bidwinback.mypage.presentation.dto.response.MySaleRecordResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.TradeQueryService;
 import com.tikitaka.bidwinback.auction.application.live.TradeLiveState;
 import com.tikitaka.bidwinback.auction.application.live.TradeLiveStateService;
+import com.tikitaka.bidwinback.auction.application.trade.TradeQueryService;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auction.domain.exception.TradeException;
 import com.tikitaka.bidwinback.auction.infrastructure.sse.TradeSseMessages;

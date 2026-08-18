@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.TradeQueryService;
+import com.tikitaka.bidwinback.auction.application.trade.TradeQueryService;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.TradeDetailResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;
 import com.tikitaka.bidwinback.global.auth.Login;

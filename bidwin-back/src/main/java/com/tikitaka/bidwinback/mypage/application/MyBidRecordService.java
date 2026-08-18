@@ -10,7 +10,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionBidSummary;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.MyBidAggregate;
 import com.tikitaka.bidwinback.global.common.PageResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
-import com.tikitaka.bidwinback.mypage.domain.RecordSort;
+import com.tikitaka.bidwinback.mypage.domain.enums.RecordSort;
 import com.tikitaka.bidwinback.mypage.domain.exception.MyPageException;
 import com.tikitaka.bidwinback.mypage.presentation.dto.response.MyBidRecordResponse;
 import lombok.RequiredArgsConstructor;

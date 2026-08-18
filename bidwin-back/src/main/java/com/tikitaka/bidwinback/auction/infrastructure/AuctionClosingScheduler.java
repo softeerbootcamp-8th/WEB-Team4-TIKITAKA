@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
-import com.tikitaka.bidwinback.auction.application.AuctionClosingBatchProcessor;
+import com.tikitaka.bidwinback.auction.application.closing.AuctionClosingBatchProcessor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

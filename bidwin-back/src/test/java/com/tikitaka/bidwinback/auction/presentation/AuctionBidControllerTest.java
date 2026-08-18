@@ -1,10 +1,10 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
-import com.tikitaka.bidwinback.auction.application.BidResult;
-import com.tikitaka.bidwinback.auction.application.BidService;
-import com.tikitaka.bidwinback.auction.domain.enums.BidType;
+import com.tikitaka.bidwinback.auction.application.bid.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.bid.BidResult;
+import com.tikitaka.bidwinback.auction.application.bid.BidService;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
+import com.tikitaka.bidwinback.auction.domain.enums.BidType;
 import com.tikitaka.bidwinback.auction.domain.exception.BidException;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
