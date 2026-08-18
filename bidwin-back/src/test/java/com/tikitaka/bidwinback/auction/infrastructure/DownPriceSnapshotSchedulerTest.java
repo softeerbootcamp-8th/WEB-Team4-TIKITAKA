@@ -5,6 +5,7 @@ import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildCoordinator;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
 import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,5 +64,6 @@ class DownPriceSnapshotSchedulerTest {
 
         verify(buildCoordinator, never()).getOrBuild(key);
         verify(redisStore).refreshEvictionMetric();
+        verify(redisStore).findLatestPage(AuctionSort.PRICE_LOW, 1, 1);
     }
 }

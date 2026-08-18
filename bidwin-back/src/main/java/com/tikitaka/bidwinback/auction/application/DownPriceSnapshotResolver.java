@@ -78,7 +78,8 @@ public class DownPriceSnapshotResolver {
             LocalDateTime serverTime
     ) {
         LocalDateTime generationAt = query.asOf();
-        if (generationAt.isAfter(serverTime)
+        if (!generationAt.equals(SnapshotBuildKey.latestSlot(generationAt).generationAt())
+                || generationAt.isAfter(serverTime)
                 || Duration.between(generationAt, serverTime).compareTo(retention) > 0) {
             return resetToLatest(query.sort(), serverTime);
         }

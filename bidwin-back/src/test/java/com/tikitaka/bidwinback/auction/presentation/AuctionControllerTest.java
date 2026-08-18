@@ -145,6 +145,26 @@ class AuctionControllerTest {
     }
 
     @Test
+    void 비동기_스냅샷_생성이_실패해도_내부_정보를_숨긴_500을_응답한다() throws Exception {
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new IllegalStateException("redis://internal-cache")
+                ));
+
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/auctions")
+                        .param("auctionType", "DOWN")
+                        .param("sort", "priceLow"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(asyncResult))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("COMMON_500_1"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("서버 내부 오류가 발생했습니다."));
+    }
+
+    @Test
     void 목록_필터를_요청하면_상태와_카테고리를_조회_조건으로_전달한다() throws Exception {
         // given
         when(auctionListService.getList(any(AuctionListQuery.class)))

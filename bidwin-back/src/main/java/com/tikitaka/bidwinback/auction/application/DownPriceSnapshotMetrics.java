@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,20 +13,31 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class DownPriceSnapshotMetrics {
 
+    private static final long NO_GENERATION = Long.MIN_VALUE;
+
     private final MeterRegistry meterRegistry;
     private final Timer buildSuccess;
     private final Timer buildFailure;
     private final Timer pageAssembly;
     private final io.micrometer.core.instrument.Counter redisEvictions;
+    private final Clock clock;
+    private final long applicationStartedAtMillis;
     private final AtomicInteger buildsInFlight = new AtomicInteger();
     private final AtomicInteger waiters = new AtomicInteger();
     private final AtomicInteger consecutiveBuildFailures = new AtomicInteger();
     private final AtomicInteger redisCircuitOpen = new AtomicInteger();
-    private final AtomicLong generationAgeMillis = new AtomicLong();
+    private final AtomicLong latestGenerationEpochMillis;
     private final AtomicLong lastRedisEvictions = new AtomicLong(-1L);
 
     public DownPriceSnapshotMetrics(MeterRegistry meterRegistry) {
+        this(meterRegistry, Clock.systemUTC());
+    }
+
+    DownPriceSnapshotMetrics(MeterRegistry meterRegistry, Clock clock) {
         this.meterRegistry = meterRegistry;
+        this.clock = clock;
+        applicationStartedAtMillis = clock.millis();
+        latestGenerationEpochMillis = new AtomicLong(NO_GENERATION);
         buildSuccess = timer("snapshot.build.duration", "result", "success");
         buildFailure = timer("snapshot.build.duration", "result", "failure");
         pageAssembly = Timer.builder("snapshot.page.assemble.duration")
@@ -45,8 +57,8 @@ public class DownPriceSnapshotMetrics {
                 .register(meterRegistry);
         Gauge.builder(
                         "snapshot.generation.age",
-                        generationAgeMillis,
-                        value -> value.doubleValue() / 1_000D
+                        latestGenerationEpochMillis,
+                        value -> generationAgeSeconds(value.get())
                 )
                 .baseUnit("seconds")
                 .register(meterRegistry);
@@ -91,7 +103,8 @@ public class DownPriceSnapshotMetrics {
     }
 
     public void recordGenerationAge(Duration age) {
-        generationAgeMillis.set(Math.max(0L, age.toMillis()));
+        long generationEpochMillis = clock.millis() - Math.max(0L, age.toMillis());
+        latestGenerationEpochMillis.accumulateAndGet(generationEpochMillis, Math::max);
     }
 
     public void recordReset(String reason) {
@@ -125,5 +138,12 @@ public class DownPriceSnapshotMetrics {
         return Timer.builder(name)
                 .tag(tagName, tagValue)
                 .register(meterRegistry);
+    }
+
+    private double generationAgeSeconds(long generationEpochMillis) {
+        long referenceEpochMillis = generationEpochMillis == NO_GENERATION
+                ? applicationStartedAtMillis
+                : generationEpochMillis;
+        return Math.max(0L, clock.millis() - referenceEpochMillis) / 1_000D;
     }
 }

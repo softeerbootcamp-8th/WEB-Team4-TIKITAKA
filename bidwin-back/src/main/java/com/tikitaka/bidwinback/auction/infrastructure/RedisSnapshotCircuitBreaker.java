@@ -15,6 +15,7 @@ public class RedisSnapshotCircuitBreaker {
     private final LongSupplier nanoTime;
     private final DownPriceSnapshotMetrics metrics;
 
+    private boolean open;
     private long openUntilNanos;
     private boolean probeInProgress;
 
@@ -41,7 +42,7 @@ public class RedisSnapshotCircuitBreaker {
     }
 
     public synchronized boolean tryAcquirePermission() {
-        if (openUntilNanos == 0L) {
+        if (!open) {
             return true;
         }
         if (nanoTime.getAsLong() < openUntilNanos || probeInProgress) {
@@ -52,6 +53,7 @@ public class RedisSnapshotCircuitBreaker {
     }
 
     public synchronized void recordSuccess() {
+        open = false;
         openUntilNanos = 0L;
         probeInProgress = false;
         metrics.setRedisCircuitOpen(false);
@@ -59,6 +61,7 @@ public class RedisSnapshotCircuitBreaker {
 
     public synchronized void recordFailure() {
         long now = nanoTime.getAsLong();
+        open = true;
         openUntilNanos = now > Long.MAX_VALUE - openDurationNanos
                 ? Long.MAX_VALUE
                 : now + openDurationNanos;

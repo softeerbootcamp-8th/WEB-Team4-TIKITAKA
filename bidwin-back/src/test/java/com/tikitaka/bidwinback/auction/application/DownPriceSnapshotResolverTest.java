@@ -199,6 +199,23 @@ class DownPriceSnapshotResolverTest {
         verify(localStore, never()).find(expiredGeneration);
     }
 
+    @Test
+    void 서버가_발급하지_않은_세대_시각은_DB로_재생성하지_않고_reset한다() {
+        LocalDateTime invalidGeneration = SERVER_TIME.minusSeconds(15);
+        AuctionListQuery query = query(AuctionSort.PRICE_LOW, 3, invalidGeneration);
+        SnapshotGenerationPage latest = page(SERVER_TIME.minusSeconds(30), 1, 1L);
+        when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
+        when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 1, 16))
+                .thenReturn(Optional.of(latest));
+
+        ResolvedSnapshot resolved = resolver.resolve(query).join();
+
+        assertThat(resolved.reset()).isTrue();
+        assertThat(resolved.effectivePage()).isEqualTo(1);
+        verify(localStore, never()).find(invalidGeneration);
+        verify(buildCoordinator, never()).getOrBuild(SnapshotBuildKey.exact(invalidGeneration));
+    }
+
     private AuctionListQuery query(
             AuctionSort sort,
             int page,

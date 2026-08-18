@@ -4,6 +4,7 @@ import com.tikitaka.bidwinback.auction.application.AuctionDatabaseTimeQuery;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildCoordinator;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
 import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
+import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -42,6 +43,11 @@ public class DownPriceSnapshotScheduler {
             boolean lockAcquired = redisStore.tryAcquireCaptureLock(key);
             redisStore.refreshEvictionMetric();
             if (!lockAcquired) {
+                redisStore.findLatestPage(AuctionSort.PRICE_LOW, 1, 1)
+                        .ifPresent(page -> metrics.recordGenerationAge(Duration.between(
+                                page.generationAt(),
+                                databaseTime
+                        )));
                 return;
             }
         } catch (RedisSnapshotUnavailableException exception) {

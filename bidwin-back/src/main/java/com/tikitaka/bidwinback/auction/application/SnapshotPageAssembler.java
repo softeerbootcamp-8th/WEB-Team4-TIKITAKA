@@ -36,8 +36,9 @@ public class SnapshotPageAssembler {
                     responseMapper.toEpochMilli(resolved.serverTime()),
                     responseMapper.toEpochMilli(snapshot.generationAt()),
                     resolved.effectivePage(),
-                    totalPages(snapshot.totalCount()),
-                    snapshot.totalCount(),
+                    DownPriceSnapshotResolver.MAX_PAGES,
+                    (long) DownPriceSnapshotResolver.MAX_PAGES
+                            * DownPriceSnapshotResolver.PAGE_SIZE,
                     resolved.reset(),
                     resolved.resetReason()
             );
@@ -46,7 +47,4 @@ public class SnapshotPageAssembler {
         }
     }
 
-    private int totalPages(int totalCount) {
-        return Math.max(1, Math.ceilDiv(totalCount, DownPriceSnapshotResolver.PAGE_SIZE));
-    }
 }

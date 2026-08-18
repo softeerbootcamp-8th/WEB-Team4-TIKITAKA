@@ -43,7 +43,7 @@ class SnapshotPageAssemblerTest {
                 new AuctionPriceSnapshot(1L, 100L, 90L)
         );
         ResolvedSnapshot resolved = new ResolvedSnapshot(
-                new SnapshotGenerationPage(generationAt, 1_600, entries),
+                new SnapshotGenerationPage(generationAt, 1, entries),
                 serverTime,
                 1,
                 true,
