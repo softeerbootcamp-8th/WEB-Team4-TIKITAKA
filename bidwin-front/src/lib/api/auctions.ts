@@ -42,6 +42,8 @@ export interface AuctionListResponse {
   page: number
   totalPages: number
   totalCount: number
+  snapshotReset: boolean
+  snapshotResetReason: 'GENERATION_EXPIRED' | null
 }
 
 export interface AuctionSeller {
@@ -138,7 +140,6 @@ export interface AuctionListQuery {
   category?: AuctionCategory
   sort: AuctionSort
   page: number
-  size: number
   asOf?: number
 }
 
@@ -184,7 +185,6 @@ export function requestAuctionList(
   const params = new URLSearchParams({
     sort: query.sort,
     page: String(query.page),
-    size: String(query.size),
   })
   const keyword = query.keyword.trim()
   if (keyword) params.set('keyword', keyword)

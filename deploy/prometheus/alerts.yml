@@ -33,6 +33,13 @@ groups:
         annotations:
           summary: 하향 가격 스냅샷 생성을 기다리는 요청이 급증했습니다.
 
+      - alert: DownPriceSnapshotResetSurge
+        expr: sum(increase(snapshot_reset_total{reason="expired"}[5m])) >= 50
+        labels:
+          severity: warning
+        annotations:
+          summary: 만료 세대 reset 응답이 5분간 50건 이상 발생했습니다.
+
       - alert: DownPriceSnapshotRedisEvictions
         expr: sum(increase(snapshot_redis_evictions_total[5m])) > 0
         labels:

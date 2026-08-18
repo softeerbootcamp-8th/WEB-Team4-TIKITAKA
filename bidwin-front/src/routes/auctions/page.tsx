@@ -79,7 +79,12 @@ function AuctionListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
+  const snapshotGenerationRef = useRef<{ queryKey: string; asOf: number } | null>(null)
+  const fulfilledResetPageRef = useRef<{
+    queryKey: string
+    page: number
+    retryToken: number
+  } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const { serverOffsetMs } = useServerClock(response?.serverTime)
 
@@ -104,10 +109,20 @@ function AuctionListPage() {
   }, [showToast])
 
   useEffect(() => {
+    const fulfilledResetPage = fulfilledResetPageRef.current
+    fulfilledResetPageRef.current = null
+    if (
+      fulfilledResetPage?.queryKey === queryKey
+      && fulfilledResetPage.page === page
+      && fulfilledResetPage.retryToken === retryToken
+    ) {
+      return
+    }
+
     const controller = new AbortController()
     let active = true
-    const snapshot = snapshotRef.current?.queryKey === queryKey
-      ? snapshotRef.current.serverTime
+    const snapshotAsOf = snapshotGenerationRef.current?.queryKey === queryKey
+      ? snapshotGenerationRef.current.asOf
       : undefined
 
     setIsLoading(true)
@@ -120,8 +135,7 @@ function AuctionListPage() {
       category: appliedFilters.category,
       sort,
       page,
-      size: PAGE_SIZE,
-      asOf: snapshot,
+      asOf: snapshotAsOf,
     }, controller.signal).then((result) => {
       if (!active) return
       if (!result.ok) {
@@ -129,8 +143,22 @@ function AuctionListPage() {
         setError(result.message)
         return
       }
-
-      if (result.data.items.length === 0 && result.data.page > FIRST_PAGE) {
+      snapshotGenerationRef.current = { queryKey, asOf: result.data.asOf }
+      if (result.data.snapshotReset) {
+        if (page !== result.data.page) {
+          fulfilledResetPageRef.current = {
+            queryKey,
+            page: result.data.page,
+            retryToken,
+          }
+        }
+        setPagination({
+          queryKey,
+          page: result.data.page,
+          maxVisitedPage: result.data.page,
+          lastPage: result.data.items.length < PAGE_SIZE ? result.data.page : null,
+        })
+      } else if (result.data.items.length === 0 && result.data.page > FIRST_PAGE) {
         const previousPage = result.data.page - 1
         setPagination((current) => ({
           queryKey,
@@ -141,24 +169,23 @@ function AuctionListPage() {
           lastPage: previousPage,
         }))
         return
+      } else {
+        setPagination((current) => {
+          const isSameQuery = current.queryKey === queryKey
+          return {
+            queryKey,
+            page: result.data.page,
+            maxVisitedPage: Math.max(
+              isSameQuery ? current.maxVisitedPage : FIRST_PAGE,
+              result.data.page,
+            ),
+            lastPage: result.data.items.length < PAGE_SIZE
+              ? result.data.page
+              : isSameQuery ? current.lastPage : null,
+          }
+        })
       }
-
       setIsLoading(false)
-      snapshotRef.current = { queryKey, serverTime: result.data.asOf }
-      setPagination((current) => {
-        const isSameQuery = current.queryKey === queryKey
-        return {
-          queryKey,
-          page: result.data.page,
-          maxVisitedPage: Math.max(
-            isSameQuery ? current.maxVisitedPage : FIRST_PAGE,
-            result.data.page,
-          ),
-          lastPage: result.data.items.length < PAGE_SIZE
-            ? result.data.page
-            : isSameQuery ? current.lastPage : null,
-        }
-      })
       setResponse(result.data)
     })
 
@@ -193,6 +220,7 @@ function AuctionListPage() {
   })
 
   function changePage(nextPage: number) {
+    fulfilledResetPageRef.current = null
     setPagination((current) => ({
       ...(current.queryKey === queryKey ? current : activePagination),
       queryKey,

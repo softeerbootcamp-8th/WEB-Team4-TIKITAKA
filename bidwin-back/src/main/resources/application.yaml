@@ -2,6 +2,8 @@ spring:
   application:
     name: bidwin-back
   mvc:
+    async:
+      request-timeout: ${MVC_ASYNC_REQUEST_TIMEOUT:10s}
     # 요청 본문/파라미터에는 비밀번호와 인증 토큰이 포함될 수 있으므로 프레임워크 로그에서 제외한다.
     log-request-details: false
   task:

@@ -16,6 +16,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AsyncConfigTest {
 
     @Test
+    void snapshot_DB_executor는_Hikari_기본_풀보다_작다() {
+        AsyncConfig asyncConfig = new AsyncConfig();
+        ThreadPoolTaskExecutor snapshotExecutor =
+                (ThreadPoolTaskExecutor) asyncConfig.auctionSnapshotTaskExecutor();
+        ThreadPoolTaskExecutor assemblyExecutor =
+                (ThreadPoolTaskExecutor) asyncConfig.pageAssemblyExecutor();
+
+        int maximumDbWorkers = snapshotExecutor.getMaxPoolSize()
+                + assemblyExecutor.getMaxPoolSize();
+
+        assertThat(maximumDbWorkers).isLessThan(5);
+    }
+
+    @Test
     void 메일_작업이_포화되면_호출_스레드에서_실행한다() throws InterruptedException {
         AsyncConfig asyncConfig = new AsyncConfig();
         ThreadPoolTaskExecutor executor =

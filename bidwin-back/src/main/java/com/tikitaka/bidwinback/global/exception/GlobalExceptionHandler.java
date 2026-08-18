@@ -12,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.NoSuchElementException;
@@ -97,6 +98,12 @@ public class GlobalExceptionHandler {
     ) {
         return ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.getStatus())
                 .body(ApiResponse.error(ErrorCode.METHOD_NOT_ALLOWED));
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAsyncRequestTimeout() {
+        return ResponseEntity.status(ErrorCode.ASYNC_REQUEST_TIMEOUT.getStatus())
+                .body(ApiResponse.error(ErrorCode.ASYNC_REQUEST_TIMEOUT));
     }
 
     @ExceptionHandler(Exception.class)
