@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.upload.application;
 
-import com.tikitaka.bidwinback.upload.domain.ProfileImageFileType;
+import com.tikitaka.bidwinback.upload.domain.enums.ProfileImageFileType;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

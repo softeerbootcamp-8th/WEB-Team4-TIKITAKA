@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
-import com.tikitaka.bidwinback.auction.application.AuctionClosingBatchProcessor;
+import com.tikitaka.bidwinback.auction.application.closing.AuctionClosingBatchProcessor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

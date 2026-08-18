@@ -4,10 +4,10 @@ import com.tikitaka.bidwinback.global.exception.ErrorCode;
 import com.tikitaka.bidwinback.global.storage.ObjectStorage;
 import com.tikitaka.bidwinback.global.storage.PresignedUpload;
 import com.tikitaka.bidwinback.upload.domain.AuctionImageUploadReservation;
-import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
-import com.tikitaka.bidwinback.upload.domain.UploadException;
-import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignRequest;
-import com.tikitaka.bidwinback.upload.presentation.dto.AuctionImagePresignResponse;
+import com.tikitaka.bidwinback.upload.domain.exception.UploadException;
+import com.tikitaka.bidwinback.upload.domain.repository.PendingAuctionImageStore;
+import com.tikitaka.bidwinback.upload.presentation.dto.request.AuctionImagePresignRequest;
+import com.tikitaka.bidwinback.upload.presentation.dto.response.AuctionImagePresignResponse;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

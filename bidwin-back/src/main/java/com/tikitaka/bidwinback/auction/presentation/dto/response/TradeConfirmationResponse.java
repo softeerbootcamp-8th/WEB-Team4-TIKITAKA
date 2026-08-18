@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
-import com.tikitaka.bidwinback.auction.application.TradeConfirmationResult;
+import com.tikitaka.bidwinback.auction.application.trade.TradeConfirmationResult;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 
 public record TradeConfirmationResponse(

@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.upload.application;
 
 import com.tikitaka.bidwinback.global.config.PendingAuctionImageProperties;
-import com.tikitaka.bidwinback.upload.domain.PendingAuctionImageStore;
 import com.tikitaka.bidwinback.upload.domain.entity.PendingAuctionImage;
+import com.tikitaka.bidwinback.upload.domain.repository.PendingAuctionImageStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;

@@ -3,8 +3,8 @@ package com.tikitaka.bidwinback.upload.application;
 import com.tikitaka.bidwinback.global.config.PendingProfileImageProperties;
 import com.tikitaka.bidwinback.global.storage.ObjectDeletionResult;
 import com.tikitaka.bidwinback.global.storage.ObjectStorage;
-import com.tikitaka.bidwinback.upload.domain.PendingProfileImageStore;
 import com.tikitaka.bidwinback.upload.domain.entity.PendingProfileImage;
+import com.tikitaka.bidwinback.upload.domain.repository.PendingProfileImageStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;

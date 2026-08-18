@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowResult;
-import com.tikitaka.bidwinback.auction.application.BuyNowService;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowResult;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowService;
 import com.tikitaka.bidwinback.auction.presentation.dto.request.BuyNowRequest;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BuyNowResponse;
 import com.tikitaka.bidwinback.global.auth.AuthMember;

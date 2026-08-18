@@ -1,8 +1,8 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
-import com.tikitaka.bidwinback.auction.application.BidResult;
-import com.tikitaka.bidwinback.auction.application.BidService;
+import com.tikitaka.bidwinback.auction.application.bid.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.bid.BidResult;
+import com.tikitaka.bidwinback.auction.application.bid.BidService;
 import com.tikitaka.bidwinback.auction.presentation.dto.request.BidRequest;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryResponse;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidResponse;

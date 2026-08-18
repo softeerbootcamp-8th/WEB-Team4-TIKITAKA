@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
-import com.tikitaka.bidwinback.auction.application.BidResult;
+import com.tikitaka.bidwinback.auction.application.bid.BidResult;
 import com.tikitaka.bidwinback.auction.domain.enums.BidStatus;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
