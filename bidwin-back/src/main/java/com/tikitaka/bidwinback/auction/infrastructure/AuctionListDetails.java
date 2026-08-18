@@ -18,6 +18,7 @@ public record AuctionListDetails(
         LocalDateTime deadline,
         LocalDateTime listedAt,
         AuctionStatus status,
+        long currentPrice,
         long revision,
         LocalDateTime startedAt,
         Long minimumPrice,
@@ -36,6 +37,7 @@ public record AuctionListDetails(
             LocalDateTime deadline,
             LocalDateTime listedAt,
             AuctionStatus status,
+            long currentPrice,
             long revision,
             LocalDateTime startedAt,
             Long minimumPrice,
@@ -51,6 +53,7 @@ public record AuctionListDetails(
         this.deadline = deadline;
         this.listedAt = listedAt;
         this.status = status;
+        this.currentPrice = currentPrice;
         this.revision = revision;
         this.startedAt = startedAt;
         this.minimumPrice = minimumPrice;
@@ -73,7 +76,7 @@ public record AuctionListDetails(
                 sellerName,
                 category,
                 thumbnailObjectKey,
-                metrics.currentPrice(),
+                status == AuctionStatus.COMPLETED ? currentPrice : metrics.currentPrice(),
                 startPrice,
                 metrics.bidCount(),
                 deadline,

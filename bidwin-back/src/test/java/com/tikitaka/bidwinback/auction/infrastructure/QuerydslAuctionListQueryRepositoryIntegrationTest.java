@@ -1184,6 +1184,15 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         );
         setAuctionTimeline(first, AS_OF.minusHours(2), AS_OF.minusMinutes(10));
         setAuctionTimeline(second, AS_OF.minusHours(1), AS_OF.minusMinutes(5));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 55_000L)
+                .setParameter("auctionId", second.getId())
+                .executeUpdate();
         Image firstImage = persistImage(first, "images/down-snapshot-first-" + UUID.randomUUID());
         Image secondImage = persistImage(second, "images/down-snapshot-second-" + UUID.randomUUID());
         entityManager.flush();
@@ -1207,7 +1216,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
                 .containsExactly(second.getId(), first.getId());
         assertThat(rows)
                 .extracting(AuctionListRow::currentPrice)
-                .containsExactly(42_000L, 31_000L);
+                .containsExactly(55_000L, 31_000L);
         assertThat(rows)
                 .extracting(AuctionListRow::bidCount)
                 .containsOnly(0L);

@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -164,6 +165,25 @@ class AuctionControllerTest {
                 .andExpect(jsonPath("$.error.code").value("COMMON_500_1"))
                 .andExpect(jsonPath("$.error.message")
                         .value("서버 내부 오류가 발생했습니다."));
+    }
+
+    @Test
+    void 비동기_목록_조회_시간이_초과되면_표준_503을_응답한다() throws Exception {
+        when(auctionListService.getList(any(AuctionListQuery.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new AsyncRequestTimeoutException()
+                ));
+
+        MvcResult asyncResult = mockMvc.perform(get("/api/v1/auctions"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(asyncResult))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_503_2"))
+                .andExpect(jsonPath("$.error.message")
+                        .value("요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."));
     }
 
     @Test

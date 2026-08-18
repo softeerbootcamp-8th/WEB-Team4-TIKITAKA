@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,16 +90,24 @@ class AuctionListServiceTest {
         AuctionListResponse response = response();
         CompletableFuture<ResolvedDownPriceSnapshotPage> sharedSnapshot =
                 new CompletableFuture<>();
-        CountDownLatch saturated = new CountDownLatch(11);
+        CountDownLatch saturated = new CountDownLatch(2);
         CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger activeAssemblies = new AtomicInteger();
+        AtomicInteger maximumActiveAssemblies = new AtomicInteger();
         when(snapshotResolver.supports(query)).thenReturn(true);
         when(snapshotResolver.resolve(query)).thenReturn(sharedSnapshot);
         when(pageAssembler.assemble(resolved)).thenAnswer(invocation -> {
+            int active = activeAssemblies.incrementAndGet();
+            maximumActiveAssemblies.accumulateAndGet(active, Math::max);
             saturated.countDown();
-            if (!release.await(5, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("페이지 조립 대기 해제에 실패했습니다.");
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("페이지 조립 대기 해제에 실패했습니다.");
+                }
+                return response;
+            } finally {
+                activeAssemblies.decrementAndGet();
             }
-            return response;
         });
 
         ThreadPoolTaskExecutor executor = (ThreadPoolTaskExecutor)
@@ -127,6 +136,7 @@ class AuctionListServiceTest {
             assertThat(results).allSatisfy(result ->
                     assertThat(result).isCompletedWithValue(response)
             );
+            assertThat(maximumActiveAssemblies).hasValue(2);
         } finally {
             release.countDown();
             executor.shutdown();

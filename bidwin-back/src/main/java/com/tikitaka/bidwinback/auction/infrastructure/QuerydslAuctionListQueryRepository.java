@@ -1018,6 +1018,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
                         auction.endedAt,
                         auction.createdAt,
                         auction.status,
+                        auction.currentPrice,
                         auction.revision,
                         auction.startedAt,
                         downAuction.minimumPrice,

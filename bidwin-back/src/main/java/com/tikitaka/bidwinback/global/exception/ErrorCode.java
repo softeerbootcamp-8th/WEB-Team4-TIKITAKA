@@ -30,6 +30,11 @@ public enum ErrorCode {
             "COMMON_503_1",
             "실시간 연결이 많아 잠시 후 다시 시도해주세요."
     ),
+    ASYNC_REQUEST_TIMEOUT(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "COMMON_503_2",
+            "요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+    ),
 
     // Member / authentication
     INVALID_CREDENTIALS(
