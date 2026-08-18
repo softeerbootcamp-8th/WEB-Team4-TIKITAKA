@@ -64,7 +64,12 @@ function AuctionListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const snapshotRef = useRef<{ queryKey: string; serverTime: number } | null>(null)
+  const snapshotGenerationRef = useRef<{ queryKey: string; asOf: number } | null>(null)
+  const fulfilledResetPageRef = useRef<{
+    queryKey: string
+    page: number
+    retryToken: number
+  } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const { serverOffsetMs } = useServerClock(response?.serverTime)
 
@@ -89,10 +94,20 @@ function AuctionListPage() {
   }, [showToast])
 
   useEffect(() => {
+    const fulfilledResetPage = fulfilledResetPageRef.current
+    fulfilledResetPageRef.current = null
+    if (
+      fulfilledResetPage?.queryKey === queryKey
+      && fulfilledResetPage.page === page
+      && fulfilledResetPage.retryToken === retryToken
+    ) {
+      return
+    }
+
     const controller = new AbortController()
     let active = true
-    const snapshot = snapshotRef.current?.queryKey === queryKey
-      ? snapshotRef.current.serverTime
+    const snapshotAsOf = snapshotGenerationRef.current?.queryKey === queryKey
+      ? snapshotGenerationRef.current.asOf
       : undefined
 
     setIsLoading(true)
@@ -105,8 +120,7 @@ function AuctionListPage() {
       category: appliedFilters.category,
       sort,
       page,
-      size: PAGE_SIZE,
-      asOf: snapshot,
+      asOf: snapshotAsOf,
     }, controller.signal).then((result) => {
       if (!active) return
       setIsLoading(false)
@@ -114,7 +128,17 @@ function AuctionListPage() {
         setError(result.message)
         return
       }
-      snapshotRef.current = { queryKey, serverTime: result.data.asOf }
+      snapshotGenerationRef.current = { queryKey, asOf: result.data.asOf }
+      if (result.data.snapshotReset) {
+        if (page !== FIRST_PAGE) {
+          fulfilledResetPageRef.current = {
+            queryKey,
+            page: FIRST_PAGE,
+            retryToken,
+          }
+        }
+        setPagination({ queryKey, page: FIRST_PAGE })
+      }
       setResponse(result.data)
     })
 
@@ -149,6 +173,7 @@ function AuctionListPage() {
   })
 
   function changePage(nextPage: number) {
+    fulfilledResetPageRef.current = null
     setPagination({ queryKey, page: nextPage })
     listRef.current?.scrollTo({ top: 0 })
   }

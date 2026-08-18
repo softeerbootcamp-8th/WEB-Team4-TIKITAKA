@@ -31,7 +31,6 @@ import { CARD_TEXT, CATEGORY_QUERY_PARAM } from './auctions/constants'
 
 const POPULAR_AUCTION_LIMIT = 5
 const SPLIT_LIST_LIMIT = 4
-const HOME_LIST_SIZE = 20
 const UP_AUCTION_LABEL = '상향 경매'
 const DOWN_AUCTION_LABEL = '하락 중'
 const HOME_SKELETON_KEYS = Array.from({ length: POPULAR_AUCTION_LIMIT }, (_, index) => index)
@@ -87,7 +86,6 @@ function HomePage() {
       auctionType: 'ALL',
       sort: 'recommended',
       page: 1,
-      size: HOME_LIST_SIZE,
     }, controller.signal).then((result) => {
       if (controller.signal.aborted) return
       setIsLoading(false)
