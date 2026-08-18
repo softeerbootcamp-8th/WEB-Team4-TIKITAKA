@@ -39,7 +39,10 @@ public class AuctionImageStorageCleanup {
                             return;
                         }
                         // 결과가 불명확할 때 영구 객체를 지우면 실제로 커밋된 경매의 이미지가 유실될 수 있다.
-                        log.warn("경매 이미지 정리를 생략합니다: 알 수 없는 트랜잭션 완료 상태, status={}", status);
+                        log.atWarn()
+                                .addKeyValue("event", "auction_image_cleanup_skipped_unknown_transaction_status")
+                                .addKeyValue("status", status)
+                                .log("경매 이미지 정리를 생략합니다: 알 수 없는 트랜잭션 완료 상태");
                     }
                 }
         );
@@ -51,14 +54,18 @@ public class AuctionImageStorageCleanup {
         }
         try {
             ObjectDeletionResult result = objectStorage.deleteAll(objectKeys);
-            result.failures().forEach(failure -> log.warn(
-                    "경매 {} 이미지 삭제 실패: objectKey={}, code={}",
-                    objectType,
-                    failure.objectKey(),
-                    failure.code()
-            ));
+            result.failures().forEach(failure -> log.atWarn()
+                    .addKeyValue("event", "auction_image_cleanup_delete_failed")
+                    .addKeyValue("objectType", objectType)
+                    .addKeyValue("objectKey", failure.objectKey())
+                    .addKeyValue("failureCode", failure.code())
+                    .log("경매 이미지 삭제 실패"));
         } catch (RuntimeException exception) {
-            log.warn("경매 {} 이미지 삭제 중 오류가 발생했습니다.", objectType, exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "auction_image_cleanup_failed")
+                    .addKeyValue("objectType", objectType)
+                    .log("경매 이미지 삭제 중 오류가 발생했습니다.");
         }
     }
 }

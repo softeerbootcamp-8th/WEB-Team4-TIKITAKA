@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.bid.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryRevealed;
 import com.tikitaka.bidwinback.auction.presentation.dto.response.BidHistoryItemResponse;

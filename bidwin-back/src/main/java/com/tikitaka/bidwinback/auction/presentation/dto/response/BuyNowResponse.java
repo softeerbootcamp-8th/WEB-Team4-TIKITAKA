@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowResult;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowResult;
 
 import java.time.LocalDateTime;
 

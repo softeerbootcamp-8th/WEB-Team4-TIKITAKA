@@ -9,7 +9,7 @@ import com.tikitaka.bidwinback.auction.domain.repository.AuctionTradeRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.ImageRepository;
 import com.tikitaka.bidwinback.global.common.PageResponse;
 import com.tikitaka.bidwinback.global.storage.ImageUrlResolver;
-import com.tikitaka.bidwinback.mypage.domain.TradeRoute;
+import com.tikitaka.bidwinback.mypage.domain.enums.TradeRoute;
 import com.tikitaka.bidwinback.mypage.presentation.dto.response.MyTradeRecordResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

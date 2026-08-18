@@ -16,6 +16,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AsyncConfigTest {
 
     @Test
+    void snapshot_DB_executor는_Hikari_기본_풀보다_작다() {
+        AsyncConfig asyncConfig = new AsyncConfig();
+        ThreadPoolTaskExecutor snapshotExecutor =
+                (ThreadPoolTaskExecutor) asyncConfig.auctionSnapshotTaskExecutor();
+        ThreadPoolTaskExecutor assemblyExecutor =
+                (ThreadPoolTaskExecutor) asyncConfig.pageAssemblyExecutor();
+
+        int maximumDbWorkers = snapshotExecutor.getMaxPoolSize()
+                + assemblyExecutor.getMaxPoolSize();
+
+        assertThat(maximumDbWorkers).isLessThan(5);
+    }
+
+    @Test
     void 메일_작업이_포화되면_호출_스레드에서_실행한다() throws InterruptedException {
         AsyncConfig asyncConfig = new AsyncConfig();
         ThreadPoolTaskExecutor executor =
@@ -55,7 +69,7 @@ class AsyncConfigTest {
     @Test
     void 비동기_예외를_토큰_노출_없이_기록한다(CapturedOutput output)
             throws NoSuchMethodException {
-        RuntimeException failure = new RuntimeException("SMTP failure");
+        RuntimeException failure = new RuntimeException("recipient=member@example.com token=raw-token");
 
         new AsyncConfig().getAsyncUncaughtExceptionHandler()
                 .handleUncaughtException(
@@ -65,8 +79,8 @@ class AsyncConfigTest {
                 );
 
         assertThat(output)
-                .contains("Async task failed: mailTask")
-                .contains("SMTP failure")
+                .contains("비동기 작업을 완료하지 못했습니다.")
+                .doesNotContain("member@example.com")
                 .doesNotContain("raw-token");
     }
 

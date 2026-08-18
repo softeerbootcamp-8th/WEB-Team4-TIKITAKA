@@ -26,9 +26,11 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,11 +46,63 @@ class AuctionPricePageQueryTest {
     @BeforeEach
     void setUp() {
         auctionPricePageQuery = new AuctionPricePageQuery(auctionListQueryRepository);
-        when(auctionListQueryRepository.findRowsByPriceSnapshots(
+        lenient().when(auctionListQueryRepository.findRowsByPriceSnapshots(
                 anyList(),
                 any(LocalDateTime.class)
         ))
                 .thenReturn(List.of());
+    }
+
+    @Test
+    void 스냅샷_추출은_가격순_top_k를_상세_조회없이_반환한다() {
+        AuctionListSearchCondition condition = downCondition(AuctionSort.PRICE_LOW);
+        DownAuctionPriceCandidate higher = downCandidate(
+                2L,
+                20L,
+                100L,
+                10L,
+                1L,
+                2L
+        );
+        DownAuctionPriceCandidate lower = downCandidate(
+                1L,
+                50L,
+                100L,
+                10L,
+                1L,
+                5L
+        );
+        when(auctionListQueryRepository.findDownPriceCandidates(
+                eq(condition),
+                isNull(),
+                eq(1_000)
+        )).thenReturn(List.of(higher, lower));
+
+        List<AuctionPriceSnapshot> snapshots = auctionPricePageQuery.findSnapshots(
+                condition,
+                2
+        );
+
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::auctionId)
+                .containsExactly(1L, 2L);
+        assertThat(snapshots)
+                .extracting(AuctionPriceSnapshot::sortPrice)
+                .containsExactly(50L, 80L);
+        verify(auctionListQueryRepository, never()).findRowsByPriceSnapshots(
+                anyList(),
+                any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    void 스냅샷_추출_범위가_0이하면_저장소를_호출하지_않고_빈_목록을_반환한다() {
+        assertThat(auctionPricePageQuery.findSnapshots(
+                downCondition(AuctionSort.PRICE_LOW),
+                0
+        )).isEmpty();
+
+        verifyNoInteractions(auctionListQueryRepository);
     }
 
     @Test

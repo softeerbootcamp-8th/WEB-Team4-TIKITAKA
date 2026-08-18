@@ -1,6 +1,5 @@
 package com.tikitaka.bidwinback.mypage.application;
 
-import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionStatus;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionRepository;

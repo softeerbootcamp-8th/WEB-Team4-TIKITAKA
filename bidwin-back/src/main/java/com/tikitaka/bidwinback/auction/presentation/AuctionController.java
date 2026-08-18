@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.auction.presentation;
 import com.tikitaka.bidwinback.auction.application.AuctionCreateService;
 import com.tikitaka.bidwinback.auction.application.AuctionDetailService;
 import com.tikitaka.bidwinback.auction.application.AuctionListQuery;
+import com.tikitaka.bidwinback.auction.application.AuctionListPagePolicy;
 import com.tikitaka.bidwinback.auction.application.AuctionListService;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionCategory;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionListStatusFilter;
@@ -38,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/v1/auctions")
@@ -47,7 +49,6 @@ public class AuctionController {
 
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
     private static final int FIRST_PAGE = 1;
-    private static final int DEFAULT_PAGE_SIZE = 16;
 
     private final AuctionDetailService auctionDetailService;
     private final AuctionCreateService auctionCreateService;
@@ -88,7 +89,7 @@ public class AuctionController {
             description = "경매 방식·검색어로 필터링한 목록을 조회합니다. `recommended` 외 정렬은 응답의 `asOf`를 다음 페이지 요청에 전달하면 같은 기준 시각으로 조회할 수 있습니다."
     )
     @GetMapping
-    public ResponseEntity<ApiResponse<AuctionListResponse>> getList(
+    public CompletableFuture<ResponseEntity<ApiResponse<AuctionListResponse>>> getList(
             @Parameter(description = "경매 방식", example = "UP", schema = @Schema(allowableValues = {"UP", "DOWN"}))
             @RequestParam(required = false) String auctionType,
             @Parameter(
@@ -105,11 +106,19 @@ public class AuctionController {
             @RequestParam(required = false) String category,
             @Parameter(description = "페이지 번호. 1부터 시작", example = "1")
             @RequestParam(required = false, defaultValue = "" + FIRST_PAGE) int page,
-            @Parameter(description = "페이지 크기. 최대 100", example = "16")
-            @RequestParam(required = false, defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
+            @Parameter(
+                    description = "페이지 크기. 16 고정",
+                    example = "16",
+                    schema = @Schema(allowableValues = {"16"})
+            )
+            @RequestParam(
+                    required = false,
+                    defaultValue = "" + AuctionListPagePolicy.PAGE_SIZE
+            ) int size,
             @Parameter(description = "목록 계산 기준 시각(epoch milliseconds). `recommended` 외 정렬에서 첫 응답의 asOf를 재사용", example = "1786860000000")
             @RequestParam(required = false) Long asOf
     ) {
+        validatePageSize(size);
         AuctionListQuery query = new AuctionListQuery(
                 parseAuctionType(auctionType),
                 AuctionSort.from(sort),
@@ -117,12 +126,20 @@ public class AuctionController {
                 parseStatus(status),
                 parseCategory(category),
                 page,
-                size,
                 asOf != null ? toLocalDateTime(asOf) : null
         );
 
-        AuctionListResponse response = auctionListService.getList(query);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return auctionListService.getList(query)
+                .thenApply(response -> ResponseEntity.ok(ApiResponse.success(response)));
+    }
+
+    private void validatePageSize(int size) {
+        if (size != AuctionListPagePolicy.PAGE_SIZE) {
+            throw new AuctionException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "페이지 크기는 16이어야 합니다."
+            );
+        }
     }
 
     private AuctionListStatusFilter parseStatus(String rawStatus) {

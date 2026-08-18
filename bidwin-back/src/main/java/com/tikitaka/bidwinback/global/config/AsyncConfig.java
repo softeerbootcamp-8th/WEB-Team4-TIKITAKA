@@ -34,9 +34,9 @@ public class AsyncConfig implements AsyncConfigurer {
     @Bean(name = "auctionSnapshotTaskExecutor")
     public Executor auctionSnapshotTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        // Hikari(10)보다 작게 제한해 서로 다른 snapshot miss도 DB 연결을 독점하지 못하게 한다.
-        executor.setCorePoolSize(4);
-        executor.setMaxPoolSize(4);
+        // page assembly(2), snapshot build(1)와 합쳐 기본 Hikari(5)에 연결 1개를 남긴다.
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("auction-snapshot-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
@@ -45,9 +45,40 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
 
+    @Bean(name = "snapshotBuildExecutor")
+    public Executor snapshotBuildExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("down-price-snapshot-build-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        return executor;
+    }
+
+    @Bean(name = "pageAssemblyExecutor")
+    public Executor pageAssemblyExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("down-price-page-assembly-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        return executor;
+    }
+
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (exception, method, parameters) ->
-                log.error("Async task failed: {}", method.getName(), exception);
+                log.atError()
+                        .addKeyValue("event", "async_task_failed")
+                        .addKeyValue("className", method.getDeclaringClass().getSimpleName())
+                        .addKeyValue("methodName", method.getName())
+                        .addKeyValue("failureType", exception.getClass().getSimpleName())
+                        .log("비동기 작업을 완료하지 못했습니다.");
     }
 }

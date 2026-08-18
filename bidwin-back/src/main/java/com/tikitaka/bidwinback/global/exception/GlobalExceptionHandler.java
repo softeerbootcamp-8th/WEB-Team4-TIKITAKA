@@ -1,6 +1,7 @@
 package com.tikitaka.bidwinback.global.exception;
 
 import com.tikitaka.bidwinback.global.common.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.NoSuchElementException;
@@ -98,11 +100,37 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ErrorCode.METHOD_NOT_ALLOWED));
     }
 
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAsyncRequestTimeout() {
+        return ResponseEntity.status(ErrorCode.ASYNC_REQUEST_TIMEOUT.getStatus())
+                .body(ApiResponse.error(ErrorCode.ASYNC_REQUEST_TIMEOUT));
+    }
+
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleException(Exception exception) {
-        log.error("Unhandled exception", exception);
+    public ResponseEntity<ApiResponse<Void>> handleException(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        log.atError()
+                .addKeyValue("event", "unhandled_request_failed")
+                .addKeyValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR.getCode())
+                .addKeyValue("method", request.getMethod())
+                .addKeyValue("path", request.getRequestURI())
+                .addKeyValue("failureType", exception.getClass().getSimpleName())
+                .addKeyValue("failureLocation", failureLocation(exception))
+                .log("처리하지 못한 요청 예외가 발생했습니다.");
 
         return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.getStatus())
                 .body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR));
+    }
+
+    private static String failureLocation(Exception exception) {
+        StackTraceElement[] stackTrace = exception.getStackTrace();
+        for (StackTraceElement element : stackTrace) {
+            if (element.getClassName().startsWith("com.tikitaka.bidwinback")) {
+                return element.toString();
+            }
+        }
+        return stackTrace.length == 0 ? "unknown" : stackTrace[0].toString();
     }
 }

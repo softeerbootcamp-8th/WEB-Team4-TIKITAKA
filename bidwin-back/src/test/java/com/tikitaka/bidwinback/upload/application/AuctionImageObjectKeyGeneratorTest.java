@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.upload.application;
 
-import com.tikitaka.bidwinback.upload.domain.AuctionImageFileType;
+import com.tikitaka.bidwinback.upload.domain.enums.AuctionImageFileType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

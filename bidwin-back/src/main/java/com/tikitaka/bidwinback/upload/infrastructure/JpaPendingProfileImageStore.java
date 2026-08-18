@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.upload.infrastructure;
 
-import com.tikitaka.bidwinback.upload.domain.PendingProfileImageStore;
 import com.tikitaka.bidwinback.upload.domain.entity.PendingProfileImage;
+import com.tikitaka.bidwinback.upload.domain.repository.PendingProfileImageStore;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

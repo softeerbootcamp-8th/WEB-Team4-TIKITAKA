@@ -1,5 +1,6 @@
 package com.tikitaka.bidwinback.auction.presentation.dto.response;
 
+import com.tikitaka.bidwinback.auction.application.SnapshotResetReason;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -20,6 +21,23 @@ public record AuctionListResponse(
         int totalPages,
 
         @Schema(description = "전체 항목 수", example = "42")
-        long totalCount
+        long totalCount,
+
+        @Schema(description = "요청 세대 만료로 최신 1페이지로 초기화했는지 여부")
+        boolean snapshotReset,
+
+        @Schema(description = "스냅샷 초기화 사유", nullable = true)
+        SnapshotResetReason snapshotResetReason
 ) {
+
+    public AuctionListResponse(
+            List<AuctionSummaryResponse> items,
+            long serverTime,
+            long asOf,
+            int page,
+            int totalPages,
+            long totalCount
+    ) {
+        this(items, serverTime, asOf, page, totalPages, totalCount, false, null);
+    }
 }

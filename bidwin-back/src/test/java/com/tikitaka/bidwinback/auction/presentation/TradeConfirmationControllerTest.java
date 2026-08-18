@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.auction.presentation;
 
-import com.tikitaka.bidwinback.auction.application.TradeConfirmationResult;
-import com.tikitaka.bidwinback.auction.application.TradeConfirmationService;
+import com.tikitaka.bidwinback.auction.application.trade.TradeConfirmationResult;
+import com.tikitaka.bidwinback.auction.application.trade.TradeConfirmationService;
 import com.tikitaka.bidwinback.auction.domain.enums.TradeStatus;
 import com.tikitaka.bidwinback.auth.application.SessionAuthService;
 import com.tikitaka.bidwinback.global.auth.AuthConstant;

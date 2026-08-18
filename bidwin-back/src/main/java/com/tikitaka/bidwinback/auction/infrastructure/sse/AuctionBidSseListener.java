@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.auction.infrastructure.sse;
 
-import com.tikitaka.bidwinback.auction.application.BidHistoryService;
+import com.tikitaka.bidwinback.auction.application.bid.BidHistoryService;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidCreated;
 import com.tikitaka.bidwinback.auction.application.live.AuctionBidHistoryRevealed;
 import com.tikitaka.bidwinback.global.sse.RedisSseEventBus;
@@ -28,12 +28,12 @@ public class AuctionBidSseListener {
                     event.bid()
             ));
         } catch (RuntimeException exception) {
-            log.warn(
-                    "커밋된 입찰을 SSE로 발행하지 못했습니다. auctionId={}, bidId={}",
-                    event.auctionId(),
-                    event.bidId(),
-                    exception
-            );
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "auction_bid_sse_publish_failed")
+                    .addKeyValue("auctionId", event.auctionId())
+                    .addKeyValue("bidId", event.bidId())
+                    .log("커밋된 입찰을 SSE로 발행하지 못했습니다.");
         }
     }
 
@@ -46,11 +46,11 @@ public class AuctionBidSseListener {
                     bidHistoryService.getBidHistory(event.auctionId())
             ));
         } catch (RuntimeException exception) {
-            log.warn(
-                    "공개된 입찰 내역을 SSE로 발행하지 못했습니다. auctionId={}",
-                    event.auctionId(),
-                    exception
-            );
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "auction_bid_history_sse_publish_failed")
+                    .addKeyValue("auctionId", event.auctionId())
+                    .log("공개된 입찰 내역을 SSE로 발행하지 못했습니다.");
         }
     }
 }

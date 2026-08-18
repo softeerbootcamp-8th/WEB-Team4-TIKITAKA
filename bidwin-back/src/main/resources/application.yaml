@@ -1,6 +1,11 @@
 spring:
   application:
     name: bidwin-back
+  mvc:
+    async:
+      request-timeout: ${MVC_ASYNC_REQUEST_TIMEOUT:10s}
+    # 요청 본문/파라미터에는 비밀번호와 인증 토큰이 포함될 수 있으므로 프레임워크 로그에서 제외한다.
+    log-request-details: false
   task:
     scheduling:
       pool:
@@ -12,6 +17,7 @@ spring:
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
+        debug: false
         smtp:
           auth: true
           starttls:
@@ -75,15 +81,50 @@ server:
         path: /
 
 management:
+  # 액추에이터를 서비스 포트에서 떼어내 루프백 전용 포트로만 연다.
+  # 8080에 붙어 있으면 ALB/공개 경로로 지표가 그대로 새어 나가므로,
+  # 같은 인스턴스의 수집 에이전트만 접근할 수 있게 바인딩을 제한한다.
+  # (Compose처럼 다른 컨테이너에서 수집할 때만 MANAGEMENT_SERVER_ADDRESS로 덮어쓴다.)
+  server:
+    port: 9091
+    address: 127.0.0.1
   endpoints:
     web:
       exposure:
-        include: []
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # p95/p99는 Prometheus가 버킷에서 계산하므로 요청 지연만 히스토그램으로 내보낸다.
+        "[http.server.requests]": true
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.tikitaka.bidwinback: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: WARN
+    org.springframework.session: WARN
+    org.springframework.jdbc.core: WARN
+    org.hibernate: WARN
+    # 장애 분석 중에도 SQL 바인딩 값에 토큰이나 개인정보가 출력되지 않게 고정한다.
+    org.hibernate.SQL: OFF
+    org.hibernate.orm.jdbc.bind: OFF
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        service: ${spring.application.name}
+        environment: ${APP_ENVIRONMENT:unknown}
 
 app:
   auction:
     closing-interval: ${AUCTION_CLOSING_INTERVAL:1s}
     closing-batch-size: ${AUCTION_CLOSING_BATCH_SIZE:100}
+    down-price-snapshot:
+      refresh-interval: ${DOWN_PRICE_SNAPSHOT_REFRESH_INTERVAL:30s}
+      retention: ${DOWN_PRICE_SNAPSHOT_RETENTION:10m}
+      redis-circuit-open-duration: ${DOWN_PRICE_SNAPSHOT_REDIS_CIRCUIT_OPEN_DURATION:5s}
   mail:
     rate-limit:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}

@@ -26,7 +26,11 @@ public class TradeSseStateChangeListener {
             eventBus.publish(TradeSseMessages.state(event.state()));
         } catch (RuntimeException exception) {
             // 다음 변경이나 재연결 snapshot으로 수렴할 수 있으므로 비즈니스 결과와 격리한다.
-            log.warn("커밋된 거래 상태를 Redis로 발행하지 못했습니다. tradeId={}", tradeId, exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "trade_sse_publish_failed")
+                    .addKeyValue("tradeId", tradeId)
+                    .log("커밋된 거래 상태를 Redis로 발행하지 못했습니다.");
         }
     }
 }

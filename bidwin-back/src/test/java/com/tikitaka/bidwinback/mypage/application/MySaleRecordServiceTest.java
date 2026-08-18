@@ -1,6 +1,6 @@
 package com.tikitaka.bidwinback.mypage.application;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
 import com.tikitaka.bidwinback.auction.domain.entity.UpAuction;

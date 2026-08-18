@@ -1,7 +1,7 @@
 package com.tikitaka.bidwinback.auction.infrastructure;
 
-import com.tikitaka.bidwinback.auction.application.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.application.AuctionPricePageQuery;
+import com.tikitaka.bidwinback.auction.application.buynow.BuyNowPriceCalculator;
 import com.tikitaka.bidwinback.auction.domain.entity.Auction;
 import com.tikitaka.bidwinback.auction.domain.entity.Bid;
 import com.tikitaka.bidwinback.auction.domain.entity.DownAuction;
@@ -1161,6 +1161,72 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
             assertThat(row.priceDropInterval()).isEqualTo(5L);
             assertThat(row.startedAt()).isEqualTo(startedAt);
         });
+    }
+
+    @Test
+    void 하향_가격_스냅샷_전용_조립은_입찰_쿼리없이_스냅샷_순서를_유지한다() {
+        Member seller = persistMember("down-snapshot-row-seller");
+        DownAuction first = persistDown(
+                seller,
+                "첫 번째 하향 스냅샷",
+                AuctionCategory.FOOD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        DownAuction second = persistDown(
+                seller,
+                "두 번째 하향 스냅샷",
+                AuctionCategory.FOOD,
+                60_000L,
+                10_000L,
+                5L
+        );
+        setAuctionTimeline(first, AS_OF.minusHours(2), AS_OF.minusMinutes(10));
+        setAuctionTimeline(second, AS_OF.minusHours(1), AS_OF.minusMinutes(5));
+        entityManager.createNativeQuery("""
+                        UPDATE auction
+                        SET status = 'COMPLETED',
+                            current_price = :currentPrice
+                        WHERE id = :auctionId
+                        """)
+                .setParameter("currentPrice", 55_000L)
+                .setParameter("auctionId", second.getId())
+                .executeUpdate();
+        Image firstImage = persistImage(first, "images/down-snapshot-first-" + UUID.randomUUID());
+        Image secondImage = persistImage(second, "images/down-snapshot-second-" + UUID.randomUUID());
+        entityManager.flush();
+        entityManager.clear();
+
+        List<AuctionPriceSnapshot> snapshots = List.of(
+                new AuctionPriceSnapshot(second.getId(), 20_000L, 42_000L),
+                new AuctionPriceSnapshot(Long.MAX_VALUE, 25_000L, 35_000L),
+                new AuctionPriceSnapshot(first.getId(), 30_000L, 31_000L)
+        );
+        Statistics statistics = entityManagerFactory
+                .unwrap(SessionFactory.class)
+                .getStatistics();
+        statistics.clear();
+
+        List<AuctionListRow> rows = auctionListQueryRepository
+                .findDownRowsByPriceSnapshots(snapshots);
+
+        assertThat(rows)
+                .extracting(AuctionListRow::auctionId)
+                .containsExactly(second.getId(), first.getId());
+        assertThat(rows)
+                .extracting(AuctionListRow::currentPrice)
+                .containsExactly(55_000L, 31_000L);
+        assertThat(rows)
+                .extracting(AuctionListRow::bidCount)
+                .containsOnly(0L);
+        assertThat(rows)
+                .extracting(AuctionListRow::thumbnailObjectKey)
+                .containsExactly(secondImage.getObjectKey(), firstImage.getObjectKey());
+        assertThat(statistics.getQueryExecutionCount()).isEqualTo(2L);
+        assertThat(statistics.getQueries())
+                .noneMatch(query -> query.toLowerCase(java.util.Locale.ROOT)
+                        .contains(" from bid "));
     }
 
     @Test

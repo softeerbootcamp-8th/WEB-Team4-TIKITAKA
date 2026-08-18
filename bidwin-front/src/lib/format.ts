@@ -30,12 +30,13 @@ export function formatDate(date: Date) {
   return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export function formatTimeOfDay(date: Date) {
+export function formatTimeOfDay(date: Date, timeZone?: string) {
   return date.toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
+    timeZone,
   })
 }
 
