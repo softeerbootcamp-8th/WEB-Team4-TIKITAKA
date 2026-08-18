@@ -87,6 +87,7 @@ app:
     down-price-snapshot:
       refresh-interval: ${DOWN_PRICE_SNAPSHOT_REFRESH_INTERVAL:30s}
       retention: ${DOWN_PRICE_SNAPSHOT_RETENTION:10m}
+      redis-circuit-open-duration: ${DOWN_PRICE_SNAPSHOT_REDIS_CIRCUIT_OPEN_DURATION:5s}
   mail:
     rate-limit:
       cooldown: ${MAIL_RATE_LIMIT_COOLDOWN:1m}
