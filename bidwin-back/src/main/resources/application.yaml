@@ -75,10 +75,22 @@ server:
         path: /
 
 management:
+  # 액추에이터를 서비스 포트에서 떼어내 루프백 전용 포트로만 연다.
+  # 8080에 붙어 있으면 ALB/공개 경로로 지표가 그대로 새어 나가므로,
+  # 같은 인스턴스의 수집 에이전트만 접근할 수 있게 바인딩을 제한한다.
+  # (Compose처럼 다른 컨테이너에서 수집할 때만 MANAGEMENT_SERVER_ADDRESS로 덮어쓴다.)
+  server:
+    port: 9091
+    address: 127.0.0.1
   endpoints:
     web:
       exposure:
-        include: []
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # p95/p99는 Prometheus가 버킷에서 계산하므로 요청 지연만 히스토그램으로 내보낸다.
+        "[http.server.requests]": true
 
 app:
   auction:
