@@ -3,7 +3,9 @@ package com.tikitaka.bidwinback.auction.infrastructure;
 import com.tikitaka.bidwinback.auction.application.AuctionDatabaseTimeQuery;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildCoordinator;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
 import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -29,6 +31,9 @@ class DownPriceSnapshotSchedulerTest {
     @Mock
     private DownPriceSnapshotBuildCoordinator buildCoordinator;
 
+    private final DownPriceSnapshotMetrics metrics =
+            new DownPriceSnapshotMetrics(new SimpleMeterRegistry());
+
     @Test
     void 같은_30초_슬롯의_분산락을_얻은_인스턴스만_Coordinator를_호출한다() {
         LocalDateTime databaseTime = LocalDateTime.of(2026, 8, 18, 12, 0, 47);
@@ -39,10 +44,11 @@ class DownPriceSnapshotSchedulerTest {
                 new DownPriceSnapshot(key.generationAt(), List.of(), List.of())
         ));
 
-        new DownPriceSnapshotScheduler(databaseTimeQuery, redisStore, buildCoordinator)
+        new DownPriceSnapshotScheduler(databaseTimeQuery, redisStore, buildCoordinator, metrics)
                 .refreshLatest();
 
         verify(buildCoordinator).getOrBuild(key);
+        verify(redisStore).refreshEvictionMetric();
     }
 
     @Test
@@ -52,9 +58,10 @@ class DownPriceSnapshotSchedulerTest {
         when(databaseTimeQuery.currentTime()).thenReturn(databaseTime);
         when(redisStore.tryAcquireCaptureLock(key)).thenReturn(false);
 
-        new DownPriceSnapshotScheduler(databaseTimeQuery, redisStore, buildCoordinator)
+        new DownPriceSnapshotScheduler(databaseTimeQuery, redisStore, buildCoordinator, metrics)
                 .refreshLatest();
 
         verify(buildCoordinator, never()).getOrBuild(key);
+        verify(redisStore).refreshEvictionMetric();
     }
 }

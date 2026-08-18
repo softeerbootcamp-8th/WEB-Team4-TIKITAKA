@@ -7,6 +7,7 @@ import com.tikitaka.bidwinback.auction.application.SnapshotGenerationPage;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -19,6 +20,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.function.Supplier;
 
 @Component
@@ -212,6 +214,22 @@ public class RedisSnapshotStore {
                         captureLockTtl
                 )
         ));
+    }
+
+    public void refreshEvictionMetric() {
+        try {
+            Properties stats = redisTemplate.execute(
+                    (RedisCallback<Properties>) connection ->
+                            connection.serverCommands().info("stats")
+            );
+            if (stats != null) {
+                metrics.recordRedisEvictions(Long.parseLong(
+                        stats.getProperty("evicted_keys", "0")
+                ));
+            }
+        } catch (RuntimeException exception) {
+            // 관측용 INFO 실패가 스냅샷 조회 circuit나 응답 경로에 영향을 주면 안 된다.
+        }
     }
 
     private Long publishToRedis(DownPriceSnapshot snapshot) {

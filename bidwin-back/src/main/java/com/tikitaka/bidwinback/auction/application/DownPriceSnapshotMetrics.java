@@ -16,11 +16,13 @@ public class DownPriceSnapshotMetrics {
     private final Timer buildSuccess;
     private final Timer buildFailure;
     private final Timer pageAssembly;
+    private final io.micrometer.core.instrument.Counter redisEvictions;
     private final AtomicInteger buildsInFlight = new AtomicInteger();
     private final AtomicInteger waiters = new AtomicInteger();
     private final AtomicInteger consecutiveBuildFailures = new AtomicInteger();
     private final AtomicInteger redisCircuitOpen = new AtomicInteger();
     private final AtomicLong generationAgeMillis = new AtomicLong();
+    private final AtomicLong lastRedisEvictions = new AtomicLong(-1L);
 
     public DownPriceSnapshotMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -28,6 +30,7 @@ public class DownPriceSnapshotMetrics {
         buildFailure = timer("snapshot.build.duration", "result", "failure");
         pageAssembly = Timer.builder("snapshot.page.assemble.duration")
                 .register(meterRegistry);
+        redisEvictions = meterRegistry.counter("snapshot.redis.evictions");
         Gauge.builder("snapshot.build.inflight", buildsInFlight, AtomicInteger::get)
                 .register(meterRegistry);
         Gauge.builder("snapshot.build.waiters", waiters, AtomicInteger::get)
@@ -97,6 +100,17 @@ public class DownPriceSnapshotMetrics {
 
     public void setRedisCircuitOpen(boolean open) {
         redisCircuitOpen.set(open ? 1 : 0);
+    }
+
+    public void recordRedisEvictions(long serverTotal) {
+        if (serverTotal < 0) {
+            return;
+        }
+        long previous = lastRedisEvictions.getAndSet(serverTotal);
+        long delta = previous < 0
+                ? serverTotal
+                : serverTotal >= previous ? serverTotal - previous : serverTotal;
+        redisEvictions.increment(delta);
     }
 
     public Timer.Sample startPageAssembly() {
