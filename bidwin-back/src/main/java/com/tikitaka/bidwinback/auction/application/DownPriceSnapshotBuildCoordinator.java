@@ -15,16 +15,16 @@ import java.util.concurrent.Executor;
 @Component
 public class DownPriceSnapshotBuildCoordinator {
 
-    private final ConcurrentHashMap<SnapshotBuildKey, CompletableFuture<DownPriceSnapshot>>
+    private final ConcurrentHashMap<DownPriceSnapshotBuildKey, CompletableFuture<DownPriceSnapshot>>
             inFlight = new ConcurrentHashMap<>();
 
-    private final SnapshotCaptureService captureService;
+    private final DownPriceSnapshotCaptureService captureService;
     private final RedisSnapshotStore redisStore;
     private final DownPriceSnapshotMetrics metrics;
     private final Executor snapshotBuildExecutor;
 
     public DownPriceSnapshotBuildCoordinator(
-            SnapshotCaptureService captureService,
+            DownPriceSnapshotCaptureService captureService,
             RedisSnapshotStore redisStore,
             DownPriceSnapshotMetrics metrics,
             @Qualifier("snapshotBuildExecutor") Executor snapshotBuildExecutor
@@ -35,7 +35,7 @@ public class DownPriceSnapshotBuildCoordinator {
         this.snapshotBuildExecutor = snapshotBuildExecutor;
     }
 
-    public CompletableFuture<DownPriceSnapshot> getOrBuild(SnapshotBuildKey key) {
+    public CompletableFuture<DownPriceSnapshot> getOrBuild(DownPriceSnapshotBuildKey key) {
         CompletableFuture<DownPriceSnapshot> created = new CompletableFuture<>();
         CompletableFuture<DownPriceSnapshot> existing = inFlight.putIfAbsent(key, created);
         if (existing != null) {
@@ -57,7 +57,7 @@ public class DownPriceSnapshotBuildCoordinator {
     }
 
     private void build(
-            SnapshotBuildKey key,
+            DownPriceSnapshotBuildKey key,
             CompletableFuture<DownPriceSnapshot> future,
             long startedAt
     ) {

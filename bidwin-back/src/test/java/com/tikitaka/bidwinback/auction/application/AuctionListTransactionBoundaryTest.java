@@ -24,12 +24,15 @@ class AuctionListTransactionBoundaryTest {
     @Test
     void DB_캡처와_페이지_조립과_fallback만_readOnly_트랜잭션을_연다()
             throws NoSuchMethodException {
-        assertReadOnly(SnapshotCaptureService.class, "capture", SnapshotBuildKey.class);
         assertReadOnly(
-                SnapshotPageAssembler.class,
+                DownPriceSnapshotCaptureService.class,
+                "capture",
+                DownPriceSnapshotBuildKey.class
+        );
+        assertReadOnly(
+                DownPriceSnapshotPageAssembler.class,
                 "assemble",
-                AuctionListQuery.class,
-                ResolvedSnapshot.class
+                ResolvedDownPriceSnapshotPage.class
         );
         assertReadOnly(AuctionListDbQuery.class, "findPage", AuctionListQuery.class);
     }

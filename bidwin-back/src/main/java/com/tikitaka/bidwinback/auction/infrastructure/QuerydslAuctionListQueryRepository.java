@@ -389,8 +389,7 @@ public class QuerydslAuctionListQueryRepository implements AuctionListQueryRepos
 
     @Override
     public List<AuctionListRow> findDownRowsByPriceSnapshots(
-            List<AuctionPriceSnapshot> snapshots,
-            LocalDateTime asOf
+            List<AuctionPriceSnapshot> snapshots
     ) {
         if (snapshots.isEmpty()) {
             return List.of();

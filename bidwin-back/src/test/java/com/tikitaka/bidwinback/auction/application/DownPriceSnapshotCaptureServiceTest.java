@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class SnapshotCaptureServiceTest {
+class DownPriceSnapshotCaptureServiceTest {
 
     @Mock
     private AuctionPricePageQuery auctionPricePageQuery;
@@ -25,7 +25,7 @@ class SnapshotCaptureServiceTest {
     @Test
     void 같은_세대시각으로_LOW_HIGH_각각_최대_1600건을_캡처한다() {
         LocalDateTime generationAt = LocalDateTime.of(2026, 8, 18, 12, 0, 30);
-        SnapshotBuildKey key = SnapshotBuildKey.exact(generationAt);
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.exact(generationAt);
         AuctionListSearchCondition lowCondition = condition(AuctionSort.PRICE_LOW, generationAt);
         AuctionListSearchCondition highCondition = condition(AuctionSort.PRICE_HIGH, generationAt);
         List<AuctionPriceSnapshot> low = List.of(snapshot(1L, 100L));
@@ -39,7 +39,7 @@ class SnapshotCaptureServiceTest {
                 DownPriceSnapshot.MAX_ENTRIES_PER_SORT
         )).thenReturn(high);
 
-        DownPriceSnapshot snapshot = new SnapshotCaptureService(auctionPricePageQuery)
+        DownPriceSnapshot snapshot = new DownPriceSnapshotCaptureService(auctionPricePageQuery)
                 .capture(key);
 
         assertThat(snapshot.generationAt()).isEqualTo(generationAt);

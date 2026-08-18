@@ -1,7 +1,5 @@
 package com.tikitaka.bidwinback.auction.application;
 
-import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
-import com.tikitaka.bidwinback.auction.domain.enums.AuctionType;
 import com.tikitaka.bidwinback.auction.domain.repository.AuctionListQueryRepository;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionListRow;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
@@ -21,7 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class SnapshotPageAssemblerTest {
+class DownPriceSnapshotPageAssemblerTest {
 
     @Mock
     private AuctionListQueryRepository auctionListQueryRepository;
@@ -42,36 +40,23 @@ class SnapshotPageAssemblerTest {
         List<AuctionPriceSnapshot> entries = List.of(
                 new AuctionPriceSnapshot(1L, 100L, 90L)
         );
-        ResolvedSnapshot resolved = new ResolvedSnapshot(
-                new SnapshotGenerationPage(generationAt, 1, entries),
+        ResolvedDownPriceSnapshotPage resolved = new ResolvedDownPriceSnapshotPage(
+                new DownPriceSnapshotPage(generationAt, entries),
                 serverTime,
                 1,
-                true,
                 SnapshotResetReason.GENERATION_EXPIRED
         );
-        AuctionListQuery query = new AuctionListQuery(
-                AuctionType.DOWN,
-                AuctionSort.PRICE_LOW,
-                null,
-                null,
-                null,
-                5,
-                16,
-                generationAt.minusMinutes(1)
-        );
-        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(
-                entries,
-                generationAt
-        )).thenReturn(List.of(row));
+        when(auctionListQueryRepository.findDownRowsByPriceSnapshots(entries))
+                .thenReturn(List.of(row));
         when(responseMapper.toSummary(row)).thenReturn(summary);
         when(responseMapper.toEpochMilli(serverTime)).thenReturn(2L);
         when(responseMapper.toEpochMilli(generationAt)).thenReturn(1L);
 
-        AuctionListResponse response = new SnapshotPageAssembler(
+        AuctionListResponse response = new DownPriceSnapshotPageAssembler(
                 auctionListQueryRepository,
                 responseMapper,
                 new DownPriceSnapshotMetrics(new SimpleMeterRegistry())
-        ).assemble(query, resolved);
+        ).assemble(resolved);
 
         assertThat(response.items()).containsExactly(summary);
         assertThat(response.serverTime()).isEqualTo(2L);
@@ -82,9 +67,6 @@ class SnapshotPageAssemblerTest {
         assertThat(response.snapshotReset()).isTrue();
         assertThat(response.snapshotResetReason())
                 .isEqualTo(SnapshotResetReason.GENERATION_EXPIRED);
-        verify(auctionListQueryRepository).findDownRowsByPriceSnapshots(
-                entries,
-                generationAt
-        );
+        verify(auctionListQueryRepository).findDownRowsByPriceSnapshots(entries);
     }
 }

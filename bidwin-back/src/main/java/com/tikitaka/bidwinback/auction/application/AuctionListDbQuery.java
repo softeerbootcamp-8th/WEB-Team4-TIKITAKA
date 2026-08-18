@@ -19,7 +19,6 @@ import java.util.List;
 public class AuctionListDbQuery {
 
     private static final int FIRST_PAGE = 1;
-    private static final int DEFAULT_PAGE_SIZE = 16;
     private static final int MAX_PAGE_SIZE = 100;
 
     private final AuctionRepository auctionRepository;
@@ -44,7 +43,7 @@ public class AuctionListDbQuery {
         );
         int currentPage = normalizedPage(query.page());
         long offset = (long) (currentPage - FIRST_PAGE) * size;
-        long totalCount = (long) DownPriceSnapshotResolver.MAX_PAGES * size;
+        long totalCount = (long) AuctionListService.MAX_LIST_PAGES * size;
 
         List<AuctionListRow> rows = findPage(
                 condition,
@@ -58,10 +57,8 @@ public class AuctionListDbQuery {
                 responseMapper.toEpochMilli(serverTime),
                 responseMapper.toEpochMilli(asOf),
                 currentPage,
-                DownPriceSnapshotResolver.MAX_PAGES,
-                totalCount,
-                false,
-                null
+                AuctionListService.MAX_LIST_PAGES,
+                totalCount
         );
     }
 
@@ -86,7 +83,7 @@ public class AuctionListDbQuery {
 
     private int normalizedSize(int requestedSize) {
         if (requestedSize <= 0) {
-            return DEFAULT_PAGE_SIZE;
+            return AuctionListService.DEFAULT_PAGE_SIZE;
         }
         return Math.min(requestedSize, MAX_PAGE_SIZE);
     }
@@ -94,7 +91,7 @@ public class AuctionListDbQuery {
     private int normalizedPage(int requestedPage) {
         return Math.min(
                 Math.max(FIRST_PAGE, requestedPage),
-                DownPriceSnapshotResolver.MAX_PAGES
+                AuctionListService.MAX_LIST_PAGES
         );
     }
 }

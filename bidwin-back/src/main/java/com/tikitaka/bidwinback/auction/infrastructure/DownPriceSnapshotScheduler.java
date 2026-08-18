@@ -3,7 +3,7 @@ package com.tikitaka.bidwinback.auction.infrastructure;
 import com.tikitaka.bidwinback.auction.application.AuctionDatabaseTimeQuery;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildCoordinator;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
-import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildKey;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +30,10 @@ public class DownPriceSnapshotScheduler {
     )
     public void refreshLatest() {
         LocalDateTime databaseTime;
-        SnapshotBuildKey key;
+        DownPriceSnapshotBuildKey key;
         try {
             databaseTime = databaseTimeQuery.currentTime();
-            key = SnapshotBuildKey.latestSlot(databaseTime);
+            key = DownPriceSnapshotBuildKey.latestSlot(databaseTime);
         } catch (RuntimeException exception) {
             log.error("하향 가격 스냅샷 세대 시각을 조회하지 못했습니다.", exception);
             return;

@@ -49,4 +49,16 @@ class DownPriceSnapshotMetricsTest {
         assertThat(registry.get("snapshot.generation.age").gauge().value())
                 .isEqualTo(10D);
     }
+
+    @Test
+    void Redis_eviction_첫_조회는_기준값으로만_저장한다() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        DownPriceSnapshotMetrics metrics = new DownPriceSnapshotMetrics(registry);
+
+        metrics.recordRedisEvictions(5L);
+        metrics.recordRedisEvictions(7L);
+
+        assertThat(registry.get("snapshot.redis.evictions").counter().count())
+                .isEqualTo(2D);
+    }
 }

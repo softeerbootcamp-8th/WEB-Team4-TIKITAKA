@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 class DownPriceSnapshotBuildCoordinatorTest {
 
     @Mock
-    private SnapshotCaptureService captureService;
+    private DownPriceSnapshotCaptureService captureService;
 
     @Mock
     private RedisSnapshotStore redisStore;
@@ -33,7 +33,7 @@ class DownPriceSnapshotBuildCoordinatorTest {
         AtomicReference<Runnable> buildTask = new AtomicReference<>();
         Executor controlledExecutor = buildTask::set;
         DownPriceSnapshotBuildCoordinator coordinator = coordinator(controlledExecutor);
-        SnapshotBuildKey key = SnapshotBuildKey.exact(
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.exact(
                 LocalDateTime.of(2026, 8, 18, 12, 0)
         );
         DownPriceSnapshot snapshot = new DownPriceSnapshot(
@@ -57,7 +57,7 @@ class DownPriceSnapshotBuildCoordinatorTest {
     void Redis_발행이_실패해도_DB_캡처_결과로_완료한다() {
         Executor directExecutor = Runnable::run;
         DownPriceSnapshotBuildCoordinator coordinator = coordinator(directExecutor);
-        SnapshotBuildKey key = SnapshotBuildKey.exact(
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.exact(
                 LocalDateTime.of(2026, 8, 18, 12, 0)
         );
         DownPriceSnapshot snapshot = new DownPriceSnapshot(

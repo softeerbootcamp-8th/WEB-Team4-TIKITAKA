@@ -11,16 +11,17 @@ import java.util.concurrent.Executor;
 public class AuctionListService {
 
     static final int MAX_LIST_PAGES = 100;
+    static final int DEFAULT_PAGE_SIZE = 16;
 
     private final DownPriceSnapshotResolver snapshotResolver;
     private final AuctionListDbQuery dbQuery;
-    private final SnapshotPageAssembler pageAssembler;
+    private final DownPriceSnapshotPageAssembler pageAssembler;
     private final Executor pageAssemblyExecutor;
 
     public AuctionListService(
             DownPriceSnapshotResolver snapshotResolver,
             AuctionListDbQuery dbQuery,
-            SnapshotPageAssembler pageAssembler,
+            DownPriceSnapshotPageAssembler pageAssembler,
             @Qualifier("pageAssemblyExecutor") Executor pageAssemblyExecutor
     ) {
         this.snapshotResolver = snapshotResolver;
@@ -36,7 +37,7 @@ public class AuctionListService {
 
         return snapshotResolver.resolve(query)
                 .thenApplyAsync(
-                        resolved -> pageAssembler.assemble(query, resolved),
+                        pageAssembler::assemble,
                         pageAssemblyExecutor
                 );
     }

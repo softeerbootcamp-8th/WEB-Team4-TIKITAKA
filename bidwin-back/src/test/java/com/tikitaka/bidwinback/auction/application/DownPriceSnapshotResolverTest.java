@@ -103,15 +103,15 @@ class DownPriceSnapshotResolverTest {
     @Test
     void 첫_요청은_Redis_최신_세대의_해당_페이지만_반환한다() {
         LocalDateTime generationAt = SERVER_TIME.minusSeconds(10);
-        SnapshotGenerationPage page = page(generationAt, 20, 17L);
+        DownPriceSnapshotPage page = page(generationAt, 17L);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 2, null);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 2, 16))
                 .thenReturn(Optional.of(page));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot()).isSameAs(page);
+        assertThat(resolved.page()).isSameAs(page);
         assertThat(resolved.effectivePage()).isEqualTo(2);
         assertThat(resolved.reset()).isFalse();
         verify(buildCoordinator, never()).getOrBuild(org.mockito.ArgumentMatchers.any());
@@ -120,15 +120,15 @@ class DownPriceSnapshotResolverTest {
     @Test
     void exact_세대는_Redis에서_조회한다() {
         LocalDateTime generationAt = SERVER_TIME.minusMinutes(1);
-        SnapshotGenerationPage page = page(generationAt, 1, 1L);
+        DownPriceSnapshotPage page = page(generationAt, 1L);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 1, generationAt);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findExactPage(generationAt, AuctionSort.PRICE_LOW, 1, 16))
                 .thenReturn(Optional.of(page));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot()).isSameAs(page);
+        assertThat(resolved.page()).isSameAs(page);
         verify(buildCoordinator, never()).getOrBuild(org.mockito.ArgumentMatchers.any());
     }
 
@@ -137,16 +137,16 @@ class DownPriceSnapshotResolverTest {
         LocalDateTime expiredGeneration = SERVER_TIME.minusMinutes(1);
         LocalDateTime latestGeneration = SERVER_TIME.minusSeconds(10);
         AuctionListQuery query = query(AuctionSort.PRICE_HIGH, 5, expiredGeneration);
-        SnapshotGenerationPage latest = page(latestGeneration, 30, 30L);
+        DownPriceSnapshotPage latest = page(latestGeneration, 30L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findExactPage(expiredGeneration, AuctionSort.PRICE_HIGH, 5, 16))
                 .thenReturn(Optional.empty());
         when(redisStore.findLatestPage(AuctionSort.PRICE_HIGH, 1, 16))
                 .thenReturn(Optional.of(latest));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot()).isSameAs(latest);
+        assertThat(resolved.page()).isSameAs(latest);
         assertThat(resolved.effectivePage()).isEqualTo(1);
         assertThat(resolved.reset()).isTrue();
         assertThat(resolved.resetReason()).isEqualTo(SnapshotResetReason.GENERATION_EXPIRED);
@@ -156,7 +156,7 @@ class DownPriceSnapshotResolverTest {
     void Redis_장애중_exact_세대는_같은_asOf로_DB에서_재생성한다() {
         LocalDateTime generationAt = SERVER_TIME.minusMinutes(1);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 1, generationAt);
-        SnapshotBuildKey key = SnapshotBuildKey.exact(generationAt);
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.exact(generationAt);
         DownPriceSnapshot built = snapshot(generationAt, 1L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findExactPage(generationAt, AuctionSort.PRICE_LOW, 1, 16))
@@ -164,9 +164,9 @@ class DownPriceSnapshotResolverTest {
         when(buildCoordinator.getOrBuild(key))
                 .thenReturn(CompletableFuture.completedFuture(built));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot().generationAt()).isEqualTo(generationAt);
+        assertThat(resolved.page().generationAt()).isEqualTo(generationAt);
         assertThat(resolved.reset()).isFalse();
         verify(buildCoordinator).getOrBuild(key);
     }
@@ -174,7 +174,7 @@ class DownPriceSnapshotResolverTest {
     @Test
     void Redis_장애중_최신_세대는_DB에서_생성한다() {
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 2, null);
-        SnapshotBuildKey key = SnapshotBuildKey.latestSlot(SERVER_TIME);
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.latestSlot(SERVER_TIME);
         DownPriceSnapshot built = snapshot(key.generationAt(), 1L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 2, 16))
@@ -182,23 +182,23 @@ class DownPriceSnapshotResolverTest {
         when(buildCoordinator.getOrBuild(key))
                 .thenReturn(CompletableFuture.completedFuture(built));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
-        assertThat(resolved.snapshot().generationAt()).isEqualTo(key.generationAt());
+        assertThat(resolved.page().generationAt()).isEqualTo(key.generationAt());
         assertThat(resolved.effectivePage()).isEqualTo(2);
         verify(buildCoordinator).getOrBuild(key);
     }
 
     @Test
-    void 보존기간_10분을_초과한_세대는_저장소를_조회하지_않고_최신_1페이지로_reset한다() {
-        LocalDateTime expiredGeneration = SERVER_TIME.minusMinutes(10).minusNanos(1);
+    void 보존기간_10분에_도달한_세대는_저장소를_조회하지_않고_최신_1페이지로_reset한다() {
+        LocalDateTime expiredGeneration = SERVER_TIME.minusMinutes(10);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 3, expiredGeneration);
-        SnapshotGenerationPage latest = page(SERVER_TIME.minusSeconds(5), 1, 1L);
+        DownPriceSnapshotPage latest = page(SERVER_TIME.minusSeconds(5), 1L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 1, 16))
                 .thenReturn(Optional.of(latest));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
         assertThat(resolved.reset()).isTrue();
         assertThat(resolved.effectivePage()).isEqualTo(1);
@@ -214,12 +214,12 @@ class DownPriceSnapshotResolverTest {
     void 서버가_발급하지_않은_세대_시각은_DB로_재생성하지_않고_reset한다() {
         LocalDateTime invalidGeneration = SERVER_TIME.minusSeconds(15);
         AuctionListQuery query = query(AuctionSort.PRICE_LOW, 3, invalidGeneration);
-        SnapshotGenerationPage latest = page(SERVER_TIME.minusSeconds(30), 1, 1L);
+        DownPriceSnapshotPage latest = page(SERVER_TIME.minusSeconds(30), 1L);
         when(databaseTimeQuery.currentTime()).thenReturn(SERVER_TIME);
         when(redisStore.findLatestPage(AuctionSort.PRICE_LOW, 1, 16))
                 .thenReturn(Optional.of(latest));
 
-        ResolvedSnapshot resolved = resolver.resolve(query).join();
+        ResolvedDownPriceSnapshotPage resolved = resolver.resolve(query).join();
 
         assertThat(resolved.reset()).isTrue();
         assertThat(resolved.effectivePage()).isEqualTo(1);
@@ -229,7 +229,7 @@ class DownPriceSnapshotResolverTest {
                 3,
                 16
         );
-        verify(buildCoordinator, never()).getOrBuild(SnapshotBuildKey.exact(invalidGeneration));
+        verify(buildCoordinator, never()).getOrBuild(DownPriceSnapshotBuildKey.exact(invalidGeneration));
     }
 
     private AuctionListQuery query(
@@ -249,14 +249,12 @@ class DownPriceSnapshotResolverTest {
         );
     }
 
-    private SnapshotGenerationPage page(
+    private DownPriceSnapshotPage page(
             LocalDateTime generationAt,
-            int totalCount,
             long auctionId
     ) {
-        return new SnapshotGenerationPage(
+        return new DownPriceSnapshotPage(
                 generationAt,
-                totalCount,
                 List.of(new AuctionPriceSnapshot(auctionId, 100L, 90L))
         );
     }

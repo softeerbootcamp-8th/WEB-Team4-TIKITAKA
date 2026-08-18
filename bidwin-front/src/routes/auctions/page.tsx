@@ -64,7 +64,7 @@ function AuctionListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
-  const snapshotRef = useRef<{ queryKey: string; asOf: number } | null>(null)
+  const snapshotGenerationRef = useRef<{ queryKey: string; asOf: number } | null>(null)
   const skipNextRequestRef = useRef<{ queryKey: string; page: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const { serverOffsetMs } = useServerClock(response?.serverTime)
@@ -100,8 +100,8 @@ function AuctionListPage() {
 
     const controller = new AbortController()
     let active = true
-    const snapshot = snapshotRef.current?.queryKey === queryKey
-      ? snapshotRef.current.asOf
+    const snapshotAsOf = snapshotGenerationRef.current?.queryKey === queryKey
+      ? snapshotGenerationRef.current.asOf
       : undefined
 
     setIsLoading(true)
@@ -115,7 +115,7 @@ function AuctionListPage() {
       sort,
       page,
       size: PAGE_SIZE,
-      asOf: snapshot,
+      asOf: snapshotAsOf,
     }, controller.signal).then((result) => {
       if (!active) return
       setIsLoading(false)
@@ -123,7 +123,7 @@ function AuctionListPage() {
         setError(result.message)
         return
       }
-      snapshotRef.current = { queryKey, asOf: result.data.asOf }
+      snapshotGenerationRef.current = { queryKey, asOf: result.data.asOf }
       if (result.data.snapshotReset) {
         if (page !== FIRST_PAGE) {
           skipNextRequestRef.current = { queryKey, page: FIRST_PAGE }

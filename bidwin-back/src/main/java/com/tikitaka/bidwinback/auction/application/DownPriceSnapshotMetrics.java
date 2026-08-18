@@ -120,9 +120,10 @@ public class DownPriceSnapshotMetrics {
             return;
         }
         long previous = lastRedisEvictions.getAndSet(serverTotal);
-        long delta = previous < 0
-                ? serverTotal
-                : serverTotal >= previous ? serverTotal - previous : serverTotal;
+        if (previous < 0) {
+            return;
+        }
+        long delta = serverTotal >= previous ? serverTotal - previous : serverTotal;
         redisEvictions.increment(delta);
     }
 

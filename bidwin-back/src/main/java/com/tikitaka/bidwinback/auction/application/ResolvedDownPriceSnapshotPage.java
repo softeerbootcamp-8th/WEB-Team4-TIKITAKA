@@ -2,11 +2,14 @@ package com.tikitaka.bidwinback.auction.application;
 
 import java.time.LocalDateTime;
 
-public record ResolvedSnapshot(
-        SnapshotGenerationPage snapshot,
+public record ResolvedDownPriceSnapshotPage(
+        DownPriceSnapshotPage page,
         LocalDateTime serverTime,
         int effectivePage,
-        boolean reset,
         SnapshotResetReason resetReason
 ) {
+
+    public boolean reset() {
+        return resetReason != null;
+    }
 }

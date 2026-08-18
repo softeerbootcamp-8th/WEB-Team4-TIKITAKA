@@ -1199,7 +1199,7 @@ class QuerydslAuctionListQueryRepositoryIntegrationTest {
         statistics.clear();
 
         List<AuctionListRow> rows = auctionListQueryRepository
-                .findDownRowsByPriceSnapshots(snapshots, AS_OF);
+                .findDownRowsByPriceSnapshots(snapshots);
 
         assertThat(rows)
                 .extracting(AuctionListRow::auctionId)

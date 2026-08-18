@@ -13,12 +13,12 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class SnapshotCaptureService {
+public class DownPriceSnapshotCaptureService {
 
     private final AuctionPricePageQuery auctionPricePageQuery;
 
     @Transactional(readOnly = true)
-    public DownPriceSnapshot capture(SnapshotBuildKey key) {
+    public DownPriceSnapshot capture(DownPriceSnapshotBuildKey key) {
         List<AuctionPriceSnapshot> priceLow = auctionPricePageQuery.findSnapshots(
                 condition(AuctionSort.PRICE_LOW, key),
                 DownPriceSnapshot.MAX_ENTRIES_PER_SORT
@@ -32,7 +32,7 @@ public class SnapshotCaptureService {
 
     private AuctionListSearchCondition condition(
             AuctionSort sort,
-            SnapshotBuildKey key
+            DownPriceSnapshotBuildKey key
     ) {
         return new AuctionListSearchCondition(
                 AuctionType.DOWN,

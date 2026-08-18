@@ -27,7 +27,7 @@ class AuctionListServiceTest {
     private AuctionListDbQuery dbQuery;
 
     @Mock
-    private SnapshotPageAssembler pageAssembler;
+    private DownPriceSnapshotPageAssembler pageAssembler;
 
     private final Executor directExecutor = Runnable::run;
 
@@ -47,21 +47,19 @@ class AuctionListServiceTest {
     @Test
     void 캐시_대상이면_Resolver_완료후_별도_Executor에서_페이지를_조립한다() {
         AuctionListQuery query = query(AuctionType.DOWN, AuctionSort.PRICE_LOW);
-        ResolvedSnapshot resolved = new ResolvedSnapshot(
-                new SnapshotGenerationPage(
+        ResolvedDownPriceSnapshotPage resolved = new ResolvedDownPriceSnapshotPage(
+                new DownPriceSnapshotPage(
                         java.time.LocalDateTime.of(2026, 8, 18, 12, 0),
-                        0,
                         List.of()
                 ),
                 java.time.LocalDateTime.of(2026, 8, 18, 12, 0, 1),
                 1,
-                false,
                 null
         );
         AuctionListResponse response = response();
         when(snapshotResolver.supports(query)).thenReturn(true);
         when(snapshotResolver.resolve(query)).thenReturn(CompletableFuture.completedFuture(resolved));
-        when(pageAssembler.assemble(query, resolved)).thenReturn(response);
+        when(pageAssembler.assemble(resolved)).thenReturn(response);
 
         CompletableFuture<AuctionListResponse> result = service().getList(query);
 

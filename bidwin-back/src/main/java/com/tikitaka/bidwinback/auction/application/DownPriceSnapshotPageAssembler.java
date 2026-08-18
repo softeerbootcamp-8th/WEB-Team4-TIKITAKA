@@ -12,33 +12,27 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
-public class SnapshotPageAssembler {
+public class DownPriceSnapshotPageAssembler {
 
     private final AuctionListQueryRepository auctionListQueryRepository;
     private final AuctionSummaryResponseMapper responseMapper;
     private final DownPriceSnapshotMetrics metrics;
 
     @Transactional(readOnly = true)
-    public AuctionListResponse assemble(
-            AuctionListQuery query,
-            ResolvedSnapshot resolved
-    ) {
+    public AuctionListResponse assemble(ResolvedDownPriceSnapshotPage resolved) {
         Timer.Sample sample = metrics.startPageAssembly();
         try {
-            SnapshotGenerationPage snapshot = resolved.snapshot();
+            DownPriceSnapshotPage page = resolved.page();
             List<AuctionListRow> rows = auctionListQueryRepository
-                    .findDownRowsByPriceSnapshots(
-                            snapshot.entries(),
-                            snapshot.generationAt()
-                    );
+                    .findDownRowsByPriceSnapshots(page.entries());
             return new AuctionListResponse(
                     rows.stream().map(responseMapper::toSummary).toList(),
                     responseMapper.toEpochMilli(resolved.serverTime()),
-                    responseMapper.toEpochMilli(snapshot.generationAt()),
+                    responseMapper.toEpochMilli(page.generationAt()),
                     resolved.effectivePage(),
-                    DownPriceSnapshotResolver.MAX_PAGES,
-                    (long) DownPriceSnapshotResolver.MAX_PAGES
-                            * DownPriceSnapshotResolver.PAGE_SIZE,
+                    AuctionListService.MAX_LIST_PAGES,
+                    (long) AuctionListService.MAX_LIST_PAGES
+                            * AuctionListService.DEFAULT_PAGE_SIZE,
                     resolved.reset(),
                     resolved.resetReason()
             );

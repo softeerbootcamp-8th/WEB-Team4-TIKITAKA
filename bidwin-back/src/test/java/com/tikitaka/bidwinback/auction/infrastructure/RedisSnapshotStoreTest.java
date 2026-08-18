@@ -2,7 +2,7 @@ package com.tikitaka.bidwinback.auction.infrastructure;
 
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
-import com.tikitaka.bidwinback.auction.application.SnapshotGenerationPage;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotPage;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -107,7 +107,7 @@ class RedisSnapshotStoreTest {
                 "17:210:195"
         ));
 
-        SnapshotGenerationPage page = store.findExactPage(
+        DownPriceSnapshotPage page = store.findExactPage(
                 GENERATION_AT,
                 AuctionSort.PRICE_LOW,
                 2,
@@ -115,7 +115,6 @@ class RedisSnapshotStoreTest {
         ).orElseThrow();
 
         assertThat(page.generationAt()).isEqualTo(GENERATION_AT);
-        assertThat(page.totalCount()).isEqualTo(18);
         assertThat(page.entries()).containsExactly(
                 new AuctionPriceSnapshot(18L, 200L, 190L),
                 new AuctionPriceSnapshot(17L, 210L, 195L)

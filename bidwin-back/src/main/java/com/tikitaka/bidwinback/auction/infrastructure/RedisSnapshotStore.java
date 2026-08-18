@@ -2,10 +2,11 @@ package com.tikitaka.bidwinback.auction.infrastructure;
 
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
-import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
-import com.tikitaka.bidwinback.auction.application.SnapshotGenerationPage;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildKey;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotPage;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import com.tikitaka.bidwinback.auction.domain.repository.dto.AuctionPriceSnapshot;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.function.Supplier;
 
+@Slf4j
 @Component
 public class RedisSnapshotStore {
 
@@ -160,7 +162,7 @@ public class RedisSnapshotStore {
         }
     }
 
-    public Optional<SnapshotGenerationPage> findLatestPage(
+    public Optional<DownPriceSnapshotPage> findLatestPage(
             AuctionSort sort,
             int page,
             int size
@@ -180,7 +182,7 @@ public class RedisSnapshotStore {
         ));
     }
 
-    public Optional<SnapshotGenerationPage> findExactPage(
+    public Optional<DownPriceSnapshotPage> findExactPage(
             LocalDateTime generationAt,
             AuctionSort sort,
             int page,
@@ -205,7 +207,7 @@ public class RedisSnapshotStore {
         ));
     }
 
-    public boolean tryAcquireCaptureLock(SnapshotBuildKey key) {
+    public boolean tryAcquireCaptureLock(DownPriceSnapshotBuildKey key) {
         String slot = Long.toString(toEpochMilli(key.generationAt()));
         return execute(() -> Boolean.TRUE.equals(
                 redisTemplate.opsForValue().setIfAbsent(
@@ -229,6 +231,7 @@ public class RedisSnapshotStore {
             }
         } catch (RuntimeException exception) {
             // 관측용 INFO 실패가 스냅샷 조회 circuit나 응답 경로에 영향을 주면 안 된다.
+            log.debug("Redis eviction 메트릭을 조회하지 못했습니다.", exception);
         }
     }
 
@@ -263,7 +266,7 @@ public class RedisSnapshotStore {
         return result;
     }
 
-    private Optional<SnapshotGenerationPage> parsePage(
+    private Optional<DownPriceSnapshotPage> parsePage(
             List<?> values,
             int page,
             int size
@@ -280,6 +283,9 @@ public class RedisSnapshotStore {
 
         LocalDateTime generationAt = fromEpochMilli(parseLong(values.get(0)));
         int totalCount = Math.toIntExact(parseLong(values.get(1)));
+        if (totalCount < 0 || totalCount > DownPriceSnapshot.MAX_ENTRIES_PER_SORT) {
+            throw new IllegalStateException("Redis 스냅샷 전체 건수가 유효하지 않습니다.");
+        }
         int expectedSize = Math.min(size, Math.max(0, totalCount - (int) offset(page, size)));
         if (values.size() - 2 != expectedSize) {
             throw new IllegalStateException("Redis 스냅샷 페이지 길이가 일치하지 않습니다.");
@@ -288,7 +294,7 @@ public class RedisSnapshotStore {
                 .stream()
                 .map(value -> deserialize(value.toString()))
                 .toList();
-        return Optional.of(new SnapshotGenerationPage(generationAt, totalCount, entries));
+        return Optional.of(new DownPriceSnapshotPage(generationAt, entries));
     }
 
     private <T> T execute(Supplier<T> operation) {

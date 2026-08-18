@@ -4,7 +4,7 @@ import com.tikitaka.bidwinback.auction.application.AuctionDatabaseTimeQuery;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshot;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildCoordinator;
 import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
-import com.tikitaka.bidwinback.auction.application.SnapshotBuildKey;
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotBuildKey;
 import com.tikitaka.bidwinback.auction.domain.enums.AuctionSort;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -38,7 +38,7 @@ class DownPriceSnapshotSchedulerTest {
     @Test
     void 같은_30초_슬롯의_분산락을_얻은_인스턴스만_Coordinator를_호출한다() {
         LocalDateTime databaseTime = LocalDateTime.of(2026, 8, 18, 12, 0, 47);
-        SnapshotBuildKey key = SnapshotBuildKey.latestSlot(databaseTime);
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.latestSlot(databaseTime);
         when(databaseTimeQuery.currentTime()).thenReturn(databaseTime);
         when(redisStore.tryAcquireCaptureLock(key)).thenReturn(true);
         when(buildCoordinator.getOrBuild(key)).thenReturn(CompletableFuture.completedFuture(
@@ -55,7 +55,7 @@ class DownPriceSnapshotSchedulerTest {
     @Test
     void 다른_인스턴스가_슬롯락을_가졌으면_세대를_만들지_않는다() {
         LocalDateTime databaseTime = LocalDateTime.of(2026, 8, 18, 12, 0, 47);
-        SnapshotBuildKey key = SnapshotBuildKey.latestSlot(databaseTime);
+        DownPriceSnapshotBuildKey key = DownPriceSnapshotBuildKey.latestSlot(databaseTime);
         when(databaseTimeQuery.currentTime()).thenReturn(databaseTime);
         when(redisStore.tryAcquireCaptureLock(key)).thenReturn(false);
 
