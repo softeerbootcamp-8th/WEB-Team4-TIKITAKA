@@ -172,6 +172,22 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ---
 ## 5. 기술적 성과
+### 김근성
+- [[김근성] 실행계획·인덱스·데이터 분포로 경매 마감 SQL 병목 추적 (5,001만 행 → 1만 행)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%8B%A4%ED%96%89%EA%B3%84%ED%9A%8D%C2%B7%EC%9D%B8%EB%8D%B1%EC%8A%A4%C2%B7%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%B6%84%ED%8F%AC%EB%A1%9C-%EA%B2%BD%EB%A7%A4-%EB%A7%88%EA%B0%90-SQL-%EB%B3%91%EB%AA%A9-%EC%B6%94%EC%A0%81-(5,001%EB%A7%8C-%ED%96%89-%E2%86%92-1%EB%A7%8C-%ED%96%89))
+- [[김근성] HQL INSERT SELECT에서 Native Set‐based 정산까지 (21.15s → 1.05s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-HQL-INSERT-SELECT%EC%97%90%EC%84%9C-Native-Set%E2%80%90based-%EC%A0%95%EC%82%B0%EA%B9%8C%EC%A7%80-(21.15s-%E2%86%92-1.05s))
+- [[김근성] SSE의 DB 커넥션 수명 결합 문제 해결](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-SSE%EC%9D%98-DB-%EC%BB%A4%EB%84%A5%EC%85%98-%EC%88%98%EB%AA%85-%EA%B2%B0%ED%95%A9-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0)
+- [[김근성] 26회의 부하 테스트를 통한 SSE 병목 분리와 안정성 검증](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-26%ED%9A%8C%EC%9D%98-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%A5%BC-%ED%86%B5%ED%95%9C-SSE-%EB%B3%91%EB%AA%A9-%EB%B6%84%EB%A6%AC%EC%99%80-%EC%95%88%EC%A0%95%EC%84%B1-%EA%B2%80%EC%A6%9D)
+- [[김근성] 쿼리 최적화와 Caffeine Single‐flight 캐싱을 통한 SSE 초기 스냅샷 개선 (p95 21.55s → 26.70ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%BF%BC%EB%A6%AC-%EC%B5%9C%EC%A0%81%ED%99%94%EC%99%80-Caffeine-Single%E2%80%90flight-%EC%BA%90%EC%8B%B1%EC%9D%84-%ED%86%B5%ED%95%9C-SSE-%EC%B4%88%EA%B8%B0-%EC%8A%A4%EB%83%85%EC%83%B7-%EA%B0%9C%EC%84%A0-(p95-21.55s-%E2%86%92-26.70ms))
+- [[김근성] Top‐K 알고리즘 도입을 통한 가격순 정렬 개선 (45s → 20s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Top%E2%80%90K-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EB%8F%84%EC%9E%85%EC%9D%84-%ED%86%B5%ED%95%9C-%EA%B0%80%EA%B2%A9%EC%88%9C-%EC%A0%95%EB%A0%AC-%EA%B0%9C%EC%84%A0-(45s-%E2%86%92-20s))
+
+
+### 허찬욱
+- [[허찬욱] 20만 건 부하테스트 직후 JVM 종료 (OOM)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-20%EB%A7%8C-%EA%B1%B4-%EB%B6%80%ED%95%98%ED%85%8C%EC%8A%A4%ED%8A%B8-%EC%A7%81%ED%9B%84-JVM-%EC%A2%85%EB%A3%8C-(OOM))
+- [[허찬욱] 가격 오름차순 Top‐K 조회 최적화](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EA%B0%80%EA%B2%A9-%EC%98%A4%EB%A6%84%EC%B0%A8%EC%88%9C-Top%E2%80%90K-%EC%A1%B0%ED%9A%8C-%EC%B5%9C%EC%A0%81%ED%99%94)
+- [[허찬욱] 최신·마감임박순 정렬 병목 개선 — 필터 미기여 인덱스 교체](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EC%B5%9C%EC%8B%A0%C2%B7%EB%A7%88%EA%B0%90%EC%9E%84%EB%B0%95%EC%88%9C-%EC%A0%95%EB%A0%AC-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-%ED%95%84%ED%84%B0-%EB%AF%B8%EA%B8%B0%EC%97%AC-%EC%9D%B8%EB%8D%B1%EC%8A%A4-%EA%B5%90%EC%B2%B4)
+- [[허찬욱] 추천순 집계 병목 개선 — bid_count 반정규화](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EC%B6%94%EC%B2%9C%EC%88%9C-%EC%A7%91%EA%B3%84-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-bid_count-%EB%B0%98%EC%A0%95%EA%B7%9C%ED%99%94)
+- [[허찬욱] 목록 조회 트랜잭션 제거 검토 — 측정 후 미채택](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-%EC%A1%B0%ED%9A%8C-%ED%8A%B8%EB%9E%9C%EC%9E%AD%EC%85%98-%EC%A0%9C%EA%B1%B0-%EA%B2%80%ED%86%A0-%E2%80%94-%EC%B8%A1%EC%A0%95-%ED%9B%84-%EB%AF%B8%EC%B1%84%ED%83%9D)
+- [[허찬욱] 목록 COUNT 병목 개선 — 캐시 반려](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-COUNT-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-%EC%BA%90%EC%8B%9C-%EB%B0%98%EB%A0%A4)
 
 ---
 
