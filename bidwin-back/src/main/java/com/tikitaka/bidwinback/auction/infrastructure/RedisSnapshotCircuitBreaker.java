@@ -1,0 +1,69 @@
+package com.tikitaka.bidwinback.auction.infrastructure;
+
+import com.tikitaka.bidwinback.auction.application.DownPriceSnapshotMetrics;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.function.LongSupplier;
+
+@Component
+public class RedisSnapshotCircuitBreaker {
+
+    private final long openDurationNanos;
+    private final LongSupplier nanoTime;
+    private final DownPriceSnapshotMetrics metrics;
+
+    private boolean open;
+    private long openedAtNanos;
+    private boolean probeInProgress;
+
+    @Autowired
+    public RedisSnapshotCircuitBreaker(
+            @Value("${app.auction.down-price-snapshot.redis-circuit-open-duration}")
+            Duration openDuration,
+            DownPriceSnapshotMetrics metrics
+    ) {
+        this(openDuration, System::nanoTime, metrics);
+    }
+
+    RedisSnapshotCircuitBreaker(
+            Duration openDuration,
+            LongSupplier nanoTime,
+            DownPriceSnapshotMetrics metrics
+    ) {
+        if (openDuration.isNegative() || openDuration.isZero()) {
+            throw new IllegalArgumentException("Redis circuit open 기간은 0보다 커야 합니다.");
+        }
+        this.openDurationNanos = openDuration.toNanos();
+        this.nanoTime = nanoTime;
+        this.metrics = metrics;
+    }
+
+    public synchronized boolean tryAcquirePermission() {
+        if (!open) {
+            return true;
+        }
+        long elapsed = nanoTime.getAsLong() - openedAtNanos;
+        if (elapsed < openDurationNanos || probeInProgress) {
+            return false;
+        }
+        probeInProgress = true;
+        return true;
+    }
+
+    public synchronized void recordSuccess() {
+        open = false;
+        openedAtNanos = 0L;
+        probeInProgress = false;
+        metrics.setRedisCircuitOpen(false);
+    }
+
+    public synchronized void recordFailure() {
+        open = true;
+        openedAtNanos = nanoTime.getAsLong();
+        probeInProgress = false;
+        metrics.setRedisCircuitOpen(true);
+    }
+}

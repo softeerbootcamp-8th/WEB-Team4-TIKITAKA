@@ -3,6 +3,7 @@ package com.tikitaka.bidwinback.global.exception;
 import com.tikitaka.bidwinback.global.common.ApiResponse;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.web.ErrorProperties;
 import org.springframework.boot.webmvc.autoconfigure.error.BasicErrorController;
 import org.springframework.boot.webmvc.error.ErrorAttributes;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 기본값으로 직접 생성한다. 나중에 server.error.* 설정을 추가하면 이 값도 함께 반영해야 한다.
  */
 @RestController
+@Slf4j
 public class FilterEscapedExceptionController implements ErrorController {
 
     private final BasicErrorController defaultErrorController;
@@ -37,7 +39,17 @@ public class FilterEscapedExceptionController implements ErrorController {
     public ResponseEntity<?> handleError(HttpServletRequest request) {
         Object exception = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
 
-        if (exception instanceof DataAccessException) {
+        if (exception instanceof DataAccessException dataAccessException) {
+            String requestUri = (String) request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
+            if (requestUri == null) {
+                requestUri = request.getRequestURI();
+            }
+            log.atError()
+                    .addKeyValue("event", "authentication_session_commit_failed")
+                    .addKeyValue("method", request.getMethod())
+                    .addKeyValue("path", requestUri)
+                    .addKeyValue("failureType", dataAccessException.getClass().getSimpleName())
+                    .log("인증 세션 변경 사항을 저장하지 못했습니다.");
             return ResponseEntity.status(ErrorCode.AUTHENTICATION_UNAVAILABLE.getStatus())
                     .body(ApiResponse.error(ErrorCode.AUTHENTICATION_UNAVAILABLE));
         }

@@ -45,9 +45,27 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
 
+    @Bean(name = "snapshotBuildExecutor")
+    public Executor snapshotBuildExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("down-price-snapshot-build-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        return executor;
+    }
+
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (exception, method, parameters) ->
-                log.error("Async task failed: {}", method.getName(), exception);
+                log.atError()
+                        .addKeyValue("event", "async_task_failed")
+                        .addKeyValue("className", method.getDeclaringClass().getSimpleName())
+                        .addKeyValue("methodName", method.getName())
+                        .addKeyValue("failureType", exception.getClass().getSimpleName())
+                        .log("비동기 작업을 완료하지 못했습니다.");
     }
 }

@@ -192,3 +192,9 @@ test('마감 시각은 월·일·시·분을 두 자리로 채워 보여준다',
   // then
   assert.equal(text, '2026.08.05 09:07 마감')
 })
+
+test('하향 경매 변동 시각을 한국 시간으로 표시한다', () => {
+  const droppedAt = new Date('2026-08-18T00:00:00.000Z')
+
+  assert.equal(formatTimeOfDay(droppedAt, 'Asia/Seoul'), '09:00:00')
+})

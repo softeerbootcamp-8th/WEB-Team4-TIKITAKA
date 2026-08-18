@@ -36,7 +36,11 @@ public class BidPriceCacheRevertListener {
                             actualPrice
                     ));
         } catch (RuntimeException exception) {
-            log.warn("롤백된 입찰의 가격 캐시 재동기화에 실패했습니다. auctionId={}", event.auctionId(), exception);
+            log.atWarn()
+                    .setCause(exception)
+                    .addKeyValue("event", "bid_price_cache_resync_failed")
+                    .addKeyValue("auctionId", event.auctionId())
+                    .log("롤백된 입찰의 가격 캐시 재동기화에 실패했습니다.");
         }
     }
 }

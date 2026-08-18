@@ -20,7 +20,10 @@ public class PendingProfileImageCleanupScheduler {
     public void cleanup() {
         int deletedCount = cleanupService.cleanup();
         if (deletedCount > 0) {
-            log.info("미사용 프로필 이미지 정리 완료: count={}", deletedCount);
+            log.atInfo()
+                    .addKeyValue("event", "pending_profile_image_cleanup_completed")
+                    .addKeyValue("deletedCount", deletedCount)
+                    .log("미사용 프로필 이미지 정리 완료");
         }
     }
 }

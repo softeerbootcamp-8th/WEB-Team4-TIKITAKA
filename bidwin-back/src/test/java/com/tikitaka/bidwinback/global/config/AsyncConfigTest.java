@@ -55,7 +55,7 @@ class AsyncConfigTest {
     @Test
     void 비동기_예외를_토큰_노출_없이_기록한다(CapturedOutput output)
             throws NoSuchMethodException {
-        RuntimeException failure = new RuntimeException("SMTP failure");
+        RuntimeException failure = new RuntimeException("recipient=member@example.com token=raw-token");
 
         new AsyncConfig().getAsyncUncaughtExceptionHandler()
                 .handleUncaughtException(
@@ -65,8 +65,8 @@ class AsyncConfigTest {
                 );
 
         assertThat(output)
-                .contains("Async task failed: mailTask")
-                .contains("SMTP failure")
+                .contains("비동기 작업을 완료하지 못했습니다.")
+                .doesNotContain("member@example.com")
                 .doesNotContain("raw-token");
     }
 

@@ -25,6 +25,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth")
 @Tag(name = "인증", description = "회원가입, 로그인, 이메일 인증과 비밀번호 재설정")
@@ -123,11 +125,21 @@ public class AuthController {
                 establishSession(servletRequest, authMember);
             } catch (DataAccessException | SerializationException retryException) {
                 discardFailedSession(servletRequest);
+                log.atError()
+                        .addKeyValue("event", "login_session_create_failed")
+                        .addKeyValue("memberId", authMember.memberId())
+                        .addKeyValue("failureType", retryException.getClass().getSimpleName())
+                        .log("로그인 세션을 생성하지 못했습니다.");
                 throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
             }
         } catch (DataAccessException exception) {
             // 자격 검증은 끝났지만 세션을 저장할 수 없으므로 로그인 성공으로 응답하면 안 된다.
             discardFailedSession(servletRequest);
+            log.atError()
+                    .addKeyValue("event", "login_session_create_failed")
+                    .addKeyValue("memberId", authMember.memberId())
+                    .addKeyValue("failureType", exception.getClass().getSimpleName())
+                    .log("로그인 세션을 생성하지 못했습니다.");
             throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
         }
 
@@ -215,6 +227,10 @@ public class AuthController {
                 // 서버 측 세션이 실제로 삭제됐는지 확인할 수 없다. 성공으로 응답하면
                 // 탈취됐거나 다른 곳에 저장된 같은 쿠키가 재시도 없이 TTL/절대 만료
                 // 전까지 계속 유효한 자격으로 남으므로, 성공으로 숨기지 않고 알린다.
+                log.atError()
+                        .addKeyValue("event", "logout_session_invalidation_failed")
+                        .addKeyValue("failureType", exception.getClass().getSimpleName())
+                        .log("로그아웃 세션을 폐기하지 못했습니다.");
                 throw new AuthException(ErrorCode.AUTHENTICATION_UNAVAILABLE);
             }
         }

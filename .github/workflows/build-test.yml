@@ -276,6 +276,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      failure_reason: ${{ steps.reason.outputs.reason }}
+      failure_detail: ${{ steps.reason.outputs.detail }}
     env:
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
@@ -284,16 +287,20 @@ jobs:
       EC2_USER: ${{ vars.EC2_USER }}
       BACKEND_DEPLOY_PATH: ${{ vars.BACKEND_DEPLOY_PATH }}
       BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+      BACKEND_SERVICE_NAME: bidwin.service
     steps:
-      - uses: actions/download-artifact@v8
+      - id: download-backend
+        uses: actions/download-artifact@v8
         with:
           name: backend
           path: backend-artifact
-      - uses: actions/download-artifact@v8
+      - id: download-frontend
+        uses: actions/download-artifact@v8
         with:
           name: frontend
           path: frontend-artifact
       - name: Validate deployment configuration
+        id: validate
         env:
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
@@ -304,35 +311,261 @@ jobs:
           : "${EC2_HOST:?Set the EC2_HOST variable}"
           : "${EC2_USER:?Set the EC2_USER variable}"
           : "${BACKEND_DEPLOY_PATH:?Set the BACKEND_DEPLOY_PATH variable}"
+          # 재시작 후 헬스체크가 배포 성공의 판정 기준이므로 URL 누락을 조용히 넘기지 않는다.
+          : "${BACKEND_HEALTH_URL:?Set the BACKEND_HEALTH_URL variable}"
           : "${EC2_SSH_PRIVATE_KEY:?Set the EC2_SSH_PRIVATE_KEY secret}"
           : "${EC2_KNOWN_HOSTS:?Set the EC2_KNOWN_HOSTS secret}"
-      - name: Deploy backend
+      - name: Prepare SSH credentials
+        id: ssh-credentials
         env:
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
-          key_file="$RUNNER_TEMP/ec2_key"
+          key_file="$RUNNER_TEMP/bidwin-deploy.pem"
           known_hosts_file="$RUNNER_TEMP/known_hosts"
+          umask 077
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > "$key_file"
           printf '%s\n' "$EC2_KNOWN_HOSTS" > "$known_hosts_file"
           chmod 600 "$key_file" "$known_hosts_file"
+          {
+            echo "SSH_KEY_FILE=$key_file"
+            echo "SSH_KNOWN_HOSTS_FILE=$known_hosts_file"
+          } >> "$GITHUB_ENV"
+      - name: Upload backend jar
+        id: upload-jar
+        run: |
           scp \
-            -i "$key_file" \
-            -o UserKnownHostsFile="$known_hosts_file" \
+            -i "$SSH_KEY_FILE" \
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS_FILE" \
             -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
             backend-artifact/*.jar \
             "$EC2_USER@$EC2_HOST:$BACKEND_DEPLOY_PATH"
+      - name: Restart backend service
+        id: restart-service
+        run: |
+          ssh \
+            -i "$SSH_KEY_FILE" \
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS_FILE" \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            "$EC2_USER@$EC2_HOST" \
+            "set -e
+             sudo -n systemctl restart '$BACKEND_SERVICE_NAME'
+             sudo -n systemctl is-active --quiet '$BACKEND_SERVICE_NAME'"
       - name: Check backend health
-        if: env.BACKEND_HEALTH_URL != ''
-        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors "$BACKEND_HEALTH_URL"
+        id: health-check
+        run: |
+          # 재시작 직후에는 스프링 부트 기동이 끝나지 않으므로 최대 90초까지 재시도한다.
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --retry 18 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            --max-time 10 \
+            --output /dev/null \
+            "$BACKEND_HEALTH_URL"
       - name: Configure AWS credentials
+        id: configure-aws
         uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: GitHubActions-${{ github.run_id }}
       - name: Deploy frontend
+        id: deploy-frontend
         run: |
           # ponytail: 전체 파일을 재검증하도록 두고, 트래픽이 커지면 해시 자산만 장기 캐시한다.
           aws s3 sync frontend-artifact/ "$FRONTEND_S3_URI" \
             --cache-control "no-cache"
+      - name: Collect backend diagnostics
+        id: diagnostics
+        if: >-
+          always()
+          && (steps.restart-service.outcome == 'failure'
+            || steps.health-check.outcome == 'failure')
+        continue-on-error: true
+        run: |
+          ssh \
+            -i "$SSH_KEY_FILE" \
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS_FILE" \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            "$EC2_USER@$EC2_HOST" \
+            "sudo -n systemctl is-active '$BACKEND_SERVICE_NAME' || true
+             sudo -n journalctl -u '$BACKEND_SERVICE_NAME' --no-pager --lines=20 \
+               2>/dev/null \
+               || journalctl -u '$BACKEND_SERVICE_NAME' --no-pager --lines=20 \
+               || true" \
+            > "$RUNNER_TEMP/diagnostics.log" 2>&1 || true
+          echo "::group::bidwin.service 진단 로그"
+          cat "$RUNNER_TEMP/diagnostics.log"
+          echo "::endgroup::"
+      # 실패한 첫 단계를 사유 문구로 바꿔 Slack 알림 잡으로 넘긴다.
+      - name: Resolve failure reason
+        id: reason
+        if: always()
+        env:
+          OUTCOME_DOWNLOAD_BACKEND: ${{ steps.download-backend.outcome }}
+          OUTCOME_DOWNLOAD_FRONTEND: ${{ steps.download-frontend.outcome }}
+          OUTCOME_VALIDATE: ${{ steps.validate.outcome }}
+          OUTCOME_SSH_CREDENTIALS: ${{ steps.ssh-credentials.outcome }}
+          OUTCOME_UPLOAD_JAR: ${{ steps.upload-jar.outcome }}
+          OUTCOME_RESTART_SERVICE: ${{ steps.restart-service.outcome }}
+          OUTCOME_HEALTH_CHECK: ${{ steps.health-check.outcome }}
+          OUTCOME_CONFIGURE_AWS: ${{ steps.configure-aws.outcome }}
+          OUTCOME_DEPLOY_FRONTEND: ${{ steps.deploy-frontend.outcome }}
+        run: |
+          reason=""
+          for entry in \
+            "$OUTCOME_DOWNLOAD_BACKEND|백엔드 아티팩트 다운로드 실패" \
+            "$OUTCOME_DOWNLOAD_FRONTEND|프론트엔드 아티팩트 다운로드 실패" \
+            "$OUTCOME_VALIDATE|배포 설정(variables/secrets) 검증 실패" \
+            "$OUTCOME_SSH_CREDENTIALS|SSH 키 준비 실패" \
+            "$OUTCOME_UPLOAD_JAR|EC2로 JAR 전송(scp) 실패" \
+            "$OUTCOME_RESTART_SERVICE|bidwin.service 재시작 실패" \
+            "$OUTCOME_HEALTH_CHECK|재시작 후 백엔드 헬스체크 실패" \
+            "$OUTCOME_CONFIGURE_AWS|AWS 자격 증명 설정 실패" \
+            "$OUTCOME_DEPLOY_FRONTEND|프론트엔드 S3 배포 실패"
+          do
+            if [ "${entry%%|*}" = "failure" ]; then
+              reason="${entry#*|}"
+              break
+            fi
+          done
+          detail=""
+          if [ -n "$reason" ] && [ -s "$RUNNER_TEMP/diagnostics.log" ]; then
+            detail="$(head -c 1200 "$RUNNER_TEMP/diagnostics.log")"
+          fi
+          {
+            echo "reason=$reason"
+            echo "detail<<DIAGNOSTICS_EOF"
+            printf '%s\n' "$detail"
+            echo "DIAGNOSTICS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  notify:
+    name: Notify
+    if: always() && github.event_name == 'push'
+    needs: [frontend, backend, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send deployment result to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          DEPLOY_REASON: ${{ needs.deploy.outputs.failure_reason }}
+          DEPLOY_DETAIL: ${{ needs.deploy.outputs.failure_detail }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret is not set. Skipping the Slack notification."
+            exit 0
+          fi
+
+          case "$DEPLOY_RESULT" in
+            success)
+              emoji="✅"
+              status="배포 성공"
+              color="#2eb886"
+              ;;
+            failure)
+              emoji="❌"
+              status="배포 실패"
+              color="#d63b3b"
+              ;;
+            cancelled)
+              emoji="⚪"
+              status="배포 취소"
+              color="#9aa0a6"
+              ;;
+            *)
+              emoji="⏭️"
+              status="배포 미실행"
+              color="#e3a008"
+              ;;
+          esac
+
+          reason="$DEPLOY_REASON"
+          if [ "$DEPLOY_RESULT" != "success" ] && [ -z "$reason" ]; then
+            blocked=""
+            if [ "$FRONTEND_RESULT" != "success" ]; then
+              blocked="프론트엔드 빌드/테스트($FRONTEND_RESULT)"
+            fi
+            if [ "$BACKEND_RESULT" != "success" ]; then
+              blocked="${blocked:+$blocked, }백엔드 빌드/테스트($BACKEND_RESULT)"
+            fi
+            if [ -n "$blocked" ]; then
+              reason="선행 작업 실패로 배포를 실행하지 않았습니다: $blocked"
+            else
+              reason="원인을 특정하지 못했습니다. 워크플로 로그를 확인해주세요."
+            fi
+          fi
+
+          detail="$(printf '%s' "$DEPLOY_DETAIL" | head -c 1200)"
+          subject="$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          payload="$(jq -n \
+            --arg emoji "$emoji" \
+            --arg status "$status" \
+            --arg color "$color" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg sha "${GITHUB_SHA:0:7}" \
+            --arg subject "$subject" \
+            --arg actor "$GITHUB_ACTOR" \
+            --arg reason "$reason" \
+            --arg detail "$detail" \
+            --arg url "$run_url" \
+            '{
+              text: "\($emoji) \($repository) \($status)",
+              attachments: [{
+                color: $color,
+                blocks: (
+                  [
+                    {
+                      type: "section",
+                      text: {
+                        type: "mrkdwn",
+                        text: "*\($emoji) \($status)*  <\($url)|워크플로 실행 보기>"
+                      }
+                    },
+                    {
+                      type: "section",
+                      fields: [
+                        { type: "mrkdwn", text: "*리포지토리*\n\($repository)" },
+                        { type: "mrkdwn", text: "*브랜치*\n\($branch)" },
+                        { type: "mrkdwn", text: "*커밋*\n`\($sha)` \($subject)" },
+                        { type: "mrkdwn", text: "*실행자*\n\($actor)" }
+                      ]
+                    }
+                  ]
+                  + (if $reason == "" then [] else [{
+                      type: "section",
+                      text: { type: "mrkdwn", text: "*사유*\n\($reason)" }
+                    }] end)
+                  + (if ($detail | gsub("\\s"; "")) == "" then [] else [{
+                      type: "section",
+                      text: { type: "mrkdwn", text: "*진단 로그*\n```\($detail)```" }
+                    }] end)
+                )
+              }]
+            }')"
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
