@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { FIRST_PAGE, PAGINATION_TEXT } from '../constants'
+import { FIRST_PAGE, PAGE_WINDOW_SIZE, PAGINATION_TEXT } from '../constants'
 import { getPageWindow } from '../query'
 
 /*
@@ -17,25 +17,16 @@ function Pagination({
   onChange: (page: number) => void
 }) {
   const pages = getPageWindow(currentPage, totalPages)
-  const hasLeadingGap = pages[0] > FIRST_PAGE
-  const hasTrailingGap = pages[pages.length - 1] < totalPages
 
   return (
     <nav aria-label={PAGINATION_TEXT.navLabel} className="flex items-center justify-center gap-1">
       <ArrowButton
         label={PAGINATION_TEXT.prev}
         disabled={currentPage <= FIRST_PAGE}
-        onClick={() => onChange(currentPage - 1)}
+        onClick={() => onChange(Math.max(FIRST_PAGE, currentPage - PAGE_WINDOW_SIZE))}
       >
         <ChevronLeft size={16} />
       </ArrowButton>
-
-      {hasLeadingGap && (
-        <>
-          <PageButton page={FIRST_PAGE} isActive={false} onClick={onChange} />
-          <span className="px-1 text-sm text-muted-soft">{PAGINATION_TEXT.ellipsis}</span>
-        </>
-      )}
 
       {pages.map((page) => (
         <PageButton
@@ -46,17 +37,10 @@ function Pagination({
         />
       ))}
 
-      {hasTrailingGap && (
-        <>
-          <span className="px-1 text-sm text-muted-soft">{PAGINATION_TEXT.ellipsis}</span>
-          <PageButton page={totalPages} isActive={false} onClick={onChange} />
-        </>
-      )}
-
       <ArrowButton
         label={PAGINATION_TEXT.next}
         disabled={currentPage >= totalPages}
-        onClick={() => onChange(currentPage + 1)}
+        onClick={() => onChange(Math.min(totalPages, currentPage + PAGE_WINDOW_SIZE))}
       >
         <ChevronRight size={16} />
       </ArrowButton>

@@ -184,6 +184,9 @@ function AuctionListPage() {
   }
 
   const items = response?.items ?? []
+  const displayedTotalPages = response && items.length === 0
+    ? response.page
+    : response?.totalPages
   const filterPanel = (
     <FilterPanel
       groups={filterGroups}
@@ -272,11 +275,11 @@ function AuctionListPage() {
             )}
           </div>
 
-          {response && items.length > 0 && (
+          {response && displayedTotalPages && (
             <div className="shrink-0 border-t border-hairline-soft pt-base">
               <Pagination
                 currentPage={response.page}
-                totalPages={response.totalPages}
+                totalPages={displayedTotalPages}
                 onChange={changePage}
               />
             </div>

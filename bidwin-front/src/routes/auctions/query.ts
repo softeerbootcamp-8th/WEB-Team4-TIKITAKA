@@ -12,11 +12,11 @@ export const SORT_OPTIONS: { key: AuctionSort; label: string }[] = [
 export type SortKey = AuctionSort
 export const DEFAULT_SORT: SortKey = 'recommended'
 
-/** 페이지가 많을 때 현재 페이지 주변만 남긴 번호 목록 */
+/** 현재 페이지가 속한 고정 크기 묶음의 번호 목록 */
 export function getPageWindow(currentPage: number, totalPages: number): number[] {
-  const size = Math.min(PAGE_WINDOW_SIZE, totalPages)
-  const half = Math.floor(size / 2)
-  const end = Math.min(totalPages, Math.max(currentPage + half, size))
-  const start = Math.max(FIRST_PAGE, end - size + 1)
+  const start = Math.floor((currentPage - FIRST_PAGE) / PAGE_WINDOW_SIZE)
+    * PAGE_WINDOW_SIZE + FIRST_PAGE
+  const end = Math.min(totalPages, start + PAGE_WINDOW_SIZE - 1)
+  const size = end - start + 1
   return Array.from({ length: size }, (_, index) => start + index)
 }
