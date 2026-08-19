@@ -21,8 +21,6 @@
   <a href="#9-팀-구성">팀 구성</a>
 </p>
 
-<hr>
-
 ## 1. 프로젝트 소개
 **Bidwin**은 판매자와 구매자가 적정 거래 가격을 더 빠르게 찾을 수 있도록 돕는 경매 기반 중고 거래 서비스입니다.
 
@@ -277,8 +275,8 @@ bidwin-front/src
 - [[김근성] 단건 정산에서 Native Set‐based 정산까지 (21.15s → 1.05s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EB%8B%A8%EA%B1%B4-%EC%A0%95%EC%82%B0%EC%97%90%EC%84%9C-Native-Set%E2%80%90based-%EC%A0%95%EC%82%B0%EA%B9%8C%EC%A7%80-(21.15s-%E2%86%92-1.05s))
 - [[김근성] SSE의 DB 커넥션 수명 결합 문제 해결](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-SSE%EC%9D%98-DB-%EC%BB%A4%EB%84%A5%EC%85%98-%EC%88%98%EB%AA%85-%EA%B2%B0%ED%95%A9-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0)
 - [[김근성] 27회의 부하 테스트를 통한 SSE 병목 분리와 안정성 검증](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-27%ED%9A%8C%EC%9D%98-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%A5%BC-%ED%86%B5%ED%95%9C-SSE-%EB%B3%91%EB%AA%A9-%EB%B6%84%EB%A6%AC%EC%99%80-%EC%95%88%EC%A0%95%EC%84%B1-%EA%B2%80%EC%A6%9D)
-- [[김근성] 쿼리 최적화와 Caffeine Single‐flight 캐싱을 통한 SSE 초기 스냅샷 개선 (p95 21.55s → 26.70ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%BF%BC%EB%A6%AC-%EC%B5%9C%EC%A0%81%ED%99%94%EC%99%80-Caffeine-Single%E2%80%90flight-%EC%BA%90%EC%8B%B1%EC%9D%84-%ED%86%B5%ED%95%9C-SSE-%EC%B4%88%EA%B8%B0-%EC%8A%A4%EB%83%85%EC%83%B7-%EA%B0%9C%EC%84%A0-(p95-21.55s-%E2%86%92-26.70ms))
 - [[김근성] Top‐K 알고리즘 도입을 통한 가격순 정렬 개선 (45s → 20s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Top%E2%80%90K-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EB%8F%84%EC%9E%85%EC%9D%84-%ED%86%B5%ED%95%9C-%EA%B0%80%EA%B2%A9%EC%88%9C-%EC%A0%95%EB%A0%AC-%EA%B0%9C%EC%84%A0-(45s-%E2%86%92-20s))
+- [[김근성] 세션 인증 깊게 고려하며 개발하기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%84%B8%EC%85%98-%EC%9D%B8%EC%A6%9D-%EA%B9%8A%EA%B2%8C-%EA%B3%A0%EB%A0%A4%ED%95%98%EB%A9%B0-%EA%B0%9C%EB%B0%9C%ED%95%98%EA%B8%B0)
 
 
 ### 허찬욱
