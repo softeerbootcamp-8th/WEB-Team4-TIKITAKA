@@ -28,14 +28,7 @@
 
 판매자는 상향 경매, 하향 경매, 즉시 구매 중 상황에 맞는 방식을 선택할 수 있습니다. Bidwin은 시간에 따른 가격 변화와 구매자 간 경쟁을 활용해 기존 중고 거래의 긴 판매 대기시간과 반복적인 가격 조정 문제를 해결합니다.
 
----
-
 ## 2. 기획
-
-<details>
-<summary><b>📖 기획 배경 및 문제 정의 (클릭하여 펼치기)</b></summary>
-
-<br>
 
 ### 2.1 기획 배경
 
@@ -88,9 +81,6 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 | 기다리지 않고 거래를 확정하고 싶음 | **즉시 구매**를 통해 판매자가 설정한 가격으로 바로 거래 |
 | 판매 시점을 예측하기 어려움 | 경매 종료 시간을 설정해 거래 기한을 명확하게 제공 |
 
-</details>
-
----
 
 ## 3. 기능 소개
 
@@ -158,7 +148,6 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
   </tbody>
 </table>
 
----
 
 ## 4. 시스템 구성도
 
@@ -282,14 +271,12 @@ bidwin-front/src
 
 </details>
 
----
-
 ## 5. 기술적 성과
 ### 김근성
 - [[김근성] 실행계획·인덱스·데이터 분포로 경매 마감 SQL 병목 추적 (5,001만 행 → 1만 행)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%8B%A4%ED%96%89%EA%B3%84%ED%9A%8D%C2%B7%EC%9D%B8%EB%8D%B1%EC%8A%A4%C2%B7%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%B6%84%ED%8F%AC%EB%A1%9C-%EA%B2%BD%EB%A7%A4-%EB%A7%88%EA%B0%90-SQL-%EB%B3%91%EB%AA%A9-%EC%B6%94%EC%A0%81-(5,001%EB%A7%8C-%ED%96%89-%E2%86%92-1%EB%A7%8C-%ED%96%89))
 - [[김근성] 단건 정산에서 Native Set‐based 정산까지 (21.15s → 1.05s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EB%8B%A8%EA%B1%B4-%EC%A0%95%EC%82%B0%EC%97%90%EC%84%9C-Native-Set%E2%80%90based-%EC%A0%95%EC%82%B0%EA%B9%8C%EC%A7%80-(21.15s-%E2%86%92-1.05s))
 - [[김근성] SSE의 DB 커넥션 수명 결합 문제 해결](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-SSE%EC%9D%98-DB-%EC%BB%A4%EB%84%A5%EC%85%98-%EC%88%98%EB%AA%85-%EA%B2%B0%ED%95%A9-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0)
-- [[김근성] 26회의 부하 테스트를 통한 SSE 병목 분리와 안정성 검증](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-26%ED%9A%8C%EC%9D%98-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%A5%BC-%ED%86%B5%ED%95%9C-SSE-%EB%B3%91%EB%AA%A9-%EB%B6%84%EB%A6%AC%EC%99%80-%EC%95%88%EC%A0%95%EC%84%B1-%EA%B2%80%EC%A6%9D)
+- [[김근성] 27회의 부하 테스트를 통한 SSE 병목 분리와 안정성 검증](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-27%ED%9A%8C%EC%9D%98-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%A5%BC-%ED%86%B5%ED%95%9C-SSE-%EB%B3%91%EB%AA%A9-%EB%B6%84%EB%A6%AC%EC%99%80-%EC%95%88%EC%A0%95%EC%84%B1-%EA%B2%80%EC%A6%9D)
 - [[김근성] 쿼리 최적화와 Caffeine Single‐flight 캐싱을 통한 SSE 초기 스냅샷 개선 (p95 21.55s → 26.70ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%BF%BC%EB%A6%AC-%EC%B5%9C%EC%A0%81%ED%99%94%EC%99%80-Caffeine-Single%E2%80%90flight-%EC%BA%90%EC%8B%B1%EC%9D%84-%ED%86%B5%ED%95%9C-SSE-%EC%B4%88%EA%B8%B0-%EC%8A%A4%EB%83%85%EC%83%B7-%EA%B0%9C%EC%84%A0-(p95-21.55s-%E2%86%92-26.70ms))
 - [[김근성] Top‐K 알고리즘 도입을 통한 가격순 정렬 개선 (45s → 20s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Top%E2%80%90K-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EB%8F%84%EC%9E%85%EC%9D%84-%ED%86%B5%ED%95%9C-%EA%B0%80%EA%B2%A9%EC%88%9C-%EC%A0%95%EB%A0%AC-%EA%B0%9C%EC%84%A0-(45s-%E2%86%92-20s))
 
@@ -309,7 +296,6 @@ bidwin-front/src
 - [[노승억] 입찰의 성공 실패 판정을 Redis로 이관하게 된다면 응답속도는 얼마나 개선이 될까?](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EC%9E%85%EC%B0%B0%EC%9D%98-%EC%84%B1%EA%B3%B5-%EC%8B%A4%ED%8C%A8-%ED%8C%90%EC%A0%95%EC%9D%84-Redis%EB%A1%9C-%EC%9D%B4%EA%B4%80%ED%95%98%EA%B2%8C-%EB%90%9C%EB%8B%A4%EB%A9%B4-%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84%EB%8A%94-%EC%96%BC%EB%A7%88%EB%82%98-%EA%B0%9C%EC%84%A0%EC%9D%B4-%EB%90%A0%EA%B9%8C%3F)
 - [[노승억] 락의 순서만 맞추면 교착상태가 해결될까?](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EB%9D%BD%EC%9D%98-%EC%88%9C%EC%84%9C%EB%A5%BC-%EB%A7%9E%EC%B6%94%EB%A9%B4-%EA%B5%90%EC%B0%A9%EC%83%81%ED%83%9C%EA%B0%80-%ED%95%B4%EA%B2%B0-%EC%82%AC%EB%9D%BC%EC%A7%88%EA%B9%8C)
 
----
 
 ## 6. 기술 스택
 
@@ -325,7 +311,6 @@ bidwin-front/src
 | **API 문서** | ![Swagger](https://img.shields.io/badge/Swagger%20UI-85EA2D?style=flat&logo=swagger&logoColor=black) ![OpenAPI](https://img.shields.io/badge/springdoc%20OpenAPI-6BA539?style=flat&logo=openapiinitiative&logoColor=white) |
 | **협업** | ![Notion](https://img.shields.io/badge/Notion-000000?style=flat&logo=notion&logoColor=white) ![Figma](https://img.shields.io/badge/Figma%20%2F%20FigJam-F24E1E?style=flat&logo=figma&logoColor=white) ![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat&logo=slack&logoColor=white) ![GitHub Projects](https://img.shields.io/badge/GitHub%20Projects-181717?style=flat&logo=github&logoColor=white) ![Google Sheets](https://img.shields.io/badge/Google%20Sheets-34A853?style=flat&logo=googlesheets&logoColor=white) |
 
----
 
 ## 7. 산출물
 
@@ -341,7 +326,6 @@ bidwin-front/src
 | **🖼️ 와이어프레임** | 전체 화면 구성과 플로우 설계 | [바로가기](https://www.figma.com/design/j9T8YCyN5ILPBUmoHurPlc/Bidwin?node-id=0-1&t=nJuW1NwHBt89iUkY-1) |
 | **📅 일정 관리 (GitHub Project)** | 스프린트 관리 및 Task 분배 | [바로가기](https://github.com/orgs/softeerbootcamp-8th/projects/8) |
 | **📝 전체 문서 관리 (Notion)** | 매일 스크럼, 아이디어 회의, 주간 회고록 | [바로가기](https://softeer04.notion.site/HMG-Softeer-4-TIKITAKA-39f6b34e4aac80bcb442fdccba74ab57?source=copy_link) |
----
 
 ## 8. 그라운드 룰
 
@@ -403,7 +387,6 @@ bidwin-front/src
 
 </details>
 
----
 
 ## 9. 팀 구성
 
