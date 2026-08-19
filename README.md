@@ -289,10 +289,10 @@ bidwin-front/src
 
 
 ### 노승억
-- [[노승억] 입찰 처리량은 왜 240 RPS에서 멈추는가](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EC%9E%85%EC%B0%B0-%EC%B2%98%EB%A6%AC%EB%9F%89%EC%9D%80-%EC%99%9C-240-RPS%EC%97%90%EC%84%9C-%EB%A9%88%EC%B6%94%EB%8A%94%EA%B0%80)
-- [[노승억] Redis 원자적 필터, 무엇이 풀리고 무엇이 안 풀렸나](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D--Redis-%EC%9B%90%EC%9E%90%EC%A0%81-%ED%95%84%ED%84%B0,-%EB%AC%B4%EC%97%87%EC%9D%B4-%ED%92%80%EB%A6%AC%EA%B3%A0-%EB%AC%B4%EC%97%87%EC%9D%B4-%EC%95%88-%ED%92%80%EB%A0%B8%EB%82%98)
-- [[노승억] 입찰의 성공 실패 판정을 Redis로 이관하게 된다면 응답속도는 얼마나 개선이 될까?](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EC%9E%85%EC%B0%B0%EC%9D%98-%EC%84%B1%EA%B3%B5-%EC%8B%A4%ED%8C%A8-%ED%8C%90%EC%A0%95%EC%9D%84-Redis%EB%A1%9C-%EC%9D%B4%EA%B4%80%ED%95%98%EA%B2%8C-%EB%90%9C%EB%8B%A4%EB%A9%B4-%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84%EB%8A%94-%EC%96%BC%EB%A7%88%EB%82%98-%EA%B0%9C%EC%84%A0%EC%9D%B4-%EB%90%A0%EA%B9%8C%3F)
-- [[노승억] 잠금 순서 정렬로 통제할 수 있는 락과 그렇지 않은 락](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EB%9D%BD%EC%9D%98-%EC%88%9C%EC%84%9C%EB%A5%BC-%EB%A7%9E%EC%B6%94%EB%A9%B4-%EA%B5%90%EC%B0%A9%EC%83%81%ED%83%9C%EA%B0%80-%ED%95%B4%EA%B2%B0-%EC%82%AC%EB%9D%BC%EC%A7%88%EA%B9%8C)
+- [[노승억] 입찰 처리량은 왜 240 RPS에서 멈추는가 — MVP 성능 측정](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EB%8F%99%EC%8B%9C%EC%84%B1-1.-%EC%9E%85%EC%B0%B0-%EC%B2%98%EB%A6%AC%EB%9F%89%EC%9D%80-%EC%99%9C-240-RPS%EC%97%90%EC%84%9C-%EB%A9%88%EC%B6%94%EB%8A%94%EA%B0%80)
+- [[노승억] Redis 원자적 필터, 무엇이 풀리고 무엇이 안 풀렸나 — 아키텍처 개선 및 성능 측정](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D--%EB%8F%99%EC%8B%9C%EC%84%B1-2.-Redis-%EC%9B%90%EC%9E%90%EC%A0%81-%ED%95%84%ED%84%B0,-%EB%AC%B4%EC%97%87%EC%9D%B4-%ED%92%80%EB%A6%AC%EA%B3%A0-%EB%AC%B4%EC%97%87%EC%9D%B4-%EC%95%88-%ED%92%80%EB%A0%B8%EB%82%98)
+- [[노승억] 입찰의 성공 실패 판정을 Redis로 이관하게 된다면 응답속도는 얼마나 개선이 될까? — P99 235.6ms → 20.1ms 기대](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D-%EB%8F%99%EC%8B%9C%EC%84%B1-3.-%EC%9E%85%EC%B0%B0%EC%9D%98-%EC%84%B1%EA%B3%B5-%EC%8B%A4%ED%8C%A8-%ED%8C%90%EC%A0%95%EC%9D%84-Redis%EB%A1%9C-%EC%9D%B4%EA%B4%80%ED%95%98%EA%B2%8C-%EB%90%9C%EB%8B%A4%EB%A9%B4-%EC%9D%91%EB%8B%B5%EC%86%8D%EB%8F%84%EB%8A%94-%EC%96%BC%EB%A7%88%EB%82%98-%EA%B0%9C%EC%84%A0%EC%9D%B4-%EB%90%A0%EA%B9%8C%3F)
+- [[노승억] 잠금 순서 정렬로 통제할 수 있는 락과 그렇지 않은 락 — performance_schema 기반 실측](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EB%85%B8%EC%8A%B9%EC%96%B5%5D--%EC%9E%A0%EA%B8%88-%EC%88%9C%EC%84%9C-%EC%A0%95%EB%A0%AC%EB%A1%9C-%ED%86%B5%EC%A0%9C%ED%95%A0-%EC%88%98-%EC%9E%88%EB%8A%94-%EB%9D%BD%EA%B3%BC-%EA%B7%B8%EB%A0%87%EC%A7%80-%EC%95%8A%EC%9D%80-%EB%9D%BD)
 
 
 ## 6. 기술 스택
