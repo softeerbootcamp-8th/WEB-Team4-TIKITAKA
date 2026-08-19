@@ -151,7 +151,8 @@ Bidwin은 다양한 경매 방식을 통해 판매자와 구매자가 적정 거
 
 ### 4.1 시스템 아키텍처
 
-![BidWin 시스템 아키텍처](docs/images/architecture.png)
+<img alt="Section 1" src="https://github.com/user-attachments/assets/11abe6b0-6e54-4b12-a824-ac0128fdf207" />
+
 
 ### 4.2 ERD
 
