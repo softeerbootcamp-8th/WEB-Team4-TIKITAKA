@@ -269,16 +269,49 @@ bidwin-front/src
 
 </details>
 
+### 4.4 모니터링 구조
+
+<details>
+<summary><b>📦 모니터링 구조 (클릭하여 펼치기)</b></summary>
+
+<br>
+
+```
+                   ┌───────────────┐
+                   │    Grafana    │
+                   └───────▲───────┘
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+        Prometheus                     Loki
+             ▲                           ▲
+             │                           │
+     ┌───────┴───────┐            ┌──────┴──────┐
+     │               │            │             │
+ Spring Alloy     MySQL Alloy  Spring logs   (DB logs)
+     │               │
+ ┌───┴────┐       ┌──┴────────────┐
+ │Spring  │       │MySQL          │
+ │JVM     │       │connections    │
+ │HTTP    │       │queries        │
+ │Hikari  │       │buffer pool    │
+ └────────┘       └───────────────┘
+
+ + 양쪽 EC2의 CPU / RAM / Disk / Network
+```
+
+</details>
+
 ## 5. 기술적 성과
 ### 김근성
 - [[김근성] 실행계획·인덱스·데이터 분포로 경매 마감 SQL 병목 추적 (5,001만 행 → 1만 행)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%8B%A4%ED%96%89%EA%B3%84%ED%9A%8D%C2%B7%EC%9D%B8%EB%8D%B1%EC%8A%A4%C2%B7%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%B6%84%ED%8F%AC%EB%A1%9C-%EA%B2%BD%EB%A7%A4-%EB%A7%88%EA%B0%90-SQL-%EB%B3%91%EB%AA%A9-%EC%B6%94%EC%A0%81-(5,001%EB%A7%8C-%ED%96%89-%E2%86%92-1%EB%A7%8C-%ED%96%89))
 - [[김근성] 단건 정산에서 Native Set‐based 정산까지 (21.15s → 1.05s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EB%8B%A8%EA%B1%B4-%EC%A0%95%EC%82%B0%EC%97%90%EC%84%9C-Native-Set%E2%80%90based-%EC%A0%95%EC%82%B0%EA%B9%8C%EC%A7%80-(21.15s-%E2%86%92-1.05s))
 - [[김근성] SSE의 DB 커넥션 수명 결합 문제 해결](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-SSE%EC%9D%98-DB-%EC%BB%A4%EB%84%A5%EC%85%98-%EC%88%98%EB%AA%85-%EA%B2%B0%ED%95%A9-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0)
 - [[김근성] 27회의 부하 테스트를 통한 SSE 병목 분리와 안정성 검증](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-27%ED%9A%8C%EC%9D%98-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%EB%A5%BC-%ED%86%B5%ED%95%9C-SSE-%EB%B3%91%EB%AA%A9-%EB%B6%84%EB%A6%AC%EC%99%80-%EC%95%88%EC%A0%95%EC%84%B1-%EA%B2%80%EC%A6%9D)
-- [[김근성] Top‐K 알고리즘 도입을 통한 가격순 정렬 개선 (45s → 20s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Top%E2%80%90K-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EB%8F%84%EC%9E%85%EC%9D%84-%ED%86%B5%ED%95%9C-%EA%B0%80%EA%B2%A9%EC%88%9C-%EC%A0%95%EB%A0%AC-%EA%B0%9C%EC%84%A0-(45s-%E2%86%92-20s))
-- [[김근성] 반정규화, 커버링 인덱스로 SSE 초기 스냅샷 개선 (10 → 3,000 RPS)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EB%B0%98%EC%A0%95%EA%B7%9C%ED%99%94,-%EC%BB%A4%EB%B2%84%EB%A7%81-%EC%9D%B8%EB%8D%B1%EC%8A%A4%EB%A1%9C-SSE-%EC%B4%88%EA%B8%B0-%EC%8A%A4%EB%83%85%EC%83%B7-%EA%B0%9C%EC%84%A0-(10-%E2%86%92-3,000-RPS))
+- [[김근성] 반정규화, 커버링 인덱스로 SSE 초기 스냅샷 개선 (p95 5.508s → 2.931ms Drop 2,454 → 0)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Caffeine-Single%E2%80%90flight%EB%A1%9C-SSE-%EC%97%B0%EA%B2%B0-%ED%8F%AD%EC%A3%BC-%EA%B0%9C%EC%84%A0-(25.83s-%E2%86%92-4.73s))
 - [[김근성] Caffeine Single‐flight로 SSE 연결 폭주 개선 (25.83s → 4.73s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Caffeine-Single%E2%80%90flight%EB%A1%9C-SSE-%EC%97%B0%EA%B2%B0-%ED%8F%AD%EC%A3%BC-%EA%B0%9C%EC%84%A0-(25.83s-%E2%86%92-4.73s))
-- [[김근성] 세션 인증 깊게 고려하며 개발하기](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%84%B8%EC%85%98-%EC%9D%B8%EC%A6%9D-%EA%B9%8A%EA%B2%8C-%EA%B3%A0%EB%A0%A4%ED%95%98%EB%A9%B0-%EA%B0%9C%EB%B0%9C%ED%95%98%EA%B8%B0)
+- [[김근성] Top‐K 알고리즘 도입을 통한 가격순 정렬 개선 (45s → 20s)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-Top%E2%80%90K-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EB%8F%84%EC%9E%85%EC%9D%84-%ED%86%B5%ED%95%9C-%EA%B0%80%EA%B2%A9%EC%88%9C-%EC%A0%95%EB%A0%AC-%EA%B0%9C%EC%84%A0-(45s-%E2%86%92-20s))
+- [[김근성] 세션 고정·자격 변경·탈취 지속성까지 고려한 세션 인증 설계](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%EA%B9%80%EA%B7%BC%EC%84%B1%5D-%EC%84%B8%EC%85%98-%EA%B3%A0%EC%A0%95%C2%B7%EC%9E%90%EA%B2%A9-%EB%B3%80%EA%B2%BD%C2%B7%ED%83%88%EC%B7%A8-%EC%A7%80%EC%86%8D%EC%84%B1%EA%B9%8C%EC%A7%80-%EA%B3%A0%EB%A0%A4%ED%95%9C-%EC%84%B8%EC%85%98-%EC%9D%B8%EC%A6%9D-%EC%84%A4%EA%B3%84)
 
 
 ### 허찬욱
