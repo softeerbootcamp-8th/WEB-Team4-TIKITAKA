@@ -280,12 +280,14 @@ bidwin-front/src
 
 
 ### 허찬욱
-- [[허찬욱] 20만 건 부하테스트 직후 JVM 종료 (OOM)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-20%EB%A7%8C-%EA%B1%B4-%EB%B6%80%ED%95%98%ED%85%8C%EC%8A%A4%ED%8A%B8-%EC%A7%81%ED%9B%84-JVM-%EC%A2%85%EB%A3%8C-(OOM))
-- [[허찬욱] 가격 오름차순 Top‐K 조회 최적화](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EA%B0%80%EA%B2%A9-%EC%98%A4%EB%A6%84%EC%B0%A8%EC%88%9C-Top%E2%80%90K-%EC%A1%B0%ED%9A%8C-%EC%B5%9C%EC%A0%81%ED%99%94)
-- [[허찬욱] 최신·마감임박순 정렬 병목 개선 — 필터 미기여 인덱스 교체](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EC%B5%9C%EC%8B%A0%C2%B7%EB%A7%88%EA%B0%90%EC%9E%84%EB%B0%95%EC%88%9C-%EC%A0%95%EB%A0%AC-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-%ED%95%84%ED%84%B0-%EB%AF%B8%EA%B8%B0%EC%97%AC-%EC%9D%B8%EB%8D%B1%EC%8A%A4-%EA%B5%90%EC%B2%B4)
-- [[허찬욱] 추천순 집계 병목 개선 — bid_count 반정규화](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EC%B6%94%EC%B2%9C%EC%88%9C-%EC%A7%91%EA%B3%84-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-bid_count-%EB%B0%98%EC%A0%95%EA%B7%9C%ED%99%94)
-- [[허찬욱] 목록 조회 트랜잭션 제거 검토 — 측정 후 미채택](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-%EC%A1%B0%ED%9A%8C-%ED%8A%B8%EB%9E%9C%EC%9E%AD%EC%85%98-%EC%A0%9C%EA%B1%B0-%EA%B2%80%ED%86%A0-%E2%80%94-%EC%B8%A1%EC%A0%95-%ED%9B%84-%EB%AF%B8%EC%B1%84%ED%83%9D)
-- [[허찬욱] 목록 COUNT 병목 개선 — 캐시 반려](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B%ED%97%88%EC%B0%AC%EC%9A%B1%5D-%EB%AA%A9%EB%A1%9D-COUNT-%EB%B3%91%EB%AA%A9-%EA%B0%9C%EC%84%A0-%E2%80%94-%EC%BA%90%EC%8B%9C-%EB%B0%98%EB%A0%A4)
+- [[허찬욱] 20만 건 부하테스트 직후 JVM OOM — 대량 조회 메모리 병목 분석](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-20만-건-부하테스트-직후-JVM-OOM-—-대량-조회-메모리-병목-분석)
+- [[허찬욱] 가격 오름차순 Top‐K 조회 최적화 (p99 약 21s → 33ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-가격-오름차순-Top%E2%80%90K-조회-최적화-(p99-약-21s-→-33ms))
+- [[허찬욱] 최신·마감임박순 정렬 병목 개선 — 필터 미기여 인덱스 교체 (p95 27.7s → 26.7ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-최신·마감임박순-정렬-병목-개선-—-필터-미기여-인덱스-교체-(p95-27.7s-→-26.7ms))
+- [[허찬욱] 추천순 JOIN·GROUP BY 병목 개선 — bid_count 반정규화 (403ms → 0.4ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-추천순-JOIN·GROUP-BY-병목-개선-—-bid_count-반정규화-(403ms-→-0.4ms))
+- [[허찬욱] 목록 조회 트랜잭션 제거 검토 — 측정 후 미채택 (Hikari Acquire 686.9ms → 95.5ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-목록-조회-트랜잭션-제거-검토-—-측정-후-미채택-(Hikari-Acquire-686.9ms-→-95.5ms))
+- [[허찬욱] 목록 COUNT 병목 개선 — 캐시 반려](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-목록-COUNT-병목-개선-—-캐시-반려)
+- [[허찬욱] 하향 가격 정렬 1,000 RPS 병목 개선 — 30초 세대 스냅샷 (16.5s → 2.74ms)](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-하향-가격-정렬-1,000-RPS-병목-개선-—-30초-세대-스냅샷-(16.5s-→-2.74ms))
+- [[허찬욱] MySQL n‐gram FULLTEXT 검색 검토 및 미도입 결정](https://github.com/softeerbootcamp-8th/WEB-Team4-TIKITAKA/wiki/%5B허찬욱%5D-MySQL-n%E2%80%90gram-FULLTEXT-검색-검토-및-미도입-결정)
 
 
 ### 노승억
